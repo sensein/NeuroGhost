@@ -1,0 +1,299 @@
+"""
+seed.py — Populate the SenseIn Schema Registry from schema.org
+
+Fetches schema.org's machine-readable JSON-LD and inserts the core type
+hierarchy as SchemaClass + SchemaProperty nodes using the same make_base
+identity pattern as the main registry.
+
+Seeded types (top-level schema.org hierarchy):
+  Thing → CreativeWork, Event, Organization, Person, Place,
+           Product, Action, MedicalEntity
+  + AudioObject, ImageObject, VideoObject (embedded media)
+
+Each class gets its full set of schema.org properties as SchemaProperty
+nodes linked via HAS_PROPERTY.
+
+Usage:
+    python seed.py               # inserts into ./registry.lbug
+    python seed.py --dry-run     # prints counts, writes nothing
+    python seed.py --wipe        # drop + re-seed (use with care)
+
+The script is idempotent: it checks whether Thing already exists before
+inserting anything.
+"""
+
+from __future__ import annotations
+import datetime, uuid
+import click, httpx, rdflib
+import ladybug as lb
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+SCHEMA_ORG_JSONLD = (
+    "https://schema.org/version/latest/schemaorg-current-https.jsonld"
+)
+
+REG     = "https://registry.sensein.io/"
+SCHEMA  = rdflib.Namespace("https://schema.org/")
+RDFS    = rdflib.RDFS
+RDF     = rdflib.RDF
+
+# Top-level types to seed.  Everything reachable via subClassOf from these
+# is also included automatically.
+SEED_ROOTS = [
+    "Thing",
+    "CreativeWork",
+    "Event",
+    "Organization",
+    "Person",
+    "Place",
+    "Product",
+    "Action",
+    "MedicalEntity",
+    "AudioObject",
+    "ImageObject",
+    "VideoObject",
+]
+
+# ---------------------------------------------------------------------------
+# Helpers  (mirrors make_base / make_uri from schema_registry.py)
+# ---------------------------------------------------------------------------
+
+def now_iso() -> str:
+    return datetime.datetime.utcnow().isoformat() + "Z"
+
+def make_uid() -> str:
+    return str(uuid.uuid4())
+
+def make_iri(object_id: str) -> str:
+    return f"{REG}obj/{object_id}"
+
+def make_uri(object_id: str, version: str = "1.0.0") -> str:
+    return f"{REG}obj/{object_id}/v/{version}"
+
+def make_base(object_id: str, iri: str | None = None,
+              version: str = "1.0.0") -> dict:
+    return {
+        "uid":        make_uid(),
+        "iri":        iri or make_iri(object_id),
+        "uri":        make_uri(object_id, version),
+        "version":    version,
+        "created_at": now_iso(),
+    }
+
+# ---------------------------------------------------------------------------
+# Fetch + parse schema.org
+# ---------------------------------------------------------------------------
+
+def fetch_schema_graph() -> rdflib.Graph:
+    print("Fetching schema.org JSON-LD …")
+    resp = httpx.get(SCHEMA_ORG_JSONLD, timeout=60, follow_redirects=True)
+    resp.raise_for_status()
+    g = rdflib.Graph()
+    g.parse(data=resp.text, format="json-ld")
+    print(f"  Parsed {len(g)} triples.")
+    return g
+
+
+def collect_classes(g: rdflib.Graph) -> dict[str, dict]:
+    """
+    Return a dict keyed by short name (e.g. "Person") with:
+      iri, label, comment, subclass_of (list of short names), props (list)
+    Only includes classes reachable from SEED_ROOTS.
+    """
+    # BFS from roots following subClassOf *upward* (child → parent already in
+    # set) and *downward* via subjects of subClassOf pointing to our roots.
+    wanted: set[str] = set()
+    queue = list(SEED_ROOTS)
+    while queue:
+        name = queue.pop()
+        if name in wanted:
+            continue
+        wanted.add(name)
+        node = SCHEMA[name]
+        # children: anything that declares subClassOf this node
+        for child in g.subjects(RDFS.subClassOf, node):
+            short = str(child).replace("https://schema.org/", "")
+            if short not in wanted:
+                queue.append(short)
+
+    classes: dict[str, dict] = {}
+    for name in wanted:
+        node    = SCHEMA[name]
+        label   = str(next(g.objects(node, RDFS.label),   name))
+        comment = str(next(g.objects(node, RDFS.comment), ""))
+        parents = [
+            str(p).replace("https://schema.org/", "")
+            for p in g.objects(node, RDFS.subClassOf)
+            if str(p).startswith("https://schema.org/")
+        ]
+        classes[name] = {
+            "iri":         str(node),
+            "label":       label,
+            "comment":     comment,
+            "subclass_of": parents,
+            "props":       [],   # filled below
+        }
+
+    # Attach properties (schema:domainIncludes links prop → class)
+    for prop_node in g.subjects(RDF.type, RDF.Property):
+        short_prop = str(prop_node).replace("https://schema.org/", "")
+        prop_label = str(next(g.objects(prop_node, RDFS.label),   short_prop))
+        prop_comment = str(next(g.objects(prop_node, RDFS.comment), ""))
+        ranges = [
+            str(r) for r in g.objects(prop_node, SCHEMA.rangeIncludes)
+        ]
+        for domain in g.objects(prop_node, SCHEMA.domainIncludes):
+            short_domain = str(domain).replace("https://schema.org/", "")
+            if short_domain in classes:
+                classes[short_domain]["props"].append({
+                    "name":    short_prop,
+                    "iri":     str(prop_node),
+                    "label":   prop_label,
+                    "comment": prop_comment,
+                    "ranges":  ranges,
+                })
+    return classes
+
+# ---------------------------------------------------------------------------
+# Insert into LadybugDB
+# ---------------------------------------------------------------------------
+
+def seed(db_path: str = "./registry.lbug",
+         dry_run: bool = False,
+         wipe: bool = False) -> None:
+
+    conn = lb.Connection(lb.Database(db_path))
+
+    if wipe and not dry_run:
+        print("Wiping existing SchemaClass and SchemaProperty nodes …")
+        conn.execute("MATCH (n:SchemaClass) DETACH DELETE n")
+        conn.execute("MATCH (n:SchemaProperty) DETACH DELETE n")
+
+    # Idempotency check
+    if not dry_run and not wipe:
+        r = conn.execute(
+            "MATCH (n:SchemaClass {iri: $iri}) RETURN n.uid LIMIT 1",
+            {"iri": "https://schema.org/Thing"}
+        )
+        if r.has_next():
+            print("schema.org seed already present — skipping. "
+                  "Use --wipe to re-seed.")
+            return
+
+    g = fetch_schema_graph()
+    classes = collect_classes(g)
+
+    print(f"Inserting {len(classes)} classes …")
+    class_uid: dict[str, str] = {}   # short_name → uid
+
+    # Pass 1: insert all class nodes
+    for name, info in classes.items():
+        b = make_base(name, iri=info["iri"])
+        class_uid[name] = b["uid"]
+        if dry_run:
+            continue
+        conn.execute("""
+            MERGE (n:SchemaClass {iri: $iri})
+            ON CREATE SET
+                n.uid        = $uid,
+                n.uri        = $uri,
+                n.version    = $version,
+                n.created_at = $created_at,
+                n.name       = $name,
+                n.definition = $definition
+        """, {**b,
+              "name":       info["label"],
+              "definition": info["comment"]})
+
+    # Pass 2: subclass relationships
+    print("Linking subclass relationships …")
+    for name, info in classes.items():
+        for parent_name in info["subclass_of"]:
+            if parent_name not in classes:
+                continue
+            if dry_run:
+                continue
+            conn.execute("""
+                MATCH (c:SchemaClass {iri: $ciri}),
+                      (p:SchemaClass {iri: $piri})
+                MERGE (c)-[:SUBCLASS_OF]->(p)
+            """, {"ciri": info["iri"],
+                  "piri": f"https://schema.org/{parent_name}"})
+
+    # Pass 3: properties
+    total_props = sum(len(info["props"]) for info in classes.values())
+    print(f"Inserting {total_props} properties …")
+    seen_props: set[str] = set()   # avoid duplicate SchemaProperty nodes
+
+    for name, info in classes.items():
+        for prop in info["props"]:
+            prop_key = prop["iri"]
+
+            if dry_run:
+                continue
+
+            # Upsert the property node (one node per schema.org property IRI)
+            if prop_key not in seen_props:
+                seen_props.add(prop_key)
+                b = make_base(prop["name"], iri=prop["iri"])
+                # Use first range as canonical range_uri
+                range_uri = prop["ranges"][0] if prop["ranges"] else ""
+                conn.execute("""
+                    MERGE (p:SchemaProperty {iri: $iri})
+                    ON CREATE SET
+                        p.uid        = $uid,
+                        p.uri        = $uri,
+                        p.version    = $version,
+                        p.created_at = $created_at,
+                        p.name       = $name,
+                        p.definition = $definition,
+                        p.datatype   = $datatype,
+                        p.range_uri  = $range_uri
+                """, {**b,
+                      "name":       prop["label"],
+                      "definition": prop["comment"],
+                      "datatype":   "xsd:string",
+                      "range_uri":  range_uri})
+
+            # Link class → property
+            conn.execute("""
+                MATCH (c:SchemaClass  {iri: $ciri}),
+                      (p:SchemaProperty {iri: $piri})
+                MERGE (c)-[:HAS_PROPERTY]->(p)
+            """, {"ciri": info["iri"], "piri": prop_key})
+
+    if dry_run:
+        print(f"\n[dry-run] Would insert:")
+        print(f"  {len(classes)} SchemaClass nodes")
+        print(f"  {total_props} SchemaProperty nodes (deduplicated)")
+        for name, info in sorted(classes.items())[:12]:
+            print(f"    {name}: {len(info['props'])} props, "
+                  f"parents={info['subclass_of']}")
+        print("  … (showing first 12)")
+    else:
+        # Summary
+        nc = conn.execute("MATCH (n:SchemaClass) RETURN count(n)").get_next()[0]
+        np = conn.execute("MATCH (n:SchemaProperty) RETURN count(n)").get_next()[0]
+        print(f"\nDone. Registry now has {nc} classes, {np} properties.")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+@click.command()
+@click.option("--db",      default="./registry.lbug", show_default=True,
+              help="Path to LadybugDB file.")
+@click.option("--dry-run", is_flag=True,
+              help="Print what would be inserted without writing.")
+@click.option("--wipe",    is_flag=True,
+              help="Delete existing classes/properties before seeding.")
+def cli(db: str, dry_run: bool, wipe: bool) -> None:
+    """Seed the SenseIn Schema Registry from schema.org."""
+    seed(db_path=db, dry_run=dry_run, wipe=wipe)
+
+if __name__ == "__main__":
+    cli()
