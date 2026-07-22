@@ -60,25 +60,30 @@ conn = lb.Connection(db)
 
 DDL = [
     """CREATE NODE TABLE IF NOT EXISTS SchemaClass (
-        uid        STRING PRIMARY KEY,
-        iri        STRING,
-        uri        STRING,
-        version    STRING,
-        created_at STRING,
-        name       STRING,
-        definition STRING
+        uid          STRING PRIMARY KEY,
+        iri          STRING,
+        uri          STRING,
+        version      STRING,
+        created_at   STRING,
+        name         STRING,
+        definition   STRING,
+        abstract     BOOLEAN,
+        source_label STRING
     )""",
 
     """CREATE NODE TABLE IF NOT EXISTS SchemaProperty (
-        uid        STRING PRIMARY KEY,
-        iri        STRING,
-        uri        STRING,
-        version    STRING,
-        created_at STRING,
-        name       STRING,
-        definition STRING,
-        datatype   STRING,
-        range_uri  STRING
+        uid         STRING PRIMARY KEY,
+        iri         STRING,
+        uri         STRING,
+        version     STRING,
+        created_at  STRING,
+        name        STRING,
+        definition  STRING,
+        datatype    STRING,
+        range_uri   STRING,
+        multivalued BOOLEAN,
+        required    BOOLEAN,
+        source_label STRING
     )""",
 
     # Validation constraints live here — they ARE rules, not property metadata
@@ -142,6 +147,10 @@ DDL = [
     "CREATE REL TABLE IF NOT EXISTS PROV_GENERATED_P (FROM SchemaProperty TO SchemaActivity)",
     "CREATE REL TABLE IF NOT EXISTS PROV_GENERATED_R (FROM SchemaRule TO SchemaActivity)",
     "CREATE REL TABLE IF NOT EXISTS FROM_SOURCE      (FROM SchemaClass TO SchemaSource)",
+    "CREATE REL TABLE IF NOT EXISTS FROM_SOURCE_P    (FROM SchemaProperty TO SchemaSource)",
+    # Alignment — distance between classes across sources
+    # distance DOUBLE: 0.0 = identical, 1.0 = no relation
+    "CREATE REL TABLE IF NOT EXISTS ALIGNED_TO       (FROM SchemaClass TO SchemaClass, distance DOUBLE, method STRING)",
 ]
 
 for stmt in DDL:
