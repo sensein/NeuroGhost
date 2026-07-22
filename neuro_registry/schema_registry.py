@@ -154,7 +154,7 @@ for stmt in DDL:
 REG = "https://registry.sensein.io/"
 
 def now_iso() -> str:
-    return datetime.datetime.utcnow().isoformat() + "Z"
+    return datetime.datetime.now(datetime.UTC).isoformat()
 
 def make_uid() -> str:
     return str(uuid.uuid4())
