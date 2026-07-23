@@ -214,6 +214,10 @@ def parse_linkml(path: Path) -> dict[str, Any]:
         resolved_iri = resolve_prefix(slot_uri, prefixes) if slot_uri else ""
 
         # Decide whether this range is a primitive type or a class reference
+        # Normalise raw_range — can be None if the YAML slot has no range defined
+        if not raw_range or not isinstance(raw_range, str):
+            raw_range = "string"
+
         if raw_range in LINKML_PRIMITIVES:
             datatype  = LINKML_PRIMITIVES[raw_range]
             range_uri = ""
