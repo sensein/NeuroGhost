@@ -572,16 +572,22 @@ def cli(source, db, threshold, min_signal,
         f"Loaded {len(classes)} classes from {len(sources)} sources: "
         f"{', '.join(sorted(sources))}"
     )
-    # Debug: show sample IRIs to verify IRI matching will work
-    iri_sample = [(c["source"], c["name"], c["iri"])
-                  for c in classes if c["iri"]][:6]
-    if iri_sample:
-        click.echo("  Sample IRIs stored in graph:")
-        for src, name, iri in iri_sample:
-            click.echo(f"    {src}:{name} → {iri}")
-    else:
-        click.echo("  WARNING: No IRIs found in graph — IRI matching will score 0 for all pairs.")
-        click.echo("  This means semantic (name+desc) signals will drive all alignment.")
+    # Diagnostics: show IRIs per source to verify IRI matching
+    by_source = {}
+    for c in classes:
+        by_source.setdefault(c["source"], []).append(c)
+    click.echo("  IRI coverage per source:")
+    for src, grp in sorted(by_source.items()):
+        with_iri = [c for c in grp if c["iri"]]
+        sample = with_iri[0]["iri"] if with_iri else "—"
+        click.echo(f"    {src}: {len(with_iri)}/{len(grp)} have IRIs  e.g. {sample}")
+    # Count potential exact IRI matches before running
+    iri_index = {}
+    for c in classes:
+        if c["iri"]:
+            iri_index.setdefault(c["iri"], []).append(c["source"])
+    cross_matches = sum(1 for srcs in iri_index.values() if len(set(srcs)) > 1)
+    click.echo(f"  Potential IRI exact-match pairs across sources: {cross_matches} shared IRIs")
 
     # Pre-load the model once before the loop.
     # Even if we have a parquet cache, new classes may need fresh embeddings.
