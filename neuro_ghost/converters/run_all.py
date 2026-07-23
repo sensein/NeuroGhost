@@ -18,9 +18,10 @@ import click
 # Add parent dir to path so converters can import each other
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from converters import bids, nwb, dandi, openminds, aind
+from converters import bbqs, bids, nwb, dandi, openminds, aind
 
 CONVERTERS = {
+    "bbqs":       bbqs,
     "bids":       bids,
     "nwb":        nwb,
     "dandi":      dandi,
