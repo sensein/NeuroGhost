@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SenseIn Schema Registry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #0b0d13;
+    --bg-elev:     #10131c;
+    --surface:     #151926;
+    --surface-2:   #1b2030;
+    --border:      #232838;
+    --border-soft: #1c2130;
+    --text:        #e6e9f2;
+    --text-dim:    #b3b9cc;
+    --muted:       #6b7391;
+    --mute-soft:   #4a5170;
+
+    --teal:        #2dd4bf;
+    --teal-soft:   rgba(45, 212, 191, 0.12);
+    --teal-line:   rgba(45, 212, 191, 0.35);
+    --purple:      #a78bfa;
+    --purple-soft: rgba(167, 139, 250, 0.14);
+    --purple-line: rgba(167, 139, 250, 0.35);
+    --yellow:      #fbbf24;
+    --yellow-soft: rgba(251, 191, 36, 0.12);
+    --red:         #f87171;
+    --red-soft:    rgba(248, 113, 113, 0.12);
+    --green:       #34d399;
+    --green-soft:  rgba(52, 211, 153, 0.14);
+    --blue:        #60a5fa;
+    --blue-soft:   rgba(96, 165, 250, 0.14);
+
+    --mono:  "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans:  "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    --radius:    8px;
+    --radius-sm: 6px;
+    --radius-xs: 4px;
+    --shadow-panel: 0 1px 0 rgba(255,255,255,0.02) inset, 0 12px 32px -12px rgba(0,0,0,0.6);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(45,212,191,0.05), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(167,139,250,0.05), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection { background: var(--teal-soft); color: var(--teal); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #242a3d; border-radius: 6px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: #2f3651; }
+
+  /* ---------- Header ---------- */
+  header {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.015), transparent);
+    backdrop-filter: blur(8px);
+  }
+  header .brand { display: flex; align-items: center; gap: 12px; }
+  header .mark {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--teal), var(--purple));
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 700; font-size: 13px; color: #0a1017;
+    box-shadow: 0 6px 20px -6px rgba(45,212,191,0.5);
+  }
+  header h1 {
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  header h1 .slash { color: var(--muted); font-weight: 400; margin: 0 4px; }
+  header h1 .accent { color: var(--teal); }
+  header .sub { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+  header .status-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); margin-right: 6px;
+    box-shadow: 0 0 0 3px rgba(52,211,153,0.15);
+    vertical-align: middle;
+  }
+  header .status-dot.loading { background: var(--yellow); box-shadow: 0 0 0 3px rgba(251,191,36,0.15); animation: pulse 1.4s ease-in-out infinite; }
+  header .status-dot.err     { background: var(--red);    box-shadow: 0 0 0 3px rgba(248,113,113,0.15); }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  /* ---------- Nav ---------- */
+  nav {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    background: var(--bg-elev);
+  }
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 11px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--sans);
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  nav button:hover { color: var(--text-dim); }
+  nav button.active { color: var(--teal); border-bottom-color: var(--teal); }
+  nav button svg { width: 14px; height: 14px; }
+
+  /* ---------- Layout ---------- */
+  .container { display: flex; height: calc(100vh - 90px); overflow: hidden; }
+
+  /* ---------- Sidebar ---------- */
+  aside {
+    width: 232px;
+    border-right: 1px solid var(--border);
+    padding: 18px 12px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    background: var(--bg-elev);
+  }
+  aside h2 {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin: 4px 8px 12px;
+    font-weight: 600;
+  }
+  .source-pill {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    margin-bottom: 3px;
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    font-family: var(--sans);
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    position: relative;
+  }
+  .source-pill:hover { background: var(--surface); color: var(--text); }
+  .source-pill.active {
+    background: var(--surface-2);
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .source-pill.active::before {
+    content: "";
+    position: absolute; left: -12px; top: 8px; bottom: 8px;
+    width: 2px; border-radius: 2px;
+    background: var(--teal);
+  }
+  .source-pill .count {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    padding: 1px 6px;
+    border-radius: 10px;
+    min-width: 22px; text-align: center;
+  }
+  .source-pill.active .count { color: var(--text-dim); border-color: var(--border); }
+
+  /* ---------- Main ---------- */
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 28px 40px;
+    min-width: 0;
+  }
+  .toolbar {
+    display: flex; gap: 10px; align-items: center;
+    margin-bottom: 16px;
+  }
+  .search-wrap { flex: 1; position: relative; max-width: 480px; }
+  .search-wrap svg {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; color: var(--muted); pointer-events: none;
+  }
+  .toolbar input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px 8px 32px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--sans);
+    outline: none;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  }
+  .toolbar input::placeholder { color: var(--muted); }
+  .toolbar input:focus {
+    border-color: var(--teal-line);
+    background: var(--surface-2);
+    box-shadow: 0 0 0 3px var(--teal-soft);
+  }
+  .toolbar .kbd {
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+    border: 1px solid var(--border); background: var(--bg-elev);
+    padding: 2px 6px; border-radius: 4px;
+  }
+
+  /* ---------- Class table ---------- */
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  thead th {
+    text-align: left;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 10px 14px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+  }
+  tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tr.class-row { cursor: pointer; transition: background 0.12s ease; }
+  tr.class-row:hover td { background: var(--surface-2); }
+  tr.class-row.open td { background: var(--surface-2); }
+
+  .name-cell { display: flex; align-items: center; gap: 8px; font-weight: 500; color: var(--text); }
+  .caret {
+    width: 14px; height: 14px; color: var(--muted);
+    transition: transform 0.2s var(--ease);
+    flex-shrink: 0;
+  }
+  tr.class-row.open .caret { transform: rotate(90deg); color: var(--teal); }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border: 1px solid transparent;
+    line-height: 1.4;
+  }
+  .badge::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%;
+    background: currentColor; flex-shrink: 0;
+  }
+  .badge.schemaorg { background: var(--teal-soft);   color: var(--teal);   border-color: var(--teal-line); }
+  .badge.bbqs      { background: var(--purple-soft); color: var(--purple); border-color: var(--purple-line); }
+  .badge.other     { background: var(--yellow-soft); color: var(--yellow); border-color: rgba(251,191,36,0.3); }
+  .badge.abstract  {
+    background: transparent; color: var(--muted); border-color: var(--border);
+    text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.08em; padding: 1px 7px;
+  }
+  .badge.abstract::before { display: none; }
+  .badge.flag-multi { background: var(--blue-soft);  color: var(--blue);  border-color: rgba(96,165,250,0.3); }
+  .badge.flag-req   { background: var(--red-soft);   color: var(--red);   border-color: rgba(248,113,113,0.3); }
+  .badge.flag-multi::before, .badge.flag-req::before { display: none; }
+
+  .iri {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    letter-spacing: -0.01em;
+  }
+  td.iri { color: var(--muted); }
+
+  /* ---------- Expanded detail ---------- */
+  tr.detail-row td { padding: 0; background: var(--bg-elev); border-bottom: 1px solid var(--border); }
+  .detail-panel {
+    padding: 20px 24px 22px;
+    border-left: 2px solid var(--teal);
+    background:
+      linear-gradient(180deg, rgba(45,212,191,0.03), transparent 40%),
+      var(--bg-elev);
+    animation: detailIn 0.28s var(--ease);
+    transform-origin: top;
+  }
+  .detail-panel.bbqs { border-left-color: var(--purple); background: linear-gradient(180deg, rgba(167,139,250,0.03), transparent 40%), var(--bg-elev); }
+  .detail-panel.other { border-left-color: var(--yellow); background: linear-gradient(180deg, rgba(251,191,36,0.03), transparent 40%), var(--bg-elev); }
+
+  @keyframes detailIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .detail-header {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    margin-bottom: 6px; flex-wrap: wrap;
+  }
+  .detail-panel h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .detail-panel .definition {
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 14px;
+    max-width: 780px;
+  }
+  .detail-panel .iri-row {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--text-dim);
+    margin-bottom: 18px;
+  }
+  .detail-panel .iri-row .label {
+    color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    padding-right: 8px; border-right: 1px solid var(--border);
+  }
+  .detail-panel h4 {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin: 18px 0 8px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .detail-panel h4 .n {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 10px;
+    letter-spacing: 0;
+  }
+  .detail-panel .parent-list {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    font-size: 12px;
+  }
+  .detail-panel .parent-list .iri {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 3px 8px; border-radius: var(--radius-xs);
+  }
+  .detail-panel .empty-inline {
+    color: var(--mute-soft); font-size: 12px; font-style: italic;
+  }
+
+  .prop-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12.5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .prop-table thead td, .prop-table thead th {
+    background: var(--bg-elev);
+    color: var(--muted);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .prop-table td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); }
+  .prop-table tr:last-child td { border-bottom: none; }
+  .prop-table tbody tr { transition: background 0.12s ease; }
+  .prop-table tbody tr:hover td { background: var(--surface-2); }
+  .prop-table td:first-child { color: var(--text); font-weight: 500; font-family: var(--mono); font-size: 12px; width: 200px; }
+  .prop-table td.flags { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  .dist-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: var(--radius-xs);
+    padding: 2px 7px;
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .dist-badge::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  }
+  .dist-0  { background: var(--green-soft);  color: var(--green);  border-color: rgba(52,211,153,0.3); }
+  .dist-05 { background: var(--yellow-soft); color: var(--yellow); border-color: rgba(251,191,36,0.3); }
+  .dist-1  { background: var(--red-soft);    color: var(--red);    border-color: rgba(248,113,113,0.3); }
+
+  /* ---------- Submit view ---------- */
+  #view-submit {
+    padding: 40px 32px 64px;
+    max-width: 780px;
+    margin: 0 auto;
+    animation: fadeUp 0.35s var(--ease);
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  #view-submit .page-header { margin-bottom: 28px; }
+  #view-submit h2 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+    background: linear-gradient(135deg, var(--text) 30%, var(--teal));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+  }
+  #view-submit .lede {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    line-height: 1.6;
+    max-width: 620px;
+  }
+
+  .form-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-panel);
+    overflow: hidden;
+  }
+  .field { padding: 16px 18px; border-bottom: 1px solid var(--border-soft); }
+  .field:last-of-type { border-bottom: none; }
+  .field .row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-bottom: 8px;
+  }
+  .field label {
+    display: block;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .field label .req { color: var(--red); margin-left: 3px; }
+  .field .hint { color: var(--muted); font-size: 11.5px; font-family: var(--mono); }
+
+  input[type=text] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--mono);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  input[type=text]:focus {
+    border-color: var(--teal-line);
+    box-shadow: 0 0 0 3px var(--teal-soft);
+    background: var(--bg-elev);
+  }
+  input[type=text]::placeholder { color: var(--mute-soft); }
+
+  .editor-shell {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .editor-shell:focus-within {
+    border-color: var(--teal-line);
+    box-shadow: 0 0 0 3px var(--teal-soft);
+  }
+  .editor-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 12px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .editor-toolbar .dots { display: flex; gap: 5px; }
+  .editor-toolbar .dots span {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--border);
+  }
+  .editor-toolbar .lang { color: var(--text-dim); font-weight: 500; }
+  textarea {
+    width: 100%;
+    height: 340px;
+    background: transparent;
+    border: none;
+    padding: 14px 16px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    outline: none;
+    resize: vertical;
+    display: block;
+  }
+  textarea::placeholder { color: var(--mute-soft); }
+
+  .form-actions {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+    background: var(--bg-elev);
+    border-top: 1px solid var(--border);
+    gap: 14px;
+  }
+  .form-actions .note { color: var(--muted); font-size: 12px; }
+  .btn {
+    background: linear-gradient(180deg, #34e0cc, var(--teal));
+    color: #051512;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 9px 18px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--sans);
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    box-shadow: 0 6px 20px -8px rgba(45,212,191,0.6);
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -8px rgba(45,212,191,0.7); filter: brightness(1.03); }
+  .btn:active { transform: translateY(0); }
+  .btn svg { width: 14px; height: 14px; }
+
+  .instructions {
+    margin-top: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+  }
+  .instructions strong {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  .instructions strong svg { width: 14px; height: 14px; color: var(--teal); }
+  .instructions ol { list-style: none; counter-reset: step; }
+  .instructions li {
+    counter-increment: step;
+    display: grid; grid-template-columns: 22px 1fr; gap: 12px;
+    padding: 6px 0;
+    font-size: 12.5px; color: var(--text-dim); line-height: 1.6;
+  }
+  .instructions li::before {
+    content: counter(step);
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    color: var(--teal); font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+    display: grid; place-items: center;
+  }
+  .instructions code {
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--teal);
+    background: var(--teal-soft);
+    padding: 1px 6px; border-radius: 4px;
+    border: 1px solid var(--teal-line);
+  }
+
+  /* ---------- Misc ---------- */
+  #status { color: var(--muted); font-size: 11.5px; font-family: var(--mono); }
+  .empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 48px 24px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    margin-top: 12px;
+  }
+  .empty::before {
+    content: "∅";
+    display: block; font-size: 24px; color: var(--mute-soft); margin-bottom: 8px;
+  }
+
+  /* Fade in on view switch */
+  .container, #view-submit { animation: fadeIn 0.25s var(--ease); }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark">S</div>
+    <div>
+      <h1><span class="accent">SenseIn</span><span class="slash">/</span>Schema Registry</h1>
+      <div class="sub" id="status"><span class="status-dot loading"></span>Loading…</div>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="showView('browse')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M3 12h18M3 19h18"/></svg>
+    Browse
+  </button>
+  <button onclick="showView('submit')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+    Register Schema
+  </button>
+</nav>
+
+<div id="view-browse" class="container">
+  <aside>
+    <h2>Sources</h2>
+    <div id="source-list"></div>
+  </aside>
+  <main>
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="text" id="search" placeholder="Search classes, IRIs, definitions…" oninput="renderTable()"/>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Source</th>
+          <th>IRI</th>
+          <th style="width:80px">Version</th>
+        </tr>
+      </thead>
+      <tbody id="class-tbody"></tbody>
+    </table>
+    <div id="empty-msg" class="empty" style="display:none">No classes match your search.</div>
+  </main>
+</div>
+
+<div id="view-submit" style="display:none">
+  <div class="page-header">
+    <h2>Register a Schema</h2>
+    <p class="lede">
+      Paste your LinkML YAML schema below. Submitting opens a pre-filled
+      GitHub Issue — once merged by CI, your schema will appear in the browser
+      within a few minutes.
+    </p>
+  </div>
+
+  <div class="form-card">
+    <div class="field">
+      <div class="row">
+        <label>Schema name <span class="req">*</span></label>
+        <span class="hint">lowercase, no spaces</span>
+      </div>
+      <input type="text" id="schema-name" placeholder="my-schema"/>
+    </div>
+
+    <div class="field">
+      <div class="row">
+        <label>LinkML YAML <span class="req">*</span></label>
+        <span class="hint">must contain a <code style="font-family:var(--mono);color:var(--teal)">classes:</code> key</span>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-toolbar">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <span class="lang">schema.yaml · LinkML</span>
+        </div>
+        <textarea id="schema-yaml" spellcheck="false" placeholder="id: https://example.org/my-schema
+name: my-schema
+prefixes:
+  linkml: https://w3id.org/linkml/
+classes:
+  MyClass:
+    description: A short description
+    attributes:
+      id:
+        identifier: true
+        range: string
+slots:
+  my_slot:
+    range: string"></textarea>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <span class="note">Opens a new GitHub Issue in a new tab.</span>
+      <button class="btn" onclick="submitSchema()">
+        Open GitHub Issue
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <strong>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+      How it works
+    </strong>
+    <ol>
+      <li>Clicking the button opens a pre-filled GitHub Issue with your YAML in a fenced code block.</li>
+      <li>A CI workflow validates the schema, runs ingestion + alignment, and commits the result.</li>
+      <li>The registry snapshot updates automatically — no manual steps needed.</li>
+      <li>Your schema must be valid LinkML with at least a <code>classes:</code> key.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Config — update these for your repo
+// ---------------------------------------------------------------------------
+const REGISTRY_JSON = "./data/registry.json";
+const GITHUB_REPO   = "sensein/neuro-registry";   // owner/repo
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let allClasses    = [];
+let allSources    = [];
+let activeSource  = "all";
+let expandedUid   = null;
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+async function boot() {
+  try {
+    const resp = await fetch(REGISTRY_JSON);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    allClasses = data.classes  || [];
+    allSources = data.sources  || [];
+    const ts   = data.generated_at
+      ? new Date(data.generated_at).toLocaleString()
+      : "";
+    document.getElementById("status").innerHTML =
+      `<span class="status-dot"></span>${allClasses.length} classes · ${allSources.length} sources · updated ${ts}`;
+    renderSources();
+    renderTable();
+  } catch (e) {
+    document.getElementById("status").innerHTML =
+      '<span class="status-dot err"></span>Could not load registry.json — run export_json.py first.';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Source pills
+// ---------------------------------------------------------------------------
+function renderSources() {
+  const el = document.getElementById("source-list");
+  el.innerHTML = "";
+  const all = document.createElement("button");
+  all.className = "source-pill" + (activeSource === "all" ? " active" : "");
+  all.innerHTML = `<span>All sources</span><span class="count">${allClasses.length}</span>`;
+  all.onclick = () => { activeSource = "all"; renderSources(); renderTable(); };
+  el.appendChild(all);
+
+  allSources.forEach(s => {
+    const btn = document.createElement("button");
+    btn.className = "source-pill" + (activeSource === s.label ? " active" : "");
+    btn.innerHTML = `<span>${s.label}</span><span class="count">${s.class_count}</span>`;
+    btn.onclick = () => { activeSource = s.label; renderSources(); renderTable(); };
+    el.appendChild(btn);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Class table
+// ---------------------------------------------------------------------------
+function sourceBadge(source) {
+  const cls = source === "schema.org" ? "schemaorg"
+            : source === "bbqs"       ? "bbqs"
+            : "other";
+  return `<span class="badge ${cls}">${source}</span>`;
+}
+
+function sourceKind(source) {
+  return source === "schema.org" ? "schemaorg"
+       : source === "bbqs"       ? "bbqs"
+       : "other";
+}
+
+function distBadge(d) {
+  const cls = d <= 0.1 ? "dist-0" : d <= 0.5 ? "dist-05" : "dist-1";
+  return `<span class="dist-badge ${cls}">${d.toFixed(3)}</span>`;
+}
+
+function renderTable() {
+  const q     = (document.getElementById("search").value || "").toLowerCase();
+  const tbody = document.getElementById("class-tbody");
+  tbody.innerHTML = "";
+
+  const visible = allClasses.filter(c => {
+    const sourceOk = activeSource === "all" || c.source === activeSource;
+    const searchOk = !q
+      || c.name.toLowerCase().includes(q)
+      || (c.definition || "").toLowerCase().includes(q)
+      || (c.iri || "").toLowerCase().includes(q);
+    return sourceOk && searchOk;
+  });
+
+  document.getElementById("empty-msg").style.display =
+    visible.length === 0 ? "block" : "none";
+
+  const caretSvg = '<svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+
+  visible.forEach(cls => {
+    // Main row
+    const tr = document.createElement("tr");
+    tr.className = "class-row" + (expandedUid === cls.uid ? " open" : "");
+    tr.onclick = () => toggleDetail(cls.uid);
+    tr.innerHTML = `
+      <td>
+        <div class="name-cell">
+          ${caretSvg}
+          <span>${cls.name}</span>
+          ${cls.abstract ? '<span class="badge abstract">abstract</span>' : ""}
+        </div>
+      </td>
+      <td>${sourceBadge(cls.source)}</td>
+      <td class="iri">${(cls.iri || "").replace("https://schema.org/", "schema:")}</td>
+      <td class="iri">${cls.version}</td>
+    `;
+    tbody.appendChild(tr);
+
+    // Detail row (hidden until expanded)
+    if (expandedUid === cls.uid) {
+      const dr = document.createElement("tr");
+      dr.className = "detail-row";
+      const td = document.createElement("td");
+      td.colSpan = 4;
+
+      const propsHtml = cls.properties.length === 0
+        ? '<div class="empty-inline">No properties defined.</div>'
+        : `<table class="prop-table">
+            <thead><tr>
+              <td>Name</td><td>Type / Range</td><td style="width:140px">Flags</td>
+            </tr></thead>
+            <tbody>
+            ${cls.properties.map(p => `
+              <tr>
+                <td>${p.name}</td>
+                <td class="iri">${p.datatype || p.range_uri || "—"}</td>
+                <td class="flags">
+                  ${p.multivalued ? '<span class="badge flag-multi">multi</span>' : ""}
+                  ${p.required    ? '<span class="badge flag-req">required</span>' : ""}
+                  ${!p.multivalued && !p.required ? '<span style="color:var(--mute-soft);font-size:11px">—</span>' : ""}
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>`;
+
+      const alignHtml = cls.alignments.length === 0
+        ? '<div class="empty-inline">No alignments computed yet.</div>'
+        : `<table class="prop-table">
+            <thead><tr>
+              <td>Aligned class</td><td>Source</td><td style="width:180px">Distance</td>
+            </tr></thead>
+            <tbody>
+            ${cls.alignments.map(a => `
+              <tr>
+                <td>${a.target_name}</td>
+                <td>${sourceBadge(a.target_source)}</td>
+                <td>${distBadge(a.distance)} <span style="color:var(--muted);font-size:11px;margin-left:6px">${a.method}</span></td>
+              </tr>`).join("")}
+            </tbody>
+          </table>`;
+
+      const parentIris = (cls.subclass_of || []).length
+        ? (cls.subclass_of).map(iri => `<span class="iri">${iri}</span>`).join("")
+        : '<div class="empty-inline">Root class.</div>';
+
+      td.innerHTML = `
+        <div class="detail-panel ${sourceKind(cls.source)}">
+          <div class="detail-header">
+            <h3>${cls.name}</h3>
+            ${sourceBadge(cls.source)}
+          </div>
+          <div class="definition">${cls.definition || "No description provided."}</div>
+          <div class="iri-row"><span class="label">IRI</span>${cls.iri || "—"}</div>
+
+          <h4>Subclass of</h4>
+          <div class="parent-list">${parentIris}</div>
+
+          <h4>Properties <span class="n">${cls.properties.length}</span></h4>
+          ${propsHtml}
+
+          <h4>Alignments <span class="n">${cls.alignments.length}</span></h4>
+          ${alignHtml}
+        </div>`;
+      dr.appendChild(td);
+      tbody.appendChild(dr);
+    }
+  });
+}
+
+function toggleDetail(uid) {
+  expandedUid = expandedUid === uid ? null : uid;
+  renderTable();
+}
+
+// ---------------------------------------------------------------------------
+// Submit
+// ---------------------------------------------------------------------------
+function submitSchema() {
+  const name = document.getElementById("schema-name").value.trim();
+  const yaml = document.getElementById("schema-yaml").value.trim();
+  if (!name) { alert("Please enter a schema name."); return; }
+  if (!yaml)  { alert("Please paste your LinkML YAML."); return; }
+  if (!yaml.includes("classes:")) {
+    alert("YAML must contain a 'classes:' key to be valid LinkML."); return;
+  }
+  const title = `schema-submission:${name}`;
+  const body  = "```yaml\n" + yaml + "\n```";
+  const url   = `https://github.com/${GITHUB_REPO}/issues/new`
+              + `?title=${encodeURIComponent(title)}`
+              + `&body=${encodeURIComponent(body)}`;
+  window.open(url, "_blank");
+}
+
+// ---------------------------------------------------------------------------
+// Nav
+// ---------------------------------------------------------------------------
+function showView(view) {
+  document.getElementById("view-browse").style.display =
+    view === "browse" ? "flex" : "none";
+  document.getElementById("view-submit").style.display =
+    view === "submit" ? "block" : "none";
+  document.querySelectorAll("nav button").forEach((b, i) => {
+    b.classList.toggle("active", (i === 0) === (view === "browse"));
+  });
+}
+
+boot();
+</script>
+</body>
+</html>
