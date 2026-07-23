@@ -535,12 +535,10 @@ def write_alignment(conn, uid_a: str, uid_b: str,
               help="Align this source against all others. "
                    "Default: align all source pairs.")
 @click.option("--db",        default=DB_PATH, show_default=True)
-@click.option("--threshold", default=0.8, show_default=True, type=float,
-              help="Only write ALIGNED_TO edges where distance <= threshold. "
-                   "Keeps the graph clean by excluding clearly unrelated pairs.")
-@click.option("--min-signal", default=0.2, show_default=True, type=float,
-              help="Skip pairs where no single signal exceeds this value. "
-                   "Prevents storing pure zero-signal non-matches that add noise.")
+@click.option("--threshold", default=0.85, show_default=True, type=float,
+              help="Only write ALIGNED_TO edges where distance <= threshold.")
+@click.option("--min-signal", default=0.1, show_default=True, type=float,
+              help="Skip pairs where no single signal exceeds this value.")
 @click.option("--registry-version", default="",
               help="Registry version to stamp on alignment edges.")
 @click.option("--dry-run",   is_flag=True,
@@ -574,6 +572,16 @@ def cli(source, db, threshold, min_signal,
         f"Loaded {len(classes)} classes from {len(sources)} sources: "
         f"{', '.join(sorted(sources))}"
     )
+    # Debug: show sample IRIs to verify IRI matching will work
+    iri_sample = [(c["source"], c["name"], c["iri"])
+                  for c in classes if c["iri"]][:6]
+    if iri_sample:
+        click.echo("  Sample IRIs stored in graph:")
+        for src, name, iri in iri_sample:
+            click.echo(f"    {src}:{name} → {iri}")
+    else:
+        click.echo("  WARNING: No IRIs found in graph — IRI matching will score 0 for all pairs.")
+        click.echo("  This means semantic (name+desc) signals will drive all alignment.")
 
     # Pre-load the model once before the loop.
     # Even if we have a parquet cache, new classes may need fresh embeddings.
