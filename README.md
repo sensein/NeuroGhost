@@ -4,6 +4,8 @@
 
 🌐 **Live site:** [sensein.group/NeuroGhost](https://sensein.group/NeuroGhost/)
 
+<img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/de347260-aebb-4ee4-b844-53356ad44c5b" />
+
 ---
 
 ## What is this?
