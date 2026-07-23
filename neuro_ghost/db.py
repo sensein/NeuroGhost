@@ -65,6 +65,62 @@ def bump_version(ver: str, bump: str = "patch") -> str:
         return f"{major}.{minor}.{patch+1}"
 
 # ---------------------------------------------------------------------------
+# Content-addressed identity
+# ---------------------------------------------------------------------------
+
+import hashlib as _hashlib
+import json as _json
+
+def compute_content_id(iri: str = "", datatype: str = "",
+                       range_uri: str = "", units: str = "",
+                       pattern: str = "", multivalued: bool = False,
+                       required: bool = False) -> str:
+    """
+    SHA-256 of the semantic graph fields.
+    Same concept from any source = same hash.
+    Different type or unit = different hash.
+    """
+    payload = _json.dumps({
+        "iri":         iri or "",
+        "datatype":    datatype or "",
+        "range_uri":   range_uri or "",
+        "units":       units or "",
+        "pattern":     pattern or "",
+        "multivalued": bool(multivalued),
+        "required":    bool(required),
+    }, sort_keys=True)
+    return _hashlib.sha256(payload.encode()).hexdigest()
+
+
+def compute_class_content_id(iri: str = "", abstract: bool = False) -> str:
+    """Simpler hash for classes — identity driven by ontology IRI."""
+    payload = _json.dumps({"iri": iri or "", "abstract": bool(abstract)},
+                           sort_keys=True)
+    return _hashlib.sha256(payload.encode()).hexdigest()
+
+
+def skos_relation(distance: float,
+                  is_subclass: bool = False) -> str:
+    """
+    Map a numeric distance to a SKOS mapping relation.
+      0.0        → skos:exactMatch
+      ≤ 0.1      → skos:closeMatch
+      ≤ 0.4      → skos:broadMatch / skos:narrowMatch
+      ≤ 0.7      → skos:relatedMatch
+      > 0.7      → (no relation — don't write the edge)
+    """
+    if distance == 0.0:
+        return "skos:exactMatch"
+    if distance <= 0.1:
+        return "skos:closeMatch"
+    if distance <= 0.4:
+        return "skos:narrowMatch" if is_subclass else "skos:broadMatch"
+    if distance <= 0.7:
+        return "skos:relatedMatch"
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # DDL
 # ---------------------------------------------------------------------------
 
@@ -77,6 +133,7 @@ DDL = [
         uid              STRING PRIMARY KEY,
         iri              STRING,
         uri              STRING,
+        content_id       STRING,
         version          STRING,
         created_at       STRING,
         name             STRING,
@@ -90,12 +147,14 @@ DDL = [
         uid              STRING PRIMARY KEY,
         iri              STRING,
         uri              STRING,
+        content_id       STRING,
         version          STRING,
         created_at       STRING,
         name             STRING,
         definition       STRING,
         datatype         STRING,
         range_uri        STRING,
+        units            STRING,
         multivalued      BOOLEAN,
         required         BOOLEAN,
         source_label     STRING,
@@ -171,6 +230,19 @@ DDL = [
         registry_version STRING
     )""",
 
+    # SemanticIdentity — one node per unique content_id (SHA-256 of semantic graph)
+    # Multiple SchemaClass/Property nodes from different sources point here
+    # when they are semantically identical. Holds the canonical URI.
+    """CREATE NODE TABLE IF NOT EXISTS SemanticIdentity (
+        uid          STRING PRIMARY KEY,
+        content_id   STRING,
+        canonical_uri STRING,
+        datatype     STRING,
+        units        STRING,
+        iri          STRING,
+        created_at   STRING
+    )""",
+
     # ---- Relationship tables -----------------------------------------------
     # Version chains carry diff data — what changed between v_n-1 and v_n
     """CREATE REL TABLE IF NOT EXISTS PRIOR_VERSION (
@@ -213,16 +285,19 @@ DDL = [
     "CREATE REL TABLE IF NOT EXISTS PROV_GENERATED_R (FROM SchemaRule TO SchemaActivity)",
     "CREATE REL TABLE IF NOT EXISTS FROM_SOURCE      (FROM SchemaClass TO SchemaSource)",
     "CREATE REL TABLE IF NOT EXISTS FROM_SOURCE_P    (FROM SchemaProperty TO SchemaSource)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_IDENTITY     (FROM SchemaClass TO SemanticIdentity)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_IDENTITY_P   (FROM SchemaProperty TO SemanticIdentity)",
 
-    # Alignment — distance + per-signal subscores for weight slider in UI
+    # Alignment — distance + subscores + SKOS semantic relation
     """CREATE REL TABLE IF NOT EXISTS ALIGNED_TO (
         FROM SchemaClass TO SchemaClass,
-        distance      DOUBLE,
-        method        STRING,
-        score_iri     DOUBLE,
-        score_name    DOUBLE,
-        score_desc    DOUBLE,
-        score_slot    DOUBLE,
+        distance         DOUBLE,
+        method           STRING,
+        skos_relation    STRING,
+        score_iri        DOUBLE,
+        score_name       DOUBLE,
+        score_desc       DOUBLE,
+        score_slot       DOUBLE,
         registry_version STRING
     )""",
 ]
