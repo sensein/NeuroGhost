@@ -228,9 +228,10 @@ def parse_linkml(path: Path) -> dict[str, Any]:
                         if ":" in raw_range else make_iri(raw_range))
 
         # Extract units from description if present (common in neuro schemas)
-        desc = slot_def.get("description", "")
+        desc = slot_def.get("description") or ""
+        desc = str(desc) if desc is not None else ""
         units = ""
-        if "(units:" in desc.lower():
+        if desc and "(units:" in desc.lower():
             import re
             m = re.search(r'\(units?:\s*([^)]+)\)', desc, re.IGNORECASE)
             if m:
@@ -693,7 +694,7 @@ def insert_schema(conn, parsed: dict, source_label: str,
                 **b,
                 "cid":          cid,
                 "name":         slot_name,
-                "definition":   slot["definition"],
+                "definition":   slot["definition"] or "",
                 "datatype":     slot["datatype"],
                 "range_uri":    slot["range_uri"],
                 "units":        slot.get("units", ""),
@@ -752,7 +753,7 @@ def insert_schema(conn, parsed: dict, source_label: str,
                     **b,
                     "cid":          cid,
                     "name":         slot_name,
-                    "definition":   slot["definition"],
+                    "definition":   slot["definition"] or "",
                     "datatype":     slot["datatype"],
                     "range_uri":    slot["range_uri"],
                     "units":        slot.get("units", ""),
@@ -837,7 +838,7 @@ def insert_schema(conn, parsed: dict, source_label: str,
                 **b,
                 "cid":          cid,
                 "name":         cls_name,
-                "definition":   cls["definition"],
+                "definition":   cls["definition"] or "",
                 "abstract":     cls["abstract"],
                 "source_label": source_label,
                 "rv":           registry_version,
@@ -882,7 +883,7 @@ def insert_schema(conn, parsed: dict, source_label: str,
                     **b,
                     "cid":          cid,
                     "name":         cls_name,
-                    "definition":   cls["definition"],
+                    "definition":   cls["definition"] or "",
                     "abstract":     cls["abstract"],
                     "source_label": source_label,
                     "rv":           registry_version,
