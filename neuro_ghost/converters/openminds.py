@@ -95,10 +95,16 @@ def convert() -> dict:
                                 raw_type = next((t for t in raw_type if t and t != "null"), "string")
                             raw_type = str(raw_type) if raw_type else "string"
                             xsd = OPENMINDS_TYPE_MAP.get(raw_type.lower(), "xsd:string")
-                            key = f"{cls_name}__{prop}"
+                            # prop may be a full URI — extract just the local name
+                            prop_local = prop.split("/")[-1].split("#")[-1]
+                            prop_local = re.sub(r"[^a-zA-Z0-9_]", "_", prop_local)
+                            if not prop_local:
+                                continue
+                            key = f"{cls_name}__{prop_local}"
+                            desc = pbody.get("description") or ""
                             all_slots[key] = {
-                                "description": pbody.get("description", ""),
-                                "slot_uri": f"https://openminds.ebrains.eu/vocab/{prop}",
+                                "description": desc,
+                                "slot_uri": prop if prop.startswith("http") else f"https://openminds.ebrains.eu/vocab/{prop_local}",
                                 "range":    xsd.replace("xsd:", ""),
                                 "multivalued": raw_type == "array",
                                 "required": prop in required,
