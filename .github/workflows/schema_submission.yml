@@ -13,6 +13,7 @@ jobs:
       issues: write
 
     steps:
+      # -----------------------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -21,9 +22,36 @@ jobs:
         with:
           python-version: "3.12"
 
+      # -----------------------------------------------------------------------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Cache sentence-transformers model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: hf-minilm-v2
+          restore-keys: hf-
+
+      # Embeddings cache keyed on all schemas — new schema busts the cache and
+      # forces a recompute, unchanged schemas reuse their cached vectors.
+      - name: Cache embeddings
+        uses: actions/cache@v4
+        with:
+          path: data/embeddings.parquet
+          key: embeddings-${{ hashFiles('schemas/*.yml') }}-${{ github.run_id }}
+          restore-keys: embeddings-${{ hashFiles('schemas/*.yml') }}-
+                        embeddings-
+
+      # -----------------------------------------------------------------------
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # -----------------------------------------------------------------------
       - name: Parse issue metadata
         id: meta
         run: |
@@ -32,8 +60,6 @@ jobs:
           SCHEMA_NAME=$(echo "$SCHEMA_NAME" | xargs | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
           echo "schema_name=$SCHEMA_NAME" >> $GITHUB_OUTPUT
 
-          # Determine bump type:
-          # label "breaking" → major, default → minor
           LABELS='${{ toJson(github.event.issue.labels.*.name) }}'
           if echo "$LABELS" | grep -q "breaking"; then
             echo "bump=major" >> $GITHUB_OUTPUT
@@ -41,7 +67,10 @@ jobs:
             echo "bump=minor" >> $GITHUB_OUTPUT
           fi
 
-      - name: Extract and convert schema from issue body
+      # -----------------------------------------------------------------------
+      # Write the submitted schema to schemas/{name}.yml so it's picked up
+      # by pipeline.py alongside all previously committed schemas.
+      - name: Extract and write schema file
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
           SCHEMA_NAME: ${{ steps.meta.outputs.schema_name }}
@@ -53,9 +82,6 @@ jobs:
           body = os.environ["ISSUE_BODY"]
           name = os.environ["SCHEMA_NAME"]
 
-          # Detect format from the code-fence language tag:
-          #   ```linkml / ```yaml / ```yml  → already LinkML
-          #   ```json / ```json-schema      → JSON Schema, needs conversion
           fenced = re.search(r'```([\w-]*)\s*\n(.*?)```', body, re.DOTALL)
           if fenced:
               lang    = (fenced.group(1) or "yaml").lower()
@@ -65,13 +91,12 @@ jobs:
               content = body.strip()
 
           json_schema_langs = {"json", "json-schema", "jsonschema"}
-          linkml_langs      = {"yaml", "yml", "linkml", ""}
 
           os.makedirs("schemas", exist_ok=True)
           out_path = f"schemas/{name}.yml"
 
           if lang in json_schema_langs:
-              print(f"Detected format: JSON Schema (lang={lang!r}) — converting to LinkML…")
+              print(f"Detected format: JSON Schema ({lang!r}) — converting…")
               sys.path.insert(0, ".")
               from neuro_ghost.converters.from_jsonschema import convert as js2lm
               try:
@@ -82,54 +107,36 @@ jobs:
               with open(out_path, "w") as f:
                   yaml.dump(linkml_dict, f, default_flow_style=False,
                             allow_unicode=True, sort_keys=False)
-              print(f"Converted → {out_path}  "
-                    f"({len(linkml_dict['classes'])} classes, "
-                    f"{len(linkml_dict['slots'])} slots)")
-          elif lang in linkml_langs or lang not in json_schema_langs:
-              print(f"Detected format: LinkML (lang={lang!r})")
+              print(f"Converted → {out_path} "
+                    f"({len(linkml_dict['classes'])} classes)")
+          else:
+              print(f"Detected format: LinkML ({lang!r})")
               with open(out_path, "w") as f:
                   f.write(content)
               print(f"Wrote {out_path}")
-          else:
-              print(f"ERROR: Unsupported schema format '{lang}'. "
-                    "Use ```yaml (LinkML) or ```json (JSON Schema).")
-              sys.exit(1)
           PYEOF
 
+      # -----------------------------------------------------------------------
       - name: Validate LinkML schema
         run: |
-          python neuro_ghost/validate_schema.py schemas/${{ steps.meta.outputs.schema_name }}.yml
+          python neuro_ghost/validate_schema.py \
+            schemas/${{ steps.meta.outputs.schema_name }}.yml
 
-      - name: Seed schema.org (if DB not cached)
+      # -----------------------------------------------------------------------
+      # Full rebuild from all schemas/*.yml in the repo (including the new one
+      # written above).  --skip-converters keeps CI fast — external schemas
+      # (BIDS/NWB/DANDI/…) are refreshed by the weekly publish_registry.yml.
+      - name: Rebuild registry (all local schemas)
         run: |
-          python neuro_ghost/seed.py \
-            --db registry.lbug \
-            --registry-version 1.0.0
-
-      - name: Ingest schema
-        run: |
-          python neuro_ghost/ingest_linkml.py \
-            --file schemas/${{ steps.meta.outputs.schema_name }}.yml \
-            --db registry.lbug \
+          python neuro_ghost/pipeline.py \
+            --fresh \
+            --skip-converters \
+            --bump  ${{ steps.meta.outputs.bump }} \
             --issue ${{ github.event.issue.number }} \
             --agent "${{ github.event.issue.user.login }}"
 
-      - name: Run alignment
-        run: |
-          python neuro_ghost/align.py \
-            --source ${{ steps.meta.outputs.schema_name }} \
-            --db registry.lbug
-
-      - name: Export + version registry
-        run: |
-          python neuro_ghost/export_json.py \
-            --db registry.lbug \
-            --bump ${{ steps.meta.outputs.bump }} \
-            --issue ${{ github.event.issue.number }} \
-            --agent "${{ github.event.issue.user.login }}" \
-            --schema ${{ steps.meta.outputs.schema_name }}
-
-      - name: Commit all artifacts
+      # -----------------------------------------------------------------------
+      - name: Commit registry + schema file
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -139,23 +146,24 @@ jobs:
             data/versions/ \
             data/provenance.json
           git diff --cached --quiet || git commit -m \
-            "feat(registry): ingest ${{ steps.meta.outputs.schema_name }} from issue #${{ github.event.issue.number }}"
+            "feat(registry): ingest ${{ steps.meta.outputs.schema_name }} (issue #${{ github.event.issue.number }})"
           git push
 
+      # -----------------------------------------------------------------------
       - name: Comment success
         if: success()
         uses: actions/github-script@v7
         with:
           script: |
-            const name    = "${{ steps.meta.outputs.schema_name }}";
-            const pagesUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
+            const name     = "${{ steps.meta.outputs.schema_name }}";
+            const pagesUrl = "https://sensein.group/NeuroGhost/";
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.issue.number,
               body: [
                 `✅ **\`${name}\` ingested successfully.**`,
                 ``,
-                `- Classes, properties, and alignments committed.`,
+                `- All schemas rebuilt and aligned.`,
                 `- Provenance logged to \`data/provenance.json\`.`,
                 `- Archived snapshot in \`data/versions/\`.`,
                 ``,
@@ -178,8 +186,7 @@ jobs:
               body: [
                 `❌ **Ingestion failed.**`,
                 ``,
-                `Check the run log for the specific LinkML validation error (e.g. an undefined slot, ` +
-                `\`is_a\` parent, or range reference).`,
+                `Check the run log for validation errors (undefined slot, \`is_a\` parent, or range).`,
                 ``,
                 `[View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
               ].join("\n"),

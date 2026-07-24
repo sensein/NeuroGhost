@@ -57,8 +57,10 @@ def _run(cmd: list[str]) -> None:
               help="Version bump type for the registry export.")
 @click.option("--agent",            default="local", show_default=True,
               help="Who is running this pipeline (recorded in provenance).")
+@click.option("--issue",            default="",
+              help="GitHub issue number to record in provenance (schema submissions).")
 def cli(db: str, fresh: bool, skip_converters: bool,
-        schemas: tuple, bump: str, agent: str) -> None:
+        schemas: tuple, bump: str, agent: str, issue: str) -> None:
     """Run the full NeuroGhost ingestion pipeline."""
 
     py = sys.executable
@@ -90,10 +92,13 @@ def cli(db: str, fresh: bool, skip_converters: bool,
         sys.exit(1)
 
     for schema_file in targets:
-        _run([py, str(HERE / "ingest_linkml.py"),
-              "--file", str(schema_file),
-              "--db",   db,
-              "--agent", agent])
+        cmd = [py, str(HERE / "ingest_linkml.py"),
+               "--file", str(schema_file),
+               "--db",   db,
+               "--agent", agent]
+        if issue:
+            cmd += ["--issue", issue]
+        _run(cmd)
 
     # 5. Align
     _run([py, str(HERE / "align.py"), "--db", db])
