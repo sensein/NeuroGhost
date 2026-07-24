@@ -79,9 +79,8 @@ units, multivalued, required, pattern}}}`.
 Converts the dict into real, hash-identified objects:
 
 - **Properties are built first.** Each one's `hash_id` is computed from
-  `name`/`description`/`range`/`units` only — `slot_uri` and
-  `registry_version` are stored on the object but excluded from the hash
-  (they're provenance/operational metadata, not identity).
+  `name`/`description`/`range`/`units` only — `slot_uri` is stored on the
+  object but excluded from the hash (it's origin metadata, not identity).
 - **Classes reference their properties by hash_id**, sorted. This is why a
   class's own hash depends on its full induced property set — two classes
   with the same properties (regardless of declaration order) hash the same.
@@ -91,8 +90,8 @@ Converts the dict into real, hash-identified objects:
   have every `is_a` target resolvable within its own import closure (that's
   `SchemaView`'s job), so this recursion always terminates cleanly.
 - **Every entity gets one `ProvenanceEntry`** for this ingestion — `source`,
-  `attributed_to` (agent), `generated_at`, `activity` — entirely separate
-  from the hash computation.
+  `attributed_to` (agent), `generated_at`, `activity`, `registry_version` —
+  entirely separate from the hash computation.
 
 ### 3. `write_registry_entities()` + `write_structural_edges()` (`neuro_ghost/db.py`)
 
@@ -116,9 +115,8 @@ and `seed.py` — schema.org is ingested through the exact same path, just with
 | `range`, `units` | `RegistryProperty` | Identity-defining. |
 | `properties`, `is_a`, `mixins` | `RegistryClass` | Identity-defining — all stored as hash_id references. |
 | `class_uri` / `slot_uri` | `RegistryClass` / `RegistryProperty` | Ontology IRI preserved from the source. **Not** part of the hash — two schemas using different IRIs (or none) for the same content still collapse to one node. |
-| `registry_version` | both | Operational stamp. Not part of the hash. |
 | `provenance` | both | List of `ProvenanceEntry`. Accumulates, never affects `hash_id`. |
-| `source`, `attributed_to`, `generated_at`, `activity`, `derived_from` | `ProvenanceEntry` | PROV-O–grounded (`slot_uri: prov:wasAttributedTo` etc.) |
+| `source`, `attributed_to`, `generated_at`, `activity`, `derived_from`, `registry_version` | `ProvenanceEntry` | PROV-O–grounded (`slot_uri: prov:wasAttributedTo` etc.). `registry_version` lives here, not on the entity — the same entity can be attested by different sources at different times, each under a different registry version, so a single scalar on the entity doesn't fit (same reasoning as dropping `source_label`). |
 
 Field names were deliberately aligned with LinkML's own metamodel
 (`description`, `range`, `class_uri`/`slot_uri`, `is_a`, `abstract`) rather
@@ -166,6 +164,12 @@ about:
 Saying "parse_linkml extracts X" and "the registry stores X" are different
 claims — test each layer for what it actually is, not for what you assume
 the other layer does with it.
+
+`tests/test_ingest_registry.py::test_required_does_not_affect_property_identity`
+takes this one step further, end to end: two schemas declare the exact same
+`age` slot except one marks it `required: true`. Ingesting both must produce
+exactly one `RegistryProperty` node, not two — proving `required` doesn't
+leak into identity, in the real graph, not just in an isolated object.
 
 ## Known gaps (as of this writing)
 
