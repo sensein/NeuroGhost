@@ -424,6 +424,78 @@ def ingest_schema(
 
 
 # ---------------------------------------------------------------------------
+# Prompts — show up as slash commands in Claude Desktop
+# ---------------------------------------------------------------------------
+
+@mcp.prompt()
+def find_concept(concept: str) -> str:
+    """Find a neuroscience concept across all registered schemas and show alignments."""
+    return (
+        f"Search the NeuroGhost registry for '{concept}':\n"
+        f"1. Call search_classes(query='{concept}') to find matching classes.\n"
+        f"2. For the top result, call get_alignments(class_name=<hash_id>) to show "
+        f"how it aligns across schemas.\n"
+        f"3. Summarise: what schemas define this concept, how similar are they, "
+        f"and what SKOS relation links them (exactMatch, closeMatch, etc.)."
+    )
+
+
+@mcp.prompt()
+def compare_schemas(schema_a: str, schema_b: str) -> str:
+    """Diff two schemas — which classes overlap and which are unique to each."""
+    return (
+        f"Compare the '{schema_a}' and '{schema_b}' schemas in NeuroGhost:\n"
+        f"1. Call diff_schemas(source_a='{schema_a}', source_b='{schema_b}').\n"
+        f"2. Report: how many classes are shared vs unique to each schema, "
+        f"list the top 5 closest shared pairs by distance score, and highlight "
+        f"any classes that appear only in one schema but have no close equivalent "
+        f"in the other."
+    )
+
+
+@mcp.prompt()
+def map_record(source_schema: str, target_schema: str) -> str:
+    """Guide for transforming a data record from one schema to another."""
+    return (
+        f"I want to transform a data record from '{source_schema}' format to "
+        f"'{target_schema}' format using NeuroGhost.\n\n"
+        f"Please:\n"
+        f"1. Call list_sources() so I can see which schemas are registered.\n"
+        f"2. Ask me to paste my '{source_schema}' record as a JSON dict.\n"
+        f"3. Call transform_record(source_schema='{source_schema}', "
+        f"target_schema='{target_schema}', record=<my dict>).\n"
+        f"4. Show me the mapped fields, any unmapped fields, and explain what "
+        f"alignment edges were used."
+    )
+
+
+@mcp.prompt()
+def submit_schema(schema_name: str) -> str:
+    """Walk through submitting a new LinkML schema to the NeuroGhost registry."""
+    return (
+        f"I want to submit a new schema called '{schema_name}' to NeuroGhost.\n\n"
+        f"Please guide me through:\n"
+        f"1. Call list_sources() to confirm '{schema_name}' isn't already registered.\n"
+        f"2. Ask me to paste my LinkML YAML.\n"
+        f"3. Call ingest_schema(schema_yaml=<my yaml>, schema_name='{schema_name}') "
+        f"— if I have a GitHub token I'll provide it, otherwise use the manual URL.\n"
+        f"4. Explain what happens next (CI validates, aligns, and archives it)."
+    )
+
+
+@mcp.prompt()
+def registry_overview() -> str:
+    """Get a quick overview of everything currently in the NeuroGhost registry."""
+    return (
+        "Give me a quick overview of the NeuroGhost registry:\n"
+        "1. Call list_sources() and summarise each schema (name, class count, version).\n"
+        "2. Call get_provenance() and show the 3 most recent registry updates.\n"
+        "3. Pick the two largest schemas and call diff_schemas() on them — "
+        "how much do they overlap?"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
