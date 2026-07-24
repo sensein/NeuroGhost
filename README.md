@@ -239,24 +239,36 @@ outside the web flow.
 git clone https://github.com/sensein/NeuroGhost.git
 cd NeuroGhost
 pip install -r requirements.txt
-
-# 1. Seed with schema.org as the base vocabulary
-python neuro_ghost/seed.py
-
-# 2. Fetch + convert external schemas (BIDS, NWB, DANDI, openMINDS, AIND)
-python neuro_ghost/converters/run_all.py
-
-# 3. Load a schema
-python neuro_ghost/ingest_linkml.py --file schemas/bbqs.yml
-
-# 4. Compute alignments
-python neuro_ghost/align.py --source bbqs
-
-# 5. Export snapshot the frontend reads
-python neuro_ghost/export_json.py --bump minor --schema bbqs
 ```
 
-Then open `index.html` in a browser and you'll see the local snapshot.
+**Full rebuild** (seeds schema.org, fetches external schemas, ingests everything, aligns, exports):
+
+```bash
+python neuro_ghost/pipeline.py --fresh
+```
+
+**Local schemas only** (skips the external network fetch):
+
+```bash
+python neuro_ghost/pipeline.py --fresh --skip-converters
+```
+
+**One schema** (incremental, adds to an existing DB):
+
+```bash
+python neuro_ghost/pipeline.py --skip-converters --schemas schemas/bbqs.yml
+```
+
+```
+Options:
+  --fresh             Delete the DB first (fixes version-mismatch errors)
+  --skip-converters   Skip fetching BIDS, NWB, DANDI, openMINDS, AIND
+  --schemas FILE      One or more specific .yml files to ingest
+  --bump              Version bump type: major / minor / patch  [default: minor]
+  --agent TEXT        Name recorded in provenance  [default: local]
+```
+
+Then open `index.html` in a browser to see the local snapshot.
 
 
 ## Under the hood
