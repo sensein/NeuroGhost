@@ -1,0 +1,118 @@
+name: Rebuild & Publish Registry
+
+# Trigger manually or weekly (Sunday 03:00 UTC).
+# A schema submission (schema_submission.yml) handles per-PR incremental updates;
+# this workflow does a full clean rebuild on a schedule.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump (patch / minor / major)"
+        required: false
+        default: "patch"
+        type: choice
+        options: [patch, minor, major]
+      skip_converters:
+        description: "Skip fetching external schemas (BIDS/NWB/DANDI/…)"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "0 3 * * 0"   # weekly, Sunday 03:00 UTC
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to push data/ back to main
+
+    steps:
+      # -----------------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history so the bump commit doesn't squash provenance
+          fetch-depth: 0
+
+      # -----------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # -----------------------------------------------------------------------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      # Sentence-transformers downloads all-MiniLM-L6-v2 (~90 MB) on first use.
+      # Cache it so rebuilds don't re-download from Hugging Face every week.
+      - name: Cache sentence-transformers model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: hf-minilm-v2
+          restore-keys: hf-
+
+      # Embeddings are computed once per unique set of schema content and stored
+      # in data/embeddings.parquet.  Cache keyed on schema file hashes so a
+      # schema change forces a recompute while an unchanged run reuses it.
+      - name: Cache embeddings
+        uses: actions/cache@v4
+        with:
+          path: data/embeddings.parquet
+          key: embeddings-${{ hashFiles('schemas/*.yml') }}
+          restore-keys: embeddings-
+
+      # -----------------------------------------------------------------------
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # -----------------------------------------------------------------------
+      - name: Determine pipeline flags
+        id: flags
+        run: |
+          BUMP="${{ inputs.bump || 'patch' }}"
+          SKIP=""
+          if [ "${{ inputs.skip_converters }}" = "true" ]; then
+            SKIP="--skip-converters"
+          fi
+          echo "bump=$BUMP"   >> $GITHUB_OUTPUT
+          echo "skip=$SKIP"   >> $GITHUB_OUTPUT
+
+      # -----------------------------------------------------------------------
+      # Full pipeline: wipe → seed → (converters) → ingest all → align → export
+      - name: Seed, ingest, align, export
+        run: |
+          python neuro_ghost/pipeline.py \
+            --fresh \
+            ${{ steps.flags.outputs.skip }} \
+            --bump  ${{ steps.flags.outputs.bump }} \
+            --agent "github-actions"
+
+      # -----------------------------------------------------------------------
+      - name: Commit & push updated registry
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Stage registry outputs + any new converted schemas
+          git add data/registry.json data/versions/ data/provenance.json
+          git add schemas/ --ignore-errors
+
+          if git diff --cached --quiet; then
+            echo "Registry unchanged — nothing to commit."
+          else
+            VERSION=$(python - <<'PY'
+          import json, pathlib
+          d = pathlib.Path("data/registry.json")
+          if d.exists():
+              print(json.loads(d.read_text()).get("registry_version", ""))
+          PY
+            )
+            git commit -m "chore(registry): rebuild v${VERSION} [skip ci]"
+            git push origin HEAD:main
+          fi
