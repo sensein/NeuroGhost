@@ -386,52 +386,56 @@ def load_classes(conn, source_label: str | None = None) -> list[dict]:
     """
     Load RegistryClass nodes from the graph for alignment.
 
-    Only loads the LATEST version of each class (no PRIOR_VERSION pointing
-    to it). We don't align old versions — only current ones.
+    A class's "source" is no longer a single label — identity is shared
+    across sources now, so a class can carry a ProvenanceEntry from each
+    source that attested to it. We load the full SET of attesting sources
+    per class instead. If source_label is given, only classes with at least
+    one attestation from that source are loaded (still compared against
+    every other class, per pairs_across_sources()).
 
-    Also loads the property IRIs for each class (for slot Jaccard scoring).
+    Also loads property IRIs (for slot Jaccard scoring) and parent IRIs
+    (to distinguish broadMatch from narrowMatch).
     """
     if source_label:
         rows = conn.execute("""
-            MATCH (n:RegistryClass {source_label: $src})
-            WHERE NOT EXISTS {
-                MATCH (newer:RegistryClass)-[:PRIOR_VERSION]->(n)
-            }
-            RETURN n.hash_id, n.iri, n.name, n.definition, n.source_label
+            MATCH (n:RegistryClass)-[:HAS_PROVENANCE]->(:ProvenanceEntry {source: $src})
+            RETURN DISTINCT n.hash_id, n.class_uri, n.name, n.description
         """, {"src": source_label}).get_all()
     else:
         rows = conn.execute("""
             MATCH (n:RegistryClass)
-            WHERE NOT EXISTS {
-                MATCH (newer:RegistryClass)-[:PRIOR_VERSION]->(n)
-            }
-            RETURN n.hash_id, n.iri, n.name, n.definition, n.source_label
+            RETURN n.hash_id, n.class_uri, n.name, n.description
         """).get_all()
 
     classes = []
-    for hash_id, iri, name, defn, src in rows:
-        if not src:  # skip nodes with no source_label — orphaned from bad ingest
-            continue
-        # Get property IRIs for slot Jaccard scoring
+    for hash_id, class_uri, name, desc in rows:
+        sources = {
+            r[0] for r in conn.execute("""
+                MATCH (:RegistryClass {hash_id: $hash_id})-[:HAS_PROVENANCE]->(pe:ProvenanceEntry)
+                RETURN pe.source
+            """, {"hash_id": hash_id}).get_all()
+        }
+        if not sources:
+            continue  # defensive — provenance is required, shouldn't happen
+
         slot_iris = [
             r[0] for r in conn.execute("""
                 MATCH (c:RegistryClass {hash_id: $hash_id})-[:HAS_PROPERTY]->(p:RegistryProperty)
-                RETURN p.iri
+                RETURN p.slot_uri
             """, {"hash_id": hash_id}).get_all() if r[0]
         ]
-        # Check if this class has a known parent (for broadMatch vs narrowMatch)
         parent_iris = [
             r[0] for r in conn.execute("""
                 MATCH (c:RegistryClass {hash_id: $hash_id})-[:SUBCLASS_OF]->(p:RegistryClass)
-                RETURN p.iri
+                RETURN p.class_uri
             """, {"hash_id": hash_id}).get_all() if r[0]
         ]
         classes.append({
             "hash_id":    hash_id,
-            "iri":        iri       or "",
+            "iri":        class_uri or "",
             "name":       name      or "",
-            "definition": defn      or "",
-            "source":     src       or "",
+            "definition": desc      or "",
+            "sources":    sources,
             "slot_iris":   slot_iris,
             "parent_iris": parent_iris,
         })
@@ -443,35 +447,54 @@ def pairs_across_sources(
     source_a: str | None,
 ) -> Iterator[tuple[dict, dict]]:
     """
-    Generate all cross-source class pairs for alignment.
+    Generate cross-source class pairs for alignment.
 
-    If source_a is given: pairs every class from source_a with every class
-    from every other source (targeted alignment).
+    If source_a is given: pairs every class attested by source_a with every
+    class not attested by source_a (targeted alignment).
 
     If source_a is None: pairs every source against every other source
-    (full cross-product alignment).
+    (grouped by source, like before, since a full O(n^2) scan over every
+    class is wasteful at scale). A class attested by multiple sources can
+    appear in more than one group; `seen` dedups by hash_id pair so it's
+    never compared against the same other class twice.
 
-    We never pair a class with another class from the same source —
-    that would be intra-source comparison which adds no value here.
+    Two classes are only skipped as "not cross-source" when they share the
+    exact same set of attesting sources — the closest equivalent, now that
+    "source" is a set instead of a single label, to the old rule of never
+    comparing two classes from the same source.
     """
-    sources = {c["source"] for c in classes if c["source"]}
-    if len(sources) < 2:
+    all_sources = {s for c in classes for s in c["sources"]}
+    if len(all_sources) < 2:
         return  # Need at least 2 sources to align
 
+    seen: set[tuple[str, str]] = set()
+
+    def _mark(a: dict, b: dict) -> bool:
+        key = tuple(sorted((a["hash_id"], b["hash_id"])))
+        if key in seen:
+            return False
+        seen.add(key)
+        return True
+
     if source_a:
-        group_a = [c for c in classes if c["source"] == source_a]
-        group_b = [c for c in classes if c["source"] != source_a]
+        group_a = [c for c in classes if source_a in c["sources"]]
+        group_b = [c for c in classes if source_a not in c["sources"]]
         for a in group_a:
             for b in group_b:
-                yield a, b
+                if _mark(a, b):
+                    yield a, b
     else:
         by_source: dict[str, list] = {}
         for c in classes:
-            by_source.setdefault(c["source"], []).append(c)
-        for s1, s2 in combinations(list(by_source.keys()), 2):
+            for s in c["sources"]:
+                by_source.setdefault(s, []).append(c)
+        for s1, s2 in combinations(sorted(all_sources), 2):
             for a in by_source[s1]:
                 for b in by_source[s2]:
-                    yield a, b
+                    if a["sources"] == b["sources"]:
+                        continue
+                    if _mark(a, b):
+                        yield a, b
 
 
 # ---------------------------------------------------------------------------
@@ -566,26 +589,29 @@ def cli(source, db, threshold, min_signal,
         click.echo("No classes found. Run seed.py and ingest_linkml.py first.")
         return
 
-    sources = {c["source"] for c in classes if c["source"]}
+    sources = {s for c in classes for s in c["sources"]}
     click.echo(
         f"Loaded {len(classes)} classes from {len(sources)} sources: "
         f"{', '.join(sorted(sources))}"
     )
-    # Diagnostics: show IRIs per source to verify IRI matching
-    by_source = {}
+    # Diagnostics: show IRIs per source to verify IRI matching. A class can
+    # belong to more than one source's group now, so counts here can exceed
+    # len(classes) — that's expected, not a bug.
+    by_source: dict[str, list] = {}
     for c in classes:
-        by_source.setdefault(c["source"], []).append(c)
+        for s in c["sources"]:
+            by_source.setdefault(s, []).append(c)
     click.echo("  IRI coverage per source:")
     for src, grp in sorted(by_source.items()):
         with_iri = [c for c in grp if c["iri"]]
         sample = with_iri[0]["iri"] if with_iri else "—"
         click.echo(f"    {src}: {len(with_iri)}/{len(grp)} have IRIs  e.g. {sample}")
     # Count potential exact IRI matches before running
-    iri_index = {}
+    iri_index: dict[str, set] = {}
     for c in classes:
         if c["iri"]:
-            iri_index.setdefault(c["iri"], []).append(c["source"])
-    cross_matches = sum(1 for srcs in iri_index.values() if len(set(srcs)) > 1)
+            iri_index.setdefault(c["iri"], set()).update(c["sources"])
+    cross_matches = sum(1 for srcs in iri_index.values() if len(srcs) > 1)
     click.echo(f"  Potential IRI exact-match pairs across sources: {cross_matches} shared IRIs")
 
     # Pre-load the model once before the loop.
@@ -626,9 +652,11 @@ def cli(source, db, threshold, min_signal,
         skos_rel = compute_skos_relation(distance, is_subclass=b_is_parent_of_a)
 
         if dry_run:
+            a_src = ",".join(sorted(a["sources"]))
+            b_src = ",".join(sorted(b["sources"]))
             click.echo(
-                f"  [{skos_rel}] {a['source']}:{a['name']} ↔ "
-                f"{b['source']}:{b['name']}  "
+                f"  [{skos_rel}] {a_src}:{a['name']} ↔ "
+                f"{b_src}:{b['name']}  "
                 f"d={distance:.4f}  "
                 f"(iri={subscores['iri']:.2f} "
                 f"name={subscores['name']:.2f} "

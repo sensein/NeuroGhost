@@ -8,8 +8,13 @@ Single source of truth for:
         Edit that file and rebuild the DB to change node structure.
       Infrastructure node tables (SchemaSource, SchemaVersionSnapshot,
         SchemaActivity, SemanticIdentity) → defined here; rarely change.
+        SemanticIdentity + HAS_IDENTITY/HAS_IDENTITY_P + PRIOR_VERSION* are
+        unused now (superseded by content-hash identity + ProvenanceEntry)
+        but not yet removed — a separate cleanup pass, not touched here.
       Relationship tables → defined here.
-  - Identity helpers (make_hash_id, make_base, make_iri, now_iso)
+  - Identity helpers (make_uid, make_iri, now_iso)
+  - Graph writers for content-addressed entities (scalar_fields,
+    entity_exists, create_entity_node, write_provenance)
 
 Import this in seed.py, ingest_linkml.py, align.py, export_json.py
 so every script gets the same tables without duplicating DDL.
@@ -45,39 +50,12 @@ def now_iso() -> str:
     return datetime.datetime.now(datetime.UTC).isoformat()
 
 def make_uid() -> str:
-    """Generate a random UUID string. Kept for backward compatibility."""
+    """Generate a random UUID string, for non-content-addressed entities
+    (ProvenanceEntry, SchemaSource, SchemaVersionSnapshot, ...)."""
     return str(uuid.uuid4())
-
-def make_hash_id(content: dict) -> str:
-    """Return sha256:<hex> for a canonicalised content dict."""
-    canonical = _json.dumps(content, sort_keys=True, separators=(",", ":"))
-    digest = _hashlib.sha256(canonical.encode()).hexdigest()
-    return f"sha256:{digest}"
 
 def make_iri(object_id: str) -> str:
     return f"{REG}obj/{object_id}"
-
-def make_uri(object_id: str, version: str = "1.0.0") -> str:
-    """Kept for backward compatibility. Prefer make_iri for new code."""
-    return f"{REG}obj/{object_id}/v/{version}"
-
-def make_base(object_id: str, version: str = "1.0.0",
-              iri: str | None = None,
-              created_by: str = "system") -> dict:
-    """Return the shared identity fields for a new registry entity.
-
-    hash_id includes a per-call UUID so that each creation event (including
-    new versions of the same IRI) produces a distinct node key.
-    The `version` parameter is accepted for backward compatibility but ignored.
-    """
-    iri_ = iri or make_iri(object_id)
-    ts   = now_iso()
-    return {
-        "hash_id":    make_hash_id({"iri": iri_, "nonce": make_uid()}),
-        "iri":        iri_,
-        "created_by": created_by,
-        "created_at": ts,
-    }
 
 def bump_version(ver: str, bump: str = "patch") -> str:
     """
@@ -95,31 +73,152 @@ def bump_version(ver: str, bump: str = "patch") -> str:
         return f"{major}.{minor}.{patch+1}"
 
 # ---------------------------------------------------------------------------
-# Content-addressed identity helpers (used by ingest layer)
+# Graph writers for content-addressed entities (RegistryClass, RegistryProperty)
 # ---------------------------------------------------------------------------
+# Shared by every script that writes these node types (ingest_linkml.py,
+# seed.py, ...): write the node only if its hash_id doesn't already exist,
+# then attach a ProvenanceEntry unless this exact source already attested to
+# it. This is how "identity is separate from provenance" plays out on disk.
+#
+# Duck-typed on purpose (entity just needs .model_dump(); prov just needs
+# .uid/.source/.source_description/.generated_at/.attributed_to/.activity/
+# .derived_from) so this module doesn't need to import schema_registry_utils.
 
-def compute_content_id(iri: str = "", datatype: str = "",
-                       range_uri: str = "", units: str = "",
-                       pattern: str = "", multivalued: bool = False,
-                       required: bool = False) -> str:
-    """SHA-256 of semantic graph fields. Kept for backward compatibility."""
-    payload = _json.dumps({
-        "iri":         iri or "",
-        "datatype":    datatype or "",
-        "range_uri":   range_uri or "",
-        "units":       units or "",
-        "pattern":     pattern or "",
-        "multivalued": bool(multivalued),
-        "required":    bool(required),
-    }, sort_keys=True)
-    return _hashlib.sha256(payload.encode()).hexdigest()
+LIST_FIELDS = {"provenance", "skos_mappings", "properties", "relations", "mixins"}
+HAS_PROVENANCE_REL = {"RegistryClass": "HAS_PROVENANCE", "RegistryProperty": "HAS_PROVENANCE_P"}
 
 
-def compute_class_content_id(iri: str = "", abstract: bool = False) -> str:
-    """Simpler hash for classes. Kept for backward compatibility."""
-    payload = _json.dumps({"iri": iri or "", "abstract": bool(abstract)},
-                           sort_keys=True)
-    return _hashlib.sha256(payload.encode()).hexdigest()
+def scalar_fields(entity) -> dict:
+    """An entity's own node-table columns — excludes list/edge-backed fields."""
+    return {k: v for k, v in entity.model_dump().items() if k not in LIST_FIELDS}
+
+
+def entity_exists(conn, label: str, hash_id: str) -> bool:
+    return conn.execute(
+        f"MATCH (n:{label} {{hash_id: $hash_id}}) RETURN n.hash_id LIMIT 1",
+        {"hash_id": hash_id},
+    ).has_next()
+
+
+def create_entity_node(conn, label: str, entity) -> None:
+    fields = scalar_fields(entity)
+    prop_str = ", ".join(f"{k}: ${k}" for k in fields)
+    conn.execute(f"CREATE (:{label} {{{prop_str}}})", fields)
+
+
+def write_provenance(conn, label: str, hash_id: str, prov) -> bool:
+    """
+    Attach a ProvenanceEntry to an entity, unless this exact source has
+    already attested to it. Returns True if a new ProvenanceEntry was added.
+    """
+    rel = HAS_PROVENANCE_REL[label]
+    already = conn.execute(f"""
+        MATCH (n:{label} {{hash_id: $hash_id}})-[:{rel}]->(pe:ProvenanceEntry {{source: $source}})
+        RETURN pe.uid LIMIT 1
+    """, {"hash_id": hash_id, "source": prov.source}).has_next()
+    if already:
+        return False
+
+    uid = prov.uid or make_uid()
+    conn.execute("""
+        CREATE (:ProvenanceEntry {
+            uid: $uid, source: $source, source_description: $source_description,
+            generated_at: $generated_at, attributed_to: $attributed_to,
+            activity: $activity, derived_from: $derived_from
+        })
+    """, {
+        "uid":                uid,
+        "source":             prov.source,
+        "source_description": prov.source_description,
+        "generated_at":       prov.generated_at.isoformat(),
+        "attributed_to":      prov.attributed_to,
+        "activity":           prov.activity,
+        "derived_from":       _json.dumps(prov.derived_from),
+    })
+    conn.execute(f"""
+        MATCH (n:{label} {{hash_id: $hash_id}}), (pe:ProvenanceEntry {{uid: $uid}})
+        CREATE (n)-[:{rel}]->(pe)
+    """, {"hash_id": hash_id, "uid": uid})
+    return True
+
+
+def write_registry_entities(conn, properties: dict, registry_classes: dict,
+                             dry_run: bool = False) -> dict:
+    """
+    Write (or reuse) each property/class node by hash_id, then attach this
+    ingestion's ProvenanceEntry to every one of them. Existing nodes are
+    never overwritten — a hash match means identical content, so there is
+    nothing to update; only a new ProvenanceEntry may need attaching.
+
+    `properties`/`registry_classes` are name -> entity dicts (values just
+    need .hash_id and .provenance; shared by ingest_linkml.py and seed.py).
+    """
+    stats = {
+        "properties_new": 0, "properties_existing": 0,
+        "classes_new":    0, "classes_existing":    0,
+        "provenance_added": 0,
+    }
+
+    for prop in properties.values():
+        is_new = not entity_exists(conn, "RegistryProperty", prop.hash_id)
+        if is_new and not dry_run:
+            create_entity_node(conn, "RegistryProperty", prop)
+        stats["properties_new" if is_new else "properties_existing"] += 1
+        if not dry_run:
+            for prov in prop.provenance:
+                if write_provenance(conn, "RegistryProperty", prop.hash_id, prov):
+                    stats["provenance_added"] += 1
+
+    for rc in registry_classes.values():
+        is_new = not entity_exists(conn, "RegistryClass", rc.hash_id)
+        if is_new and not dry_run:
+            create_entity_node(conn, "RegistryClass", rc)
+        stats["classes_new" if is_new else "classes_existing"] += 1
+        if not dry_run:
+            for prov in rc.provenance:
+                if write_provenance(conn, "RegistryClass", rc.hash_id, prov):
+                    stats["provenance_added"] += 1
+
+    return stats
+
+
+def write_structural_edges(conn, registry_classes: dict) -> int:
+    """
+    HAS_PROPERTY (from each class's own `properties`) + SUBCLASS_OF (from
+    `is_a`, which is already resolved to a hash_id or None by the caller).
+    """
+    rels = 0
+
+    for rc in registry_classes.values():
+        for prop_hash_id in rc.properties:
+            already = conn.execute("""
+                MATCH (c:RegistryClass {hash_id: $c})-[:HAS_PROPERTY]->(p:RegistryProperty {hash_id: $p})
+                RETURN c.hash_id LIMIT 1
+            """, {"c": rc.hash_id, "p": prop_hash_id}).has_next()
+            if not already:
+                conn.execute("""
+                    MATCH (c:RegistryClass {hash_id: $c}), (p:RegistryProperty {hash_id: $p})
+                    CREATE (c)-[:HAS_PROPERTY]->(p)
+                """, {"c": rc.hash_id, "p": prop_hash_id})
+                rels += 1
+
+    for rc in registry_classes.values():
+        parent_hash_id = rc.is_a
+        if not parent_hash_id:
+            continue
+
+        already = conn.execute("""
+            MATCH (c:RegistryClass {hash_id: $c})-[:SUBCLASS_OF]->(p:RegistryClass {hash_id: $p})
+            RETURN c.hash_id LIMIT 1
+        """, {"c": rc.hash_id, "p": parent_hash_id}).has_next()
+        if not already:
+            conn.execute("""
+                MATCH (c:RegistryClass {hash_id: $c}), (p:RegistryClass {hash_id: $p})
+                CREATE (c)-[:SUBCLASS_OF]->(p)
+            """, {"c": rc.hash_id, "p": parent_hash_id})
+            rels += 1
+
+    return rels
 
 
 def skos_relation(distance: float, is_subclass: bool = False) -> str:
@@ -176,8 +275,8 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
     non-abstract, non-inline classes.
 
     Column rules per slot:
-    - db_inline class ref (e.g. ProvenanceInfo) → flatten its slots inline.
-    - Multivalued class ref → REL table (handled in _REL_DDL below; skipped here).
+    - db_inline class ref → flatten its slots inline.
+    - Multivalued class ref (e.g. provenance) → REL table (handled in _REL_DDL below; skipped here).
     - Non-multivalued class ref → STRING column (hash_id FK).
     - Scalar with db_json or multivalued → STRING (stored as JSON array).
     - Plain scalar → mapped type; identifier slots get PRIMARY KEY.
@@ -322,6 +421,9 @@ _REL_DDL: list[str] = [
     "CREATE REL TABLE IF NOT EXISTS HAS_RELATION       (FROM RegistryClass    TO Relation)",
     "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING   (FROM RegistryClass    TO SkosMapping)",
     "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING_P (FROM RegistryProperty TO SkosMapping)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE     (FROM RegistryClass    TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_P   (FROM RegistryProperty TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_R   (FROM Relation         TO ProvenanceEntry)",
     "CREATE REL TABLE IF NOT EXISTS MIXIN              (FROM RegistryClass    TO RegistryClass)",
     "CREATE REL TABLE IF NOT EXISTS SUBCLASS_OF        (FROM RegistryClass    TO RegistryClass)",
 
