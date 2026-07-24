@@ -1,161 +1,206 @@
 """
-align.py — Compute semantic alignment between schema sources
-============================================================
+align.py — Proteus-aligned semantic alignment for NeuroGhost
+=============================================================
 
-WHY THIS FILE EXISTS
---------------------
-After ingesting multiple schemas (BIDS, NWB, DANDI, BBQS, etc.), we have
-thousands of classes and properties living in the graph — but they don't
-know about each other yet. A BIDS "subject" and a DANDI "Participant" are
-clearly related, but the graph has no edge saying so.
+Implements the Proteus alignment pipeline
+(https://github.com/neurovium/Proteus/tree/main/proteus-align)
+inline — no external proteus_align import required.
 
-This file computes those relationships and writes them into the graph as
-ALIGNED_TO edges, each carrying:
-  - distance    : 0.0 (identical) to 1.0 (completely unrelated)
-  - skos_relation: the W3C SKOS vocabulary term for the relationship type
-  - score_iri   : contribution from IRI matching
-  - score_name  : contribution from name similarity
-  - score_desc  : contribution from definition similarity
-  - score_slot  : contribution from shared properties (stub)
+PIPELINE STAGES
+---------------
+Stage 0  load_classes()           — build MatchingProfiles from LadybugDB
+Stage 1  pairs_across_sources()   — blocking: recall-focused candidate pairs
+         + unit veto              — the ONLY precision filter at this stage
+Stage 2  compute_signals()        — SignalVector per pair
+Stage 3  calibrate()              — confidence score + evidence regime
+Stage 4  assign_predicate()       — SKOS predicate with pathway invariant
+Stage 5  repair_structural()      — demote duplicate exactMatches
+Stage 6  write_alignment()        — ALIGNED_TO edge in LadybugDB
 
-WHY SKOS?
----------
-SKOS (Simple Knowledge Organization System) is a W3C standard vocabulary
-for describing relationships between concepts in different vocabularies.
-It gives us a shared language for saying:
-  skos:exactMatch   → these two concepts ARE the same thing
-  skos:closeMatch   → these are very similar but not identical
-  skos:broadMatch   → concept A is broader/more general than concept B
-  skos:narrowMatch  → concept A is narrower/more specific than concept B
-  skos:relatedMatch → related but neither broader nor narrower
+KEY INVARIANTS (from Proteus CLAUDE.md)
+----------------------------------------
+1. Unit dimension compatibility is a hard VETO, never a scoring factor.
+2. Blocking is tuned for recall; everything after is for precision.
+3. Missing data is MISSING (None), never zero-imputed.
+4. Only anchored evidence (IRI / ontology) can yield skos:exactMatch.
+   Statistical evidence alone caps at skos:closeMatch.
+5. Structural repair demotes, never deletes.
 
-This makes our alignment data interoperable with any tool that speaks SKOS.
+SIGNAL WEIGHTS (M1 calibration)
+---------------------------------
+  name_similarity : 0.45  (token Jaccard + string similarity, take max)
+  token_jaccard   : 0.35  (set overlap of camelCase-split tokens)
+  alias_overlap   : 0.20  (best alias pair similarity — MISSING if no aliases)
+  definition      : bonus (25% blend when embeddings available)
+  unit_compatible : +0.05 bonus capped at 1.0
 
-HOW THE DISTANCE FUNCTION WORKS
---------------------------------
-We combine four signals into a single distance score:
-
-  1. IRI match (weight 0.6)
-     If two classes explicitly point to the same ontology IRI
-     (e.g. both say class_uri: schema:Person), they are definitionally
-     the same concept. This is the strongest possible signal.
-     Score: 1.0 if IRIs match, 0.0 otherwise (binary).
-
-  2. Name similarity (weight 0.15)
-     How semantically similar are the class names?
-     Uses sentence-transformers to encode both names as vectors, then
-     computes cosine similarity. "Investigator" and "Researcher" score
-     high because their embedding vectors are close in semantic space.
-     Falls back to difflib if sentence-transformers is unavailable.
-
-  3. Definition similarity (weight 0.25)
-     How semantically similar are the plain-English descriptions?
-     Same embedding approach as name, but on the longer definition text.
-     More information = more reliable signal.
-
-  4. Slot/property Jaccard (weight 0.0 — stubbed)
-     What fraction of properties do the two classes share?
-     Stubbed at weight=0 until scientists specify how to weight it.
-     The function exists and is wired up — just turn up the weight when ready.
-
-The weights are chosen so IRI match dominates. If two classes share an IRI,
-no amount of name/definition dissimilarity can push them apart. The semantic
-signals (name + definition) are there to catch cases where schemas don't
-declare explicit IRI anchors.
-
-EMBEDDING CACHE (PARQUET)
---------------------------
-Computing embeddings is slow (~1-2 seconds per class on CPU). With hundreds
-of classes, re-computing every time we run alignment would be painful.
-
-Solution: we cache embeddings in data/embeddings.parquet.
-  - First run: compute embeddings, save to parquet
-  - Subsequent runs: load from parquet, only compute new ones
-
-The parquet file is committed to the repo so CI doesn't need to recompute
-from scratch on every submission.
-
-PAIRS ACROSS SOURCES
----------------------
-We only compare classes from DIFFERENT sources. Comparing BIDS to BIDS
-doesn't tell us anything new. The function pairs_across_sources() generates
-all cross-source pairs efficiently.
+DEFINITION EMBEDDINGS (M3 — implemented)
+-----------------------------------------
+We implement definition similarity via sentence-transformers
+(all-MiniLM-L6-v2). This is an advance on the Proteus skeleton, which
+marks M3 as MISSING pending completion. Embeddings are cached in
+data/embeddings.parquet so CI doesn't recompute from scratch.
 
 USAGE
 -----
-  python align.py --source bbqs           # align bbqs against all others
-  python align.py                          # align all source pairs
+  python align.py                           # align all source pairs
+  python align.py --source bbqs            # align bbqs against all others
   python align.py --dry-run               # print pairs without writing
   python align.py --threshold 0.5         # only write edges with d <= 0.5
-  python align.py --min-signal 0.4        # skip truly unrelated pairs
 """
 
 from __future__ import annotations
+
 import difflib
+import re
+from dataclasses import dataclass, field
 from itertools import combinations
 from pathlib import Path
 from typing import Iterator
 
 import click
 
-from db import get_connection, skos_relation as compute_skos_relation
+from db import get_connection
 
 # ---------------------------------------------------------------------------
-# Distance weights
+# Confidence thresholds (Proteus stage 4)
 # ---------------------------------------------------------------------------
-# These are the weights used to combine the four signals into one score.
-# They must sum to 1.0 (or we normalise by their sum, as we do below).
-#
-# Current rationale:
-#   IRI match is the gold standard — if both classes say "I am schema:Person"
-#   then they ARE the same concept by definition. Weight = 0.6.
-#
-#   Definition similarity captures semantic meaning from natural language.
-#   Definitions are longer than names, so they carry more signal. Weight = 0.25.
-#
-#   Name similarity is useful for cases with no IRI anchor and terse names.
-#   Weight = 0.15.
-#
-#   Slot Jaccard is stubbed — scientists are specifying how to handle it.
-#   When ready, reduce IRI/name/desc weights proportionally to make room.
 
-W_IRI   = 0.60
-W_NAME  = 0.15
-W_DESC  = 0.25
-W_SLOT  = 0.00   # stubbed — increase when scientists spec this
+EXACT_CONF    = 0.95   # anchored only
+BROAD_CONF    = 0.85   # anchored broad/narrow
+CLOSE_CONF    = 0.65   # statistical ceiling
+RELATED_FLOOR = 0.45   # drop anything below this
 
-DB_PATH        = "./registry.lbug"
-EMBEDDINGS_PATH = Path("data/embeddings.parquet")
+# Stage 3 weights (Proteus M1)
+W_NAME    = 0.45
+W_JACCARD = 0.35
+W_ALIAS   = 0.20
+UNIT_BONUS = 0.05
+
+MISSING = None  # sentinel: signal absent, not zero (Invariant 3)
+
+DB_PATH          = "./registry.lbug"
+EMBEDDINGS_PATH  = Path("data/embeddings.parquet")
+
 
 # ---------------------------------------------------------------------------
-# Embedding model (lazy-loaded, cached globally)
+# Inline _lexical.py — tokenization & similarity (Proteus)
 # ---------------------------------------------------------------------------
-# We use "all-MiniLM-L6-v2" — a lightweight but powerful sentence embedding
-# model that maps text to a 384-dimensional vector space. It was trained on
-# over a billion sentence pairs and understands domain concepts well.
-#
-# "Lazy loading" means we don't import sentence_transformers at module level —
-# we wait until the first time we actually need it. This means the module
-# can be imported even if sentence_transformers isn't installed, and the
-# fallback (difflib) will kick in instead.
+
+# Domain abbreviations. Extend via tests, not ad hoc.
+_ABBREV: dict[str, str] = {
+    "subj": "subject",  "obj": "object",    "desc": "description",
+    "def":  "definition","prop": "property", "cls":  "class",
+    "uri":  "identifier","iri": "identifier","id":   "identifier",
+    "src":  "source",   "tgt": "target",    "ver":  "version",
+    "num":  "number",   "cnt": "count",     "freq": "frequency",
+    "temp": "temperature","samp": "sample",  "rec":  "recording",
+    "subtype": "subtype","idx": "index",
+}
+
+
+def _tokens(name: str) -> tuple[str, ...]:
+    """Split name into normalised tokens (camelCase, snake_case, kebab-case)."""
+    s = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", s)
+    parts = re.split(r"[\s_\-/]+", s.lower())
+    return tuple(_ABBREV.get(p, p) for p in parts if p)
+
+
+def _jaccard(a: str, b: str) -> float:
+    """Token Jaccard similarity between two names."""
+    ta, tb = set(_tokens(a)), set(_tokens(b))
+    union = ta | tb
+    return len(ta & tb) / len(union) if union else 0.0
+
+
+def _string_sim(a: str, b: str) -> float:
+    """Edit-distance similarity on normalised strings (0–1)."""
+    if not a or not b:
+        return 0.0
+    na = " ".join(_tokens(a))
+    nb = " ".join(_tokens(b))
+    return difflib.SequenceMatcher(None, na, nb).ratio()
+
+
+def _alias_best(names_a: list[str], names_b: list[str]) -> float | None:
+    """Best pairwise string similarity across two alias lists. MISSING if empty."""
+    if not names_a or not names_b:
+        return MISSING
+    return max(_string_sim(a, b) for a in names_a for b in names_b)
+
+
+# ---------------------------------------------------------------------------
+# Inline units.py — dimensional veto (Proteus)
+# ---------------------------------------------------------------------------
+# UCUM → QUDT dimension vector: (L, M, T, I, Θ, N, J)
+# None = unknown unit — never veto on unknown.
+
+_DIMS: dict[str, tuple[int, ...]] = {
+    # dimensionless
+    "1": (0,0,0,0,0,0,0), "ratio": (0,0,0,0,0,0,0), "percent": (0,0,0,0,0,0,0),
+    # length
+    "m": (1,0,0,0,0,0,0), "mm": (1,0,0,0,0,0,0), "cm": (1,0,0,0,0,0,0),
+    "km": (1,0,0,0,0,0,0), "um": (1,0,0,0,0,0,0), "nm": (1,0,0,0,0,0,0),
+    # time
+    "s": (0,0,1,0,0,0,0), "ms": (0,0,1,0,0,0,0), "us": (0,0,1,0,0,0,0),
+    "min": (0,0,1,0,0,0,0), "h": (0,0,1,0,0,0,0),
+    "hour": (0,0,1,0,0,0,0), "day": (0,0,1,0,0,0,0),
+    # frequency
+    "hz": (0,0,-1,0,0,0,0), "khz": (0,0,-1,0,0,0,0),
+    # temperature (celsius/kelvin/fahrenheit share dimension Θ)
+    "k": (0,0,0,0,1,0,0), "celsius": (0,0,0,0,1,0,0),
+    "degc": (0,0,0,0,1,0,0), "fahrenheit": (0,0,0,0,1,0,0),
+    # mass
+    "kg": (0,1,0,0,0,0,0), "g": (0,1,0,0,0,0,0), "mg": (0,1,0,0,0,0,0),
+    # electrical
+    "v": (2,1,-3,-1,0,0,0), "mv": (2,1,-3,-1,0,0,0), "uv": (2,1,-3,-1,0,0,0),
+    "a": (0,0,0,1,0,0,0),  "ma": (0,0,0,1,0,0,0),
+    "ohm": (2,1,-3,-2,0,0,0),
+    # amount
+    "mol": (0,0,0,0,0,1,0), "mmol": (0,0,0,0,0,1,0),
+}
+
+
+def _dimension_of(unit: str) -> tuple[int, ...] | None:
+    return _DIMS.get(unit.lower().strip())
+
+
+def _unit_veto(units_a: list[str], units_b: list[str]) -> bool:
+    """
+    Hard veto: return True when BOTH sides have known but incompatible dimensions.
+    Only fires when dimensions are known on both sides (Invariant 1).
+    """
+    for ua in units_a:
+        da = _dimension_of(ua)
+        if da is None:
+            continue
+        for ub in units_b:
+            db = _dimension_of(ub)
+            if db is None:
+                continue
+            if da != db:
+                return True
+    return False
+
+
+def _unit_compatible(units_a: list[str], units_b: list[str]) -> bool | None:
+    """Soft compatibility for stage 3 bonus. None = unknown on at least one side."""
+    known_a = [_dimension_of(u) for u in units_a if _dimension_of(u) is not None]
+    known_b = [_dimension_of(u) for u in units_b if _dimension_of(u) is not None]
+    if not known_a or not known_b:
+        return None
+    return known_a[0] == known_b[0]
+
+
+# ---------------------------------------------------------------------------
+# Embedding model — lazy loaded, cached globally (implements M3)
+# ---------------------------------------------------------------------------
 
 _model = None
 
+
 def _get_model():
-    """
-    Load the sentence-transformers model, or fall back to difflib.
-
-    Returns either the loaded SentenceTransformer model, or the string
-    "fallback" to signal that difflib should be used instead.
-
-    The fallback is triggered by:
-      - sentence-transformers not installed (ImportError)
-      - torchcodec/FFmpeg dependency missing (RuntimeError on newer versions)
-      - any other import failure
-
-    Recommendation to avoid the fallback:
-      pip install "sentence-transformers>=2.7.0,<3.0.0"
-    """
     global _model
     if _model is None:
         try:
@@ -166,31 +211,18 @@ def _get_model():
             _model = "fallback"
             click.echo(
                 f"  Could not load sentence-transformers ({type(e).__name__}) — "
-                "falling back to difflib.\n"
+                "falling back to string_sim.\n"
                 "  Fix: pip install 'sentence-transformers>=2.7.0,<3.0.0'"
             )
     return _model
 
 
-# ---------------------------------------------------------------------------
-# Embedding cache (parquet)
-# ---------------------------------------------------------------------------
-
 def _load_embedding_cache() -> dict[str, list[float]]:
-    """
-    Load pre-computed text embeddings from parquet, if the file exists.
-
-    The cache maps text → embedding vector (list of 384 floats).
-    Keys are the exact text strings that were embedded.
-
-    Returns an empty dict if no cache exists yet.
-    """
     if not EMBEDDINGS_PATH.exists():
         return {}
     try:
         import pandas as pd
         df = pd.read_parquet(EMBEDDINGS_PATH)
-        # Columns: "text", "embedding" (list of floats stored as object)
         return {row["text"]: row["embedding"] for _, row in df.iterrows()}
     except Exception as e:
         click.echo(f"  WARNING: could not load embedding cache — {e}")
@@ -198,203 +230,270 @@ def _load_embedding_cache() -> dict[str, list[float]]:
 
 
 def _save_embedding_cache(cache: dict[str, list[float]]) -> None:
-    """
-    Save the embedding cache to parquet.
-    Called after computing new embeddings so they're available next run.
-    """
     try:
         import pandas as pd
         EMBEDDINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        df = pd.DataFrame([
-            {"text": text, "embedding": emb}
-            for text, emb in cache.items()
-        ])
+        df = pd.DataFrame([{"text": t, "embedding": e} for t, e in cache.items()])
         df.to_parquet(EMBEDDINGS_PATH, index=False)
         click.echo(f"  Saved {len(cache)} embeddings → {EMBEDDINGS_PATH}")
     except Exception as e:
         click.echo(f"  WARNING: could not save embedding cache — {e}")
 
 
-# Module-level cache — loaded once per run
 _embedding_cache: dict[str, list[float]] = {}
-_cache_dirty = False   # track if we need to re-save
+_cache_dirty = False
 
 
 def _embed(text: str) -> list[float] | None:
-    """
-    Get the embedding vector for a text string.
-
-    First checks the in-memory cache (populated from parquet on first call).
-    If not cached, computes using the model and adds to cache.
-    If model is fallback, returns None (difflib will be used instead).
-
-    An embedding vector is a list of 384 floats. Two texts with similar
-    meanings will have vectors that are close in this 384-dimensional space,
-    measured by cosine similarity.
-    """
     global _embedding_cache, _cache_dirty
     if not _embedding_cache:
         _embedding_cache = _load_embedding_cache()
-
     if not text or not text.strip():
         return None
-
     if text in _embedding_cache:
         return _embedding_cache[text]
-
     model = _get_model()
     if model == "fallback":
         return None
-
-    # Compute the embedding
     emb = model.encode([text], normalize_embeddings=True)[0].tolist()
     _embedding_cache[text] = emb
     _cache_dirty = True
     return emb
 
 
+def _cosine(text_a: str, text_b: str) -> float | None:
+    """Cosine similarity via embeddings (M3). None if model unavailable."""
+    ea, eb = _embed(text_a), _embed(text_b)
+    if ea is None or eb is None:
+        return MISSING
+    import numpy as np
+    return float(np.dot(ea, eb))
+
+
 # ---------------------------------------------------------------------------
-# Signal functions
+# Stage 2 — SignalVector
 # ---------------------------------------------------------------------------
 
-def _score_iri(iri_a: str, iri_b: str) -> float:
+@dataclass(frozen=True)
+class SignalVector:
     """
-    Binary IRI match score.
-
-    1.0 if both IRIs are non-empty and identical (ignoring trailing slashes).
-    0.0 otherwise.
-
-    Why binary? If two schemas explicitly declare the same ontology IRI,
-    there is no ambiguity — they are the same concept. No partial credit.
+    Per-pair evidence bundle (Proteus stage 2).
+    Each field is None (MISSING) when the signal is absent — never zero-imputed.
     """
+    name_similarity: float | None   # max(jaccard, string_sim) on names
+    token_jaccard:   float | None   # set-based token overlap
+    alias_overlap:   float | None   # best alias pair similarity (MISSING if no aliases)
+    def_similarity:  float | None   # cosine on definitions (M3 — implemented)
+    unit_compatible: bool  | None   # dimensional compat; None = unknown
+    anchor_relation: str   | None   # "identical"|"broader"|"narrower"|"unrelated"|None
+
+
+def _anchor_relation(
+    iri_a: str, iri_b: str,
+    parents_a: list[str], parents_b: list[str],
+) -> str | None:
+    """Classify ontology anchor relationship (Proteus stage 2, M2 stub)."""
     if not iri_a or not iri_b:
-        return 0.0
-    return 1.0 if iri_a.rstrip("/") == iri_b.rstrip("/") else 0.0
+        return MISSING
+    a, b = iri_a.rstrip("/"), iri_b.rstrip("/")
+    if a == b:
+        return "identical"
+    if b in [p.rstrip("/") for p in parents_a]:
+        return "broader"   # B is parent of A → A is narrower → use broadMatch
+    if a in [p.rstrip("/") for p in parents_b]:
+        return "narrower"
+    return "unrelated"
 
 
-def _score_semantic(text_a: str, text_b: str) -> float:
-    """
-    Semantic similarity between two text strings.
-
-    Tries embedding-based cosine similarity first (range 0.0–1.0).
-    Falls back to difflib sequence matching if embeddings unavailable.
-
-    Cosine similarity of normalized embeddings = dot product of the vectors.
-    A score of 1.0 means the texts are semantically identical.
-    A score of 0.0 means they have no semantic overlap.
-    """
-    if not text_a or not text_b:
-        return 0.0
-
-    emb_a = _embed(text_a)
-    emb_b = _embed(text_b)
-
-    if emb_a is not None and emb_b is not None:
-        # Cosine similarity = dot product (vectors are already normalized)
-        import numpy as np
-        return float(np.dot(emb_a, emb_b))
-
-    # Difflib fallback: ratio() returns fraction of matching characters
-    return difflib.SequenceMatcher(None, text_a.lower(), text_b.lower()).ratio()
-
-
-def _score_slot(slots_a: set[str], slots_b: set[str]) -> float:
-    """
-    Jaccard similarity between two sets of property IRIs.
-
-    Jaccard = |intersection| / |union|
-    Range 0.0–1.0. 1.0 means identical property sets.
-
-    Currently weight=0 (stubbed) — included for completeness and future use.
-    When scientists specify how to incorporate property overlap into alignment,
-    increase W_SLOT and decrease other weights proportionally.
-    """
-    if not slots_a and not slots_b:
-        return 0.0
-    union = slots_a | slots_b
-    if not union:
-        return 0.0
-    return len(slots_a & slots_b) / len(union)
-
-
-# ---------------------------------------------------------------------------
-# Combined distance function
-# ---------------------------------------------------------------------------
-
-def compute_distance(a: dict, b: dict) -> tuple[float, str, dict]:
-    """
-    Compute the alignment distance between two class dicts.
-
-    Returns a tuple of:
-      distance    : float 0.0–1.0 (0.0 = same, 1.0 = unrelated)
-      method      : string describing the dominant signal
-      subscores   : dict with individual signal scores for the UI weight slider
-
-    The subscores are stored on the ALIGNED_TO edge so the frontend can
-    recompute distance with different weights without re-running alignment.
-
-    Algorithm:
-      similarity = (W_IRI * s_iri + W_NAME * s_name + W_DESC * s_desc + W_SLOT * s_slot)
-                   / (W_IRI + W_NAME + W_DESC + W_SLOT)
-      distance   = 1 - similarity
-    """
-    s_iri  = _score_iri(a["iri"],         b["iri"])
-    s_name = _score_semantic(a["name"],   b["name"])
-    s_desc = _score_semantic(a["definition"], b["definition"])
-    s_slot = _score_slot(
-        set(a.get("slot_iris", [])),
-        set(b.get("slot_iris", []))
+def compute_signals(a: dict, b: dict) -> SignalVector:
+    """Stage 2: build the evidence bundle for a class pair."""
+    anchor = _anchor_relation(
+        a["iri"], b["iri"],
+        a.get("parent_iris", []),
+        b.get("parent_iris", []),
     )
 
-    total_weight = W_IRI + W_NAME + W_DESC + W_SLOT
-    if total_weight == 0:
-        return 1.0, "none", {"iri": 0.0, "name": 0.0, "desc": 0.0, "slot": 0.0}
+    jac      = _jaccard(a["name"], b["name"])       if a["name"] and b["name"] else MISSING
+    str_s    = _string_sim(a["name"], b["name"])    if a["name"] and b["name"] else MISSING
+    name_sim = max(jac, str_s) if jac is not None and str_s is not None else (jac or str_s)
 
-    similarity = (
-        W_IRI  * s_iri  +
-        W_NAME * s_name +
-        W_DESC * s_desc +
-        W_SLOT * s_slot
-    ) / total_weight
+    alias_sim = _alias_best(a.get("aliases", []), b.get("aliases", []))
 
-    distance = round(1.0 - similarity, 6)
+    # M3 — definition cosine; fall back to string_sim
+    def_sim = _cosine(a.get("definition", ""), b.get("definition", ""))
+    if def_sim is MISSING:
+        da, db = a.get("definition", ""), b.get("definition", "")
+        def_sim = _string_sim(da, db) if da and db else MISSING
 
-    # Determine which signal dominated the result — for the "method" label
-    # stored on the edge and shown in the UI.
-    if s_iri == 1.0 and W_IRI > 0:
-        method = "iri"                     # explicit ontology anchor
-    elif s_desc > 0.75 and W_DESC > 0:
-        method = "semantic-desc"           # definition similarity drove it
-    elif s_name > 0.75 and W_NAME > 0:
-        method = "semantic-name"           # name similarity drove it
-    else:
-        method = "composite"               # mixture of signals
+    unit_compat = _unit_compatible(a.get("units", []), b.get("units", []))
 
-    return distance, method, {
-        "iri":  round(s_iri,  6),
-        "name": round(s_name, 6),
-        "desc": round(s_desc, 6),
-        "slot": round(s_slot, 6),
-    }
+    return SignalVector(
+        name_similarity = name_sim,
+        token_jaccard   = jac,
+        alias_overlap   = alias_sim,
+        def_similarity  = def_sim,
+        unit_compatible = unit_compat,
+        anchor_relation = anchor,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Load classes from the graph
+# Stage 3 — Calibration
+# ---------------------------------------------------------------------------
+
+def calibrate(sv: SignalVector) -> tuple[float, str]:
+    """
+    Stage 3: combine signal vector → (confidence 0–1, regime).
+
+    Anchored regime: IRI anchor determines confidence directly.
+    Statistical regime: M1 fixed-weight average + definition blend + unit bonus.
+    """
+    # Anchored pathway
+    if sv.anchor_relation == "identical":
+        conf = 1.0 if (sv.unit_compatible is None or sv.unit_compatible) else 0.90
+        return conf, "anchored"
+    if sv.anchor_relation in ("broader", "narrower"):
+        return BROAD_CONF, "anchored"
+    if sv.anchor_relation == "unrelated":
+        return 0.0, "anchored"
+
+    # Statistical pathway — normalise over present signals only (Invariant 3)
+    stats = [
+        (W_NAME,    sv.name_similarity),
+        (W_JACCARD, sv.token_jaccard),
+        (W_ALIAS,   sv.alias_overlap),
+    ]
+    w_sum = sum(w for w, v in stats if v is not MISSING and w > 0)
+    s_sum = sum(w * v for w, v in stats if v is not MISSING and w > 0)
+    score = s_sum / w_sum if w_sum else 0.0
+
+    # Blend in definition similarity (M3) — not in M1 weights but informative
+    if sv.def_similarity is not MISSING:
+        score = score * 0.75 + sv.def_similarity * 0.25
+
+    if sv.unit_compatible is True:
+        score = min(1.0, score + UNIT_BONUS)
+
+    return round(score, 6), "statistical"
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 — Predicate assignment
+# ---------------------------------------------------------------------------
+
+def assign_predicate(sv: SignalVector, confidence: float, regime: str) -> tuple[str, float] | None:
+    """
+    Stage 4: (sv, confidence, regime) → (skos_predicate, confidence) or None.
+
+    Invariant 4: statistical evidence alone caps at skos:closeMatch.
+    Only anchored evidence can yield skos:exactMatch.
+    Returns None when the pair is below the confidence floor.
+    """
+    if regime == "anchored":
+        rel = sv.anchor_relation
+        if rel == "identical":
+            if confidence >= EXACT_CONF and (sv.unit_compatible is None or sv.unit_compatible):
+                return "skos:exactMatch", confidence
+            return "skos:closeMatch", confidence   # unit mismatch → downgrade
+        if rel == "broader":
+            return "skos:broadMatch", confidence
+        if rel == "narrower":
+            return "skos:narrowMatch", confidence
+        return None  # "unrelated"
+
+    # Statistical — cap at closeMatch
+    if confidence >= CLOSE_CONF:
+        return "skos:closeMatch", confidence
+    if confidence >= RELATED_FLOOR:
+        return "skos:relatedMatch", confidence
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Stage 5 — Structural sanity repair
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _Pending:
+    a:          dict
+    b:          dict
+    confidence: float
+    predicate:  str
+    sv:         SignalVector
+    method:     str
+    subscores:  dict
+
+
+def repair_structural(pending: list[_Pending]) -> list[_Pending]:
+    """
+    Stage 5 M1: enforce one-to-one cardinality for exactMatch.
+
+    If multiple exactMatch edges share the same subject, keep the highest-
+    confidence one; demote the rest to closeMatch (demote-don't-delete).
+    """
+    best_exact: dict[str, tuple[float, int]] = {}
+    for i, p in enumerate(pending):
+        if p.predicate == "skos:exactMatch":
+            prev = best_exact.get(p.a["hash_id"])
+            if prev is None or p.confidence > prev[0]:
+                best_exact[p.a["hash_id"]] = (p.confidence, i)
+
+    repaired = []
+    for i, p in enumerate(pending):
+        if p.predicate == "skos:exactMatch":
+            if best_exact.get(p.a["hash_id"], (None, i))[1] != i:
+                from dataclasses import replace
+                p = replace(p, predicate="skos:closeMatch")
+        repaired.append(p)
+    return repaired
+
+
+# ---------------------------------------------------------------------------
+# Combined pipeline entry point
+# ---------------------------------------------------------------------------
+
+def compute_alignment(a: dict, b: dict) -> _Pending | None:
+    """
+    Run stages 1-4 for a single pair.
+    Returns a _Pending record or None if the pair should be dropped.
+    Stage 1 unit veto is the caller's responsibility (handled in CLI loop).
+    """
+    sv                = compute_signals(a, b)
+    confidence, regime = calibrate(sv)
+    pred_result        = assign_predicate(sv, confidence, regime)
+    if pred_result is None:
+        return None
+    predicate, confidence = pred_result
+    distance = round(1.0 - confidence, 6)
+
+    subscores = {
+        "iri":    1.0 if sv.anchor_relation == "identical" else 0.0,
+        "name":   sv.name_similarity or 0.0,
+        "desc":   sv.def_similarity  or 0.0,
+        "slot":   0.0,
+        "jaccard":sv.token_jaccard   or 0.0,
+    }
+    if regime == "anchored":
+        method = "anchored-iri"
+    elif (sv.def_similarity or 0) > 0.75:
+        method = "semantic-desc"
+    elif (sv.name_similarity or 0) > 0.75:
+        method = "semantic-name"
+    else:
+        method = "composite"
+
+    return _Pending(a=a, b=b, confidence=confidence, predicate=predicate,
+                    sv=sv, method=method, subscores=subscores)
+
+
+# ---------------------------------------------------------------------------
+# Stage 0 — Load classes from LadybugDB
 # ---------------------------------------------------------------------------
 
 def load_classes(conn, source_label: str | None = None) -> list[dict]:
     """
-    Load RegistryClass nodes from the graph for alignment.
-
-    A class's "source" is no longer a single label — identity is shared
-    across sources now, so a class can carry a ProvenanceEntry from each
-    source that attested to it. We load the full SET of attesting sources
-    per class instead. If source_label is given, only classes with at least
-    one attestation from that source are loaded (still compared against
-    every other class, per pairs_across_sources()).
-
-    Also loads property IRIs (for slot Jaccard scoring) and parent IRIs
-    (to distinguish broadMatch from narrowMatch).
+    Stage 0: build MatchingProfiles from RegistryClass nodes.
+    Loads name, IRI, definition, parent IRIs, slot IRIs, and units.
     """
     if source_label:
         rows = conn.execute("""
@@ -411,24 +510,31 @@ def load_classes(conn, source_label: str | None = None) -> list[dict]:
     for hash_id, class_uri, name, desc in rows:
         sources = {
             r[0] for r in conn.execute("""
-                MATCH (:RegistryClass {hash_id: $hash_id})-[:HAS_PROVENANCE]->(pe:ProvenanceEntry)
+                MATCH (:RegistryClass {hash_id: $h})-[:HAS_PROVENANCE]->(pe:ProvenanceEntry)
                 RETURN pe.source
-            """, {"hash_id": hash_id}).get_all()
+            """, {"h": hash_id}).get_all()
         }
         if not sources:
-            continue  # defensive — provenance is required, shouldn't happen
+            continue
 
         slot_iris = [
             r[0] for r in conn.execute("""
-                MATCH (c:RegistryClass {hash_id: $hash_id})-[:HAS_PROPERTY]->(p:RegistryProperty)
+                MATCH (c:RegistryClass {hash_id: $h})-[:HAS_PROPERTY]->(p:RegistryProperty)
                 RETURN p.slot_uri
-            """, {"hash_id": hash_id}).get_all() if r[0]
+            """, {"h": hash_id}).get_all() if r[0]
+        ]
+        units = [
+            r[0] for r in conn.execute("""
+                MATCH (c:RegistryClass {hash_id: $h})-[:HAS_PROPERTY]->(p:RegistryProperty)
+                WHERE p.units IS NOT NULL
+                RETURN p.units
+            """, {"h": hash_id}).get_all() if r[0]
         ]
         parent_iris = [
             r[0] for r in conn.execute("""
-                MATCH (c:RegistryClass {hash_id: $hash_id})-[:SUBCLASS_OF]->(p:RegistryClass)
+                MATCH (c:RegistryClass {hash_id: $h})-[:SUBCLASS_OF]->(p:RegistryClass)
                 RETURN p.class_uri
-            """, {"hash_id": hash_id}).get_all() if r[0]
+            """, {"h": hash_id}).get_all() if r[0]
         ]
         classes.append({
             "hash_id":    hash_id,
@@ -436,36 +542,30 @@ def load_classes(conn, source_label: str | None = None) -> list[dict]:
             "name":       name      or "",
             "definition": desc      or "",
             "sources":    sources,
-            "slot_iris":   slot_iris,
-            "parent_iris": parent_iris,
+            "slot_iris":  slot_iris,
+            "parent_iris":parent_iris,
+            "units":      units,
+            "aliases":    [],  # M3 — populated when alias data lands in schema
         })
     return classes
 
+
+# ---------------------------------------------------------------------------
+# Stage 1 — Blocking: pairs across sources
+# ---------------------------------------------------------------------------
 
 def pairs_across_sources(
     classes: list[dict],
     source_a: str | None,
 ) -> Iterator[tuple[dict, dict]]:
     """
-    Generate cross-source class pairs for alignment.
-
-    If source_a is given: pairs every class attested by source_a with every
-    class not attested by source_a (targeted alignment).
-
-    If source_a is None: pairs every source against every other source
-    (grouped by source, like before, since a full O(n^2) scan over every
-    class is wasteful at scale). A class attested by multiple sources can
-    appear in more than one group; `seen` dedups by hash_id pair so it's
-    never compared against the same other class twice.
-
-    Two classes are only skipped as "not cross-source" when they share the
-    exact same set of attesting sources — the closest equivalent, now that
-    "source" is a set instead of a single label, to the old rule of never
-    comparing two classes from the same source.
+    Stage 1 blocking: generate recall-focused cross-source class pairs.
+    A class attested by multiple sources can appear in multiple groups;
+    `seen` deduplicates by hash_id pair so no pair is compared twice.
     """
     all_sources = {s for c in classes for s in c["sources"]}
     if len(all_sources) < 2:
-        return  # Need at least 2 sources to align
+        return
 
     seen: set[tuple[str, str]] = set()
 
@@ -498,29 +598,15 @@ def pairs_across_sources(
 
 
 # ---------------------------------------------------------------------------
-# Write alignment to graph
+# Stage 6 — Write alignment to LadybugDB
 # ---------------------------------------------------------------------------
 
-def write_alignment(conn, hash_id_a: str, hash_id_b: str,
-                    distance: float, method: str,
-                    subscores: dict, skos_rel: str,
-                    registry_version: str = "") -> None:
-    """
-    Write an ALIGNED_TO edge between two RegistryClass nodes.
-
-    We delete any existing edge first to avoid duplicates (alignment is
-    re-runnable). The new edge carries:
-      - distance: the computed score
-      - skos_relation: the W3C SKOS vocabulary term
-      - method: which signal dominated
-      - score_*: individual signal subscores (for frontend weight slider)
-      - registry_version: when this alignment was computed
-    """
-    # Remove stale edge if it exists
+def write_alignment(conn, p: _Pending, registry_version: str = "") -> None:
+    """Stage 6: write an ALIGNED_TO edge. Deletes any stale edge first."""
     conn.execute("""
         MATCH (a:RegistryClass {hash_id: $ua})-[r:ALIGNED_TO]->(b:RegistryClass {hash_id: $ub})
         DELETE r
-    """, {"ua": hash_id_a, "ub": hash_id_b})
+    """, {"ua": p.a["hash_id"], "ub": p.b["hash_id"]})
 
     conn.execute("""
         MATCH (a:RegistryClass {hash_id: $ua}), (b:RegistryClass {hash_id: $ub})
@@ -535,15 +621,15 @@ def write_alignment(conn, hash_id_a: str, hash_id_b: str,
             registry_version: $rv
         }]->(b)
     """, {
-        "ua": hash_id_a,
-        "ub": hash_id_b,
-        "d":  distance,
-        "m":  method,
-        "sr": skos_rel,
-        "si": subscores["iri"],
-        "sn": subscores["name"],
-        "sd": subscores["desc"],
-        "ss": subscores["slot"],
+        "ua": p.a["hash_id"],
+        "ub": p.b["hash_id"],
+        "d":  round(1.0 - p.confidence, 6),
+        "m":  p.method,
+        "sr": p.predicate,
+        "si": p.subscores["iri"],
+        "sn": p.subscores["name"],
+        "sd": p.subscores["desc"],
+        "ss": p.subscores["slot"],
         "rv": registry_version,
     })
 
@@ -553,32 +639,27 @@ def write_alignment(conn, hash_id_a: str, hash_id_b: str,
 # ---------------------------------------------------------------------------
 
 @click.command()
-@click.option("--source",    default=None,
-              help="Align this source against all others. "
-                   "Default: align all source pairs.")
-@click.option("--db",        default=DB_PATH, show_default=True)
-@click.option("--threshold", default=0.85, show_default=True, type=float,
-              help="Only write ALIGNED_TO edges where distance <= threshold.")
-@click.option("--min-signal", default=0.1, show_default=True, type=float,
-              help="Skip pairs where no single signal exceeds this value.")
+@click.option("--source",           default=None,
+              help="Align this source against all others. Default: all pairs.")
+@click.option("--db",               default=DB_PATH, show_default=True)
+@click.option("--threshold",        default=0.85, show_default=True, type=float,
+              help="Drop edges where distance > threshold (confidence < 1-threshold).")
 @click.option("--registry-version", default="",
-              help="Registry version to stamp on alignment edges.")
-@click.option("--dry-run",   is_flag=True,
-              help="Print alignment pairs without writing to graph.")
-@click.option("--save-cache", is_flag=True, default=True,
-              help="Save newly computed embeddings to parquet cache.")
-def cli(source, db, threshold, min_signal,
-        registry_version, dry_run, save_cache) -> None:
+              help="Registry version stamped on ALIGNED_TO edges.")
+@click.option("--dry-run",          is_flag=True,
+              help="Print pairs without writing to graph.")
+@click.option("--save-cache",       is_flag=True, default=True,
+              help="Persist new embeddings to parquet cache.")
+def cli(source, db, threshold, registry_version, dry_run, save_cache) -> None:
     """
-    Compute semantic alignment between RegistryClass nodes across sources.
+    Compute Proteus-aligned semantic alignment between RegistryClass nodes.
 
-    Writes ALIGNED_TO edges with distance, SKOS relation, and subscores.
-    Only processes the latest version of each class.
+    Runs stages 0-6: profile loading, blocking + unit veto, signal vectors,
+    calibration, predicate assignment, structural repair, and ALIGNED_TO writes.
 
     Examples:
       python align.py --source bbqs --dry-run
-      python align.py --source bbqs
-      python align.py --threshold 0.3  # only close matches
+      python align.py --threshold 0.5   # only close matches
     """
     global _cache_dirty
 
@@ -594,9 +675,7 @@ def cli(source, db, threshold, min_signal,
         f"Loaded {len(classes)} classes from {len(sources)} sources: "
         f"{', '.join(sorted(sources))}"
     )
-    # Diagnostics: show IRIs per source to verify IRI matching. A class can
-    # belong to more than one source's group now, so counts here can exceed
-    # len(classes) — that's expected, not a bug.
+
     by_source: dict[str, list] = {}
     for c in classes:
         for s in c["sources"]:
@@ -604,79 +683,66 @@ def cli(source, db, threshold, min_signal,
     click.echo("  IRI coverage per source:")
     for src, grp in sorted(by_source.items()):
         with_iri = [c for c in grp if c["iri"]]
-        sample = with_iri[0]["iri"] if with_iri else "—"
+        sample   = with_iri[0]["iri"] if with_iri else "—"
         click.echo(f"    {src}: {len(with_iri)}/{len(grp)} have IRIs  e.g. {sample}")
-    # Count potential exact IRI matches before running
-    iri_index: dict[str, set] = {}
-    for c in classes:
-        if c["iri"]:
-            iri_index.setdefault(c["iri"], set()).update(c["sources"])
-    cross_matches = sum(1 for srcs in iri_index.values() if len(srcs) > 1)
-    click.echo(f"  Potential IRI exact-match pairs across sources: {cross_matches} shared IRIs")
 
-    # Pre-load the model once before the loop.
-    # Even if we have a parquet cache, new classes may need fresh embeddings.
-    if W_NAME > 0 or W_DESC > 0:
-        _get_model()
-        _embedding_cache.update(_load_embedding_cache())
+    _get_model()
+    _embedding_cache.update(_load_embedding_cache())
 
-    written = skipped = exact = 0
+    pending: list[_Pending] = []
+    vetoed = 0
 
     for a, b in pairs_across_sources(classes, source):
-        distance, method, subscores = compute_distance(a, b)
-
-        # Filter 1: distance too high — these classes are unrelated
-        if distance > threshold:
-            skipped += 1
+        # Stage 1 hard veto (Invariant 1)
+        if _unit_veto(a.get("units", []), b.get("units", [])):
+            vetoed += 1
             continue
 
-        # Filter 2: no meaningful signal in any dimension.
-        # This catches the case where IRI=0, name difflib=0.3, desc=0.2
-        # and neither is really saying "these are related". Storing that
-        # edge would add noise to the Concepts view.
-        max_signal = max(
-            subscores["iri"], subscores["name"],
-            subscores["desc"], subscores["slot"]
-        )
-        if max_signal < min_signal:
-            skipped += 1
+        result = compute_alignment(a, b)
+        if result is None:
             continue
 
-        if distance == 0.0:
-            exact += 1
+        if (1.0 - result.confidence) > threshold:
+            continue
 
-        # Determine SKOS relation.
-        # We check if class A is a subclass of class B or vice versa
-        # to distinguish broadMatch from narrowMatch.
-        b_is_parent_of_a = bool(a["iri"] and b["iri"] in a["parent_iris"])
-        skos_rel = compute_skos_relation(distance, is_subclass=b_is_parent_of_a)
+        pending.append(result)
+
+    # Stage 5 — structural repair
+    pending = repair_structural(pending)
+
+    written = exact = close = broad = narrow = related = 0
+
+    for p in pending:
+        distance = round(1.0 - p.confidence, 6)
 
         if dry_run:
-            a_src = ",".join(sorted(a["sources"]))
-            b_src = ",".join(sorted(b["sources"]))
+            a_src = ",".join(sorted(p.a["sources"]))
+            b_src = ",".join(sorted(p.b["sources"]))
             click.echo(
-                f"  [{skos_rel}] {a_src}:{a['name']} ↔ "
-                f"{b_src}:{b['name']}  "
-                f"d={distance:.4f}  "
-                f"(iri={subscores['iri']:.2f} "
-                f"name={subscores['name']:.2f} "
-                f"desc={subscores['desc']:.2f})"
+                f"  [{p.predicate}] {a_src}:{p.a['name']} ↔ "
+                f"{b_src}:{p.b['name']}  "
+                f"d={distance:.4f} conf={p.confidence:.4f} "
+                f"(name={p.subscores['name']:.2f} "
+                f"jac={p.subscores['jaccard']:.2f} "
+                f"desc={p.subscores['desc']:.2f})"
             )
         else:
-            write_alignment(
-                conn, a["hash_id"], b["hash_id"],
-                distance, method, subscores, skos_rel,
-                registry_version,
-            )
+            write_alignment(conn, p, registry_version)
+
         written += 1
+        if p.predicate == "skos:exactMatch":    exact   += 1
+        elif p.predicate == "skos:closeMatch":  close   += 1
+        elif p.predicate == "skos:broadMatch":  broad   += 1
+        elif p.predicate == "skos:narrowMatch": narrow  += 1
+        elif p.predicate == "skos:relatedMatch":related += 1
 
     action = "Would write" if dry_run else "Wrote"
     click.echo(
         f"\n{action} {written} ALIGNED_TO edges "
-        f"({exact} exact IRI matches, {skipped} skipped)."
+        f"(exact={exact} close={close} broad={broad} narrow={narrow} related={related} "
+        f"vetoed={vetoed})."
     )
 
-    # Save newly computed embeddings to parquet cache
     if save_cache and _cache_dirty and not dry_run:
         _save_embedding_cache(_embedding_cache)
 
