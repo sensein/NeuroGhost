@@ -1,0 +1,23 @@
+id: https://example.org/valid-attributes
+name: valid_attributes
+description: A minimal schema where a class declares its slots inline as attributes.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  ex: https://example.org/schema#
+default_prefix: ex
+default_range: string
+imports:
+  - linkml:types
+
+classes:
+  Device:
+    description: A piece of recording equipment
+    class_uri: ex:Device
+    attributes:
+      manufacturer:
+        description: Who made the device
+        range: string
+      sampling_rate:
+        description: "Sampling rate (units: Hz)"
+        range: float
+        required: true

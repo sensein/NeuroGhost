@@ -96,37 +96,9 @@ jobs:
               sys.exit(1)
           PYEOF
 
-      - name: Validate with linkml-runtime
+      - name: Validate LinkML schema
         run: |
-          python3 - << 'PYEOF'
-          import sys
-          import yaml
-
-          name = "${{ steps.meta.outputs.schema_name }}"
-          path = f"schemas/{name}.yml"
-
-          # Use linkml-runtime's SchemaView for authoritative LinkML validation.
-          # If the schema is structurally invalid, SchemaView raises on load.
-          try:
-              from linkml_runtime.utils.schemaview import SchemaView
-              sv = SchemaView(path)
-              all_classes = sv.all_classes()
-              all_slots   = sv.all_slots()
-          except Exception as e:
-              print(f"ERROR: Invalid LinkML schema — {e}")
-              sys.exit(1)
-
-          if not all_classes:
-              print("ERROR: Schema defines no classes.")
-              sys.exit(1)
-
-          n_attrs = sum(
-              len(cls.attributes or {})
-              for cls in all_classes.values()
-          )
-          print(f"Valid LinkML schema: {len(all_classes)} classes, "
-                f"{len(all_slots)} slots, {n_attrs} inline attributes")
-          PYEOF
+          python neuro_ghost/validate_schema.py schemas/${{ steps.meta.outputs.schema_name }}.yml
 
       - name: Seed schema.org (if DB not cached)
         run: |
@@ -206,7 +178,8 @@ jobs:
               body: [
                 `❌ **Ingestion failed.**`,
                 ``,
-                `Check that your YAML is valid LinkML with \`classes:\` and \`slots:\` keys.`,
+                `Check the run log for the specific LinkML validation error (e.g. an undefined slot, ` +
+                `\`is_a\` parent, or range reference).`,
                 ``,
                 `[View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
               ].join("\n"),

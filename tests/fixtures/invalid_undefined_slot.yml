@@ -1,0 +1,23 @@
+id: https://example.org/invalid-undefined-slot
+name: invalid_undefined_slot
+description: A broken schema — Person references a slot that is never defined.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  ex: https://example.org/schema#
+default_prefix: ex
+default_range: string
+imports:
+  - linkml:types
+
+classes:
+  Person:
+    description: A research investigator
+    class_uri: ex:Person
+    slots:
+      - name
+      - nonexistent_slot
+
+slots:
+  name:
+    description: Full name
+    range: string
