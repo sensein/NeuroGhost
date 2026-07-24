@@ -171,6 +171,27 @@ takes this one step further, end to end: two schemas declare the exact same
 exactly one `RegistryProperty` node, not two — proving `required` doesn't
 leak into identity, in the real graph, not just in an isolated object.
 
+## Open question: when should ProvenanceEntry.registry_version be set?
+
+The whole-registry version (the semver in `data/registry.json`, e.g. `1.7.0`)
+only gets computed once, at the very end of a submission, when
+`export_json.py` reads the last entry in `data/provenance.json` and bumps it.
+`seed.py`/`ingest_linkml.py`/`align.py` all run *before* that — so the version
+an entity is actually going to belong to doesn't exist yet at the moment it's
+ingested.
+
+That rules out the obvious fix ("pass the current, pre-bump version to
+ingest_linkml.py/align.py") — it would record the version this submission is
+replacing, not the one it's part of. The consistent fix would be computing
+the bump once, up front (alongside where the Action already determines
+`bump` type in "Parse issue metadata"), and threading that single value
+through every step including `export_json.py` — instead of `export_json.py`
+computing it independently after the fact.
+
+**Not implemented.** `schema_submission.yml` does not pass `--registry-version`
+to `ingest_linkml.py` or `align.py` — those entities' `ProvenanceEntry.
+registry_version` stays `None` for now, pending a decision on the above.
+
 ## Known gaps (as of this writing)
 
 - **`index.html`** (frontend) still expects the pre-rework JSON shape
