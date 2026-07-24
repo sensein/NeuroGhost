@@ -1,0 +1,49 @@
+name: neuroghost
+displayName: NeuroGhost
+description: >
+  A shared vocabulary registry for neuroscience data. Search concepts across
+  schemas (BIDS, NWB, DANDI, BBQS, openMINDS, AIND), compare schemas, transform
+  data records between formats, and submit new schemas — all via MCP tools.
+version: 1.0.0
+license: CC0-1.0
+homepage: https://sensein.group/NeuroGhost/
+repository: https://github.com/sensein/NeuroGhost
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      registry_url:
+        type: string
+        description: >
+          Override the registry JSON URL. Defaults to the live GitHub Pages
+          endpoint. Set to a local file path (file:///...) when running offline
+          with a local registry.json.
+        default: "https://sensein.group/NeuroGhost/data/registry.json"
+  commandFunction: |-
+    (config) => ({
+      command: "python",
+      args: ["-m", "neuro_ghost.mcp_server"],
+      env: config.registry_url
+        ? { NEUROGHOST_REGISTRY_URL: config.registry_url }
+        : {}
+    })
+
+tools:
+  - name: list_sources
+    description: List all registered neuroscience schema sources with class counts.
+  - name: search_classes
+    description: Search for classes by name or definition, optionally filtered by schema.
+  - name: get_class
+    description: Get full class detail — properties, alignments, IRI, sources.
+  - name: get_alignments
+    description: Find classes aligned to a given class across all registered schemas.
+  - name: diff_schemas
+    description: Compare two schemas — overlapping and unique classes.
+  - name: transform_record
+    description: Map a data record from one schema format to another using alignment.
+  - name: get_provenance
+    description: Get the registry changelog — every schema ingestion and version bump.
+  - name: ingest_schema
+    description: Submit a new LinkML schema to the registry via GitHub issue.
