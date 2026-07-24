@@ -428,8 +428,18 @@ def ingest_schema(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Entry point for the `neuroghost-mcp` console script."""
-    mcp.run()
+    """Entry point for the `neuroghost-mcp` console script.
+
+    Transport is selected by the MCP_TRANSPORT env var:
+      stdio (default) — for Claude Desktop / Cursor / local use
+      sse             — HTTP+SSE for Smithery and other hosted platforms
+    """
+    transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    if transport == "sse":
+        port = int(os.environ.get("PORT", "8000"))
+        mcp.run(transport="sse", host="0.0.0.0", port=port)
+    else:
+        mcp.run()
 
 
 if __name__ == "__main__":

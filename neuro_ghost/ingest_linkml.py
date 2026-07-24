@@ -248,16 +248,38 @@ def parse_linkml(path: Path) -> dict[str, Any]:
     slots: dict[str, dict] = {}
 
     for cls_name in sv.all_classes():
-        cls_def       = sv.get_class(cls_name)
-        induced_slots = sv.class_induced_slots(cls_name)
+        cls_def = sv.get_class(cls_name)
+
+        try:
+            induced_slots = sv.class_induced_slots(cls_name)
+        except (ValueError, KeyError):
+            # is_a points to a class outside this schema (e.g. NWB's "Container")
+            # Fall back to directly-declared slots only.
+            induced_slots = list(cls_def.attributes.values())
+            for sname in (cls_def.slots or []):
+                try:
+                    s = sv.get_slot(sname)
+                    if s:
+                        induced_slots.append(s)
+                except Exception:
+                    pass
 
         class_uri    = cls_def.class_uri or ""
         resolved_iri = resolve_prefix(class_uri, prefixes) if class_uri else ""
 
+        # Strip is_a if the parent class isn't in this schema — build_registry_entities
+        # already handles None gracefully; leaving a dangling name would be misleading.
+        is_a = cls_def.is_a
+        if is_a:
+            try:
+                sv.get_class(is_a)
+            except (ValueError, KeyError):
+                is_a = None
+
         classes[cls_name] = {
             "iri":         resolved_iri,
             "definition":  cls_def.description or "",
-            "is_a":        cls_def.is_a,
+            "is_a":        is_a,
             "is_abstract": bool(cls_def.abstract),
             "slots":       [slot.name for slot in induced_slots],
         }

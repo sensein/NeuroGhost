@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "MCP_TRANSPORT=sse python -m neuro_ghost.mcp_server"
+restartPolicyType = "on_failure"
