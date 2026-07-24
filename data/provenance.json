@@ -133,5 +133,20 @@
       "sources_total": 5
     },
     "archive_path": "data/versions/1.8.0.json"
+  },
+  {
+    "registry_version": "1.9.0",
+    "previous_version": "1.8.0",
+    "timestamp": "2026-07-24T16:04:19.714410+00:00",
+    "bump": "minor",
+    "trigger": "issue",
+    "issue_number": "17",
+    "agent": "djarecka",
+    "schema_ingested": "my_schema1",
+    "stats": {
+      "classes_total": 39,
+      "sources_total": 1
+    },
+    "archive_path": "data/versions/1.9.0.json"
   }
 ]
