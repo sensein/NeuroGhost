@@ -460,18 +460,36 @@ async function boot(){
       // Normalize class/property fields across registry export formats:
       // the meta-model export uses hash_id / value_range / is_abstract, while
       // this UI reads uid / datatype / version. Map new→old, keeping old as-is.
+      // Identity is shared across sources now, so classes/properties carry a
+      // `sources` array instead of a single `source` label — keep both: a
+      // joined-string `source` for display (existing code/badges), and the
+      // real array for correct membership checks (filtering, diffing).
       allClasses=(d.classes||[]).map(c=>({
         ...c,
         uid: c.uid||c.hash_id,
         version: c.version||c.registry_version||"",
         abstract: c.abstract??c.is_abstract,
+        sources: c.sources||(c.source?[c.source]:[]),
+        source: c.source||(c.sources||[]).join(", "),
         alignments: c.alignments||[],
         properties: (c.properties||[]).map(p=>({
           ...p,
           uid: p.uid||p.hash_id,
           datatype: p.datatype||p.value_range||"",
+          sources: p.sources||(p.source?[p.source]:[]),
+          source: p.source||(p.sources||[]).join(", "),
         })),
       }));
+      const classByHash={};allClasses.forEach(c=>{classByHash[c.uid]=c;});
+      allClasses.forEach(c=>{
+        c.alignments.forEach(a=>{
+          if(a.target_source===undefined){
+            const t=classByHash[a.target_hash_id];
+            a.target_source=t?t.source:"";
+            a.target_sources=t?t.sources:[];
+          }
+        });
+      });
       allSources=d.sources||[];
       classHistories=d.class_histories||{};
       propHistories=d.property_histories||{};
@@ -506,7 +524,7 @@ function dlClassYAML(uid){
 }
 function dlDiffCSV(){
   const a=document.getElementById("diff-a")?.value,b=document.getElementById("diff-b")?.value;if(!a||!b)return;
-  const ca=allClasses.filter(c=>c.source===a),cb=allClasses.filter(c=>c.source===b);
+  const ca=allClasses.filter(c=>c.sources.includes(a)),cb=allClasses.filter(c=>c.sources.includes(b));
   const nb=new Set(cb.map(c=>c.name));
   const lines=["name,source,status"];
   ca.forEach(c=>lines.push(`${c.name},${a},${nb.has(c.name)?"matched":"unique"}`));
@@ -534,7 +552,7 @@ function renderConcepts(){
   });
   clusters.forEach(cluster=>{
     const p=cluster[0];
-    if(treeSrc!=="all"&&!cluster.some(c=>c.source===treeSrc))return;
+    if(treeSrc!=="all"&&!cluster.some(c=>c.sources.includes(treeSrc)))return;
     if(q&&!cluster.some(c=>c.name.toLowerCase().includes(q)||(c.definition||"").toLowerCase().includes(q)))return;
     const div=document.createElement("div");div.className="concept-card";
     const srcs=cluster.map(c=>srcBadge(c.source)).join("");
@@ -571,13 +589,13 @@ function renderDiffSelects(){
 }
 function renderDiff(){
   const a=document.getElementById("diff-a")?.value,b=document.getElementById("diff-b")?.value;if(!a||!b)return;
-  const ca=allClasses.filter(c=>c.source===a),cb=allClasses.filter(c=>c.source===b);
+  const ca=allClasses.filter(c=>c.sources.includes(a)),cb=allClasses.filter(c=>c.sources.includes(b));
   const mb=new Map(cb.map(c=>[c.name,c])),ma=new Map(ca.map(c=>[c.name,c]));
   document.getElementById("diff-grid").innerHTML=`
     <div class="diff-col"><div class="diff-col-header"><h3>${srcBadge(a)}</h3><span class="iri">${ca.length} classes</span></div>
-      <div class="diff-list">${ca.map(c=>{const aln=c.alignments.find(x=>x.target_source===b&&x.distance<.5);return`<div class="diff-item"><span>${c.name}</span><span class="${mb.has(c.name)?"matched":"unique"}">${mb.has(c.name)?"= matched":aln?("~ d="+aln.distance.toFixed(2)):"unique"}</span></div>`;}).join("")}</div></div>
+      <div class="diff-list">${ca.map(c=>{const aln=c.alignments.find(x=>(x.target_sources||[]).includes(b)&&x.distance<.5);return`<div class="diff-item"><span>${c.name}</span><span class="${mb.has(c.name)?"matched":"unique"}">${mb.has(c.name)?"= matched":aln?("~ d="+aln.distance.toFixed(2)):"unique"}</span></div>`;}).join("")}</div></div>
     <div class="diff-col"><div class="diff-col-header"><h3>${srcBadge(b)}</h3><span class="iri">${cb.length} classes</span></div>
-      <div class="diff-list">${cb.map(c=>{const aln=c.alignments.find(x=>x.target_source===a&&x.distance<.5);return`<div class="diff-item"><span>${c.name}</span><span class="${ma.has(c.name)?"matched":"unique"}">${ma.has(c.name)?"= matched":aln?("~ d="+aln.distance.toFixed(2)):"unique"}</span></div>`;}).join("")}</div></div>`;
+      <div class="diff-list">${cb.map(c=>{const aln=c.alignments.find(x=>(x.target_sources||[]).includes(a)&&x.distance<.5);return`<div class="diff-item"><span>${c.name}</span><span class="${ma.has(c.name)?"matched":"unique"}">${ma.has(c.name)?"= matched":aln?("~ d="+aln.distance.toFixed(2)):"unique"}</span></div>`;}).join("")}</div></div>`;
 }
 
 // GRAPH SCHEMA
@@ -761,8 +779,8 @@ function trBuildMapping(){
   document.getElementById("tr-mapping").style.display="block";
   document.getElementById("tr-convert").style.display="block";
 
-  const srcClasses=allClasses.filter(c=>c.source===src);
-  const tgtClasses=allClasses.filter(c=>c.source===tgt);
+  const srcClasses=allClasses.filter(c=>c.sources.includes(src));
+  const tgtClasses=allClasses.filter(c=>c.sources.includes(tgt));
   const srcProps=new Set();srcClasses.forEach(c=>c.properties.forEach(p=>srcProps.add(p.name)));
   const tgtProps=[];tgtClasses.forEach(c=>c.properties.forEach(p=>{if(!tgtProps.find(x=>x.name===p.name))tgtProps.push(p);}));
 
@@ -775,7 +793,7 @@ function trBuildMapping(){
     if(!candidate){
       const srcCls=srcClasses.find(c=>c.name.toLowerCase()===h.toLowerCase()||c.properties.some(p=>p.name.toLowerCase()===h.toLowerCase()));
       if(srcCls){
-        const aln=srcCls.alignments.find(a=>a.target_source===tgt&&a.distance<.4);
+        const aln=srcCls.alignments.find(a=>(a.target_sources||[]).includes(tgt)&&a.distance<.4);
         if(aln){alnHint=` (via ${srcCls.name}↔${aln.target_name} d=${aln.distance.toFixed(2)})`;candidate=tgtProps.find(p=>true);}
       }
     }
@@ -836,19 +854,19 @@ function runQuery(){
   if(what==="classes"||what==="properties"){
     const source=what==="properties"?allClasses.flatMap(c=>c.properties):allClasses;
     rows=source.filter(x=>{
-      if(src&&x.source!==src)return false;
+      if(src&&!(x.sources||[]).includes(src))return false;
       if(name&&!x.name.toLowerCase().includes(name))return false;
       if(alnSrc&&what==="classes"){
-        return x.alignments.some(a=>a.target_source===alnSrc&&a.distance<=dist);
+        return x.alignments.some(a=>(a.target_sources||[]).includes(alnSrc)&&a.distance<=dist);
       }
       return true;
     });
   }else{
     // alignments
     allClasses.forEach(c=>{
-      if(src&&c.source!==src)return;
+      if(src&&!c.sources.includes(src))return;
       c.alignments.forEach(a=>{
-        if(alnSrc&&a.target_source!==alnSrc)return;
+        if(alnSrc&&!(a.target_sources||[]).includes(alnSrc))return;
         if(a.distance>dist)return;
         rows.push({from:c.name,from_src:c.source,to:a.target_name,to_src:a.target_source,distance:a.distance,method:a.method});
       });
