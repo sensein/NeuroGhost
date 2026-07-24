@@ -1,5 +1,5 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.sensein/neuroghost",
   "title": "NeuroGhost",
   "description": "A shared vocabulary registry for neuroscience data. Search and compare concepts across schemas (BIDS, NWB, DANDI, BBQS, openMINDS, AIND), diff schemas, transform data records between formats, and submit new schemas.",
