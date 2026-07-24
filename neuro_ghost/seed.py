@@ -151,15 +151,15 @@ def collect_classes(g: rdflib.Graph) -> dict[str, dict]:
 # Insert into LadybugDB
 # ---------------------------------------------------------------------------
 
-def _provenance(agent: str = "system") -> ProvenanceEntry:
+def _provenance(agent: str = "system", registry_version: str = "") -> ProvenanceEntry:
     return ProvenanceEntry(
-        uid=None, source="schema.org", generated_at=now_iso(),
-        attributed_to=agent, activity="seeding",
+        uid=None, source="schema.org", registry_version=registry_version or None,
+        generated_at=now_iso(), attributed_to=agent, activity="seeding",
     )
 
 
 def build_registry_entities(
-    classes: dict[str, dict],
+    classes: dict[str, dict], registry_version: str = "",
 ) -> tuple[dict[str, RegistryProperty], dict[str, RegistryClass]]:
     """
     Convert collect_classes()'s output into content-hashed RegistryProperty/
@@ -186,7 +186,7 @@ def build_registry_entities(
                 description=prop["comment"] or "",
                 range=value_range,
                 slot_uri=prop["iri"] or None,
-                provenance=[_provenance()],
+                provenance=[_provenance(registry_version=registry_version)],
             )
             p.hash_id = compute_hash_id(p)
             properties[prop["iri"]] = p
@@ -215,7 +215,7 @@ def build_registry_entities(
             abstract=False,
             is_a=parent.hash_id if parent else None,
             properties=prop_hash_ids,
-            provenance=[_provenance()],
+            provenance=[_provenance(registry_version=registry_version)],
         )
         rc.hash_id = compute_hash_id(rc)
         registry_classes[name] = rc
@@ -260,7 +260,7 @@ def seed(db_path: str = "./registry.lbug",
     classes = collect_classes(g)
 
     print(f"Building {len(classes)} classes …")
-    properties, registry_classes = build_registry_entities(classes)
+    properties, registry_classes = build_registry_entities(classes, registry_version)
 
     if dry_run:
         print(f"\n[dry-run] Would insert:")
@@ -297,9 +297,11 @@ def seed(db_path: str = "./registry.lbug",
               help="Print what would be inserted without writing.")
 @click.option("--wipe",    is_flag=True,
               help="Delete existing classes/properties before seeding.")
-def cli(db: str, dry_run: bool, wipe: bool) -> None:
+@click.option("--registry-version", default="1.0.0", show_default=True,
+              help="Registry semver to stamp on seeded ProvenanceEntry records.")
+def cli(db: str, dry_run: bool, wipe: bool, registry_version: str) -> None:
     """Seed the SenseIn Schema Registry from schema.org."""
-    seed(db_path=db, dry_run=dry_run, wipe=wipe)
+    seed(db_path=db, dry_run=dry_run, wipe=wipe, registry_version=registry_version)
 
 if __name__ == "__main__":
     cli()

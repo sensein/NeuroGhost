@@ -20,6 +20,7 @@ class ProvenanceEntry(BaseModel):
     uid:                Optional[str]  = None
     source:             str
     source_description: Optional[str] = None
+    registry_version:   Optional[str]  = None
     generated_at:       datetime                # prov:generatedAtTime
     attributed_to:      str                      # prov:wasAttributedTo
     activity:           Optional[str]  = None    # prov:wasGeneratedBy
@@ -57,11 +58,9 @@ class RegistryClass(RegistryEntity):
     relations:    List[str]          = Field(default_factory=list)
     is_a:         Optional[str]      = None
     mixins:       List[str]          = Field(default_factory=list)
-    registry_version: Optional[str]  = None
 
 
 class RegistryProperty(RegistryEntity):
     slot_uri:         Optional[str]  = None
     range:            str
     units:            Optional[str]  = None
-    registry_version: Optional[str]  = None
