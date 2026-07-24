@@ -11,3 +11,4 @@ linkml>=1.8.0
 # Pinned <3.0.0 to avoid torchcodec + FFmpeg system dependency
 sentence-transformers>=2.7.0,<3.0.0
 pytest>=8.0.0
+mcp[cli]>=1.0.0
