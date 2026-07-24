@@ -4,7 +4,10 @@
   "title": "NeuroGhost",
   "description": "A shared vocabulary registry for neuroscience data. Search and compare concepts across schemas (BIDS, NWB, DANDI, BBQS, openMINDS, AIND), diff schemas, transform data records between formats, and submit new schemas.",
   "version": "1.0.0",
-  "repository": "https://github.com/sensein/NeuroGhost",
+  "repository": {
+    "url": "https://github.com/sensein/NeuroGhost",
+    "source": "github"
+  },
   "websiteUrl": "https://sensein.group/NeuroGhost/",
   "license": "CC0-1.0",
   "packages": [
