@@ -4,6 +4,12 @@ name: Rebuild & Publish Registry
 # A schema submission (schema_submission.yml) handles per-PR incremental updates;
 # this workflow does a full clean rebuild on a schedule.
 on:
+  push:
+    branches: [main]
+    paths:
+      - "schemas/**"
+      - "neuro_ghost/**"
+      - "requirements.txt"
   workflow_dispatch:
     inputs:
       bump:
