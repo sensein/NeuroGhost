@@ -118,5 +118,20 @@
       "sources_total": 6
     },
     "archive_path": "data/versions/1.7.0.json"
+  },
+  {
+    "registry_version": "1.8.0",
+    "previous_version": "1.7.0",
+    "timestamp": "2026-07-24T15:50:02.609570+00:00",
+    "bump": "minor",
+    "trigger": "manual",
+    "issue_number": "",
+    "agent": "local",
+    "schema_ingested": "",
+    "stats": {
+      "classes_total": 617,
+      "sources_total": 5
+    },
+    "archive_path": "data/versions/1.8.0.json"
   }
 ]
