@@ -2,8 +2,9 @@
 seed.py — Populate the SenseIn Schema Registry from schema.org
 
 Fetches schema.org's machine-readable JSON-LD and inserts the core type
-hierarchy as RegistryClass + RegistryProperty nodes using the same make_base
-identity pattern as the main registry.
+hierarchy as content-hashed RegistryClass + RegistryProperty nodes, exactly
+the way ingest_linkml.py ingests any other schema — schema.org is just
+another source, with source="schema.org" on its ProvenanceEntry records.
 
 Seeded types (top-level schema.org hierarchy):
   Thing → CreativeWork, Event, Organization, Person, Place,
@@ -23,9 +24,15 @@ inserting anything.
 """
 
 from __future__ import annotations
+import sys
+from pathlib import Path
+
 import click, httpx, rdflib
 
-from db import get_connection, make_base, make_uid, now_iso, REG
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from schema_registry_utils import RegistryClass, RegistryProperty, ProvenanceEntry, compute_hash_id
+
+from db import get_connection, now_iso, write_registry_entities, write_structural_edges
 
 # ---------------------------------------------------------------------------
 # Config
@@ -144,6 +151,82 @@ def collect_classes(g: rdflib.Graph) -> dict[str, dict]:
 # Insert into LadybugDB
 # ---------------------------------------------------------------------------
 
+def _provenance(agent: str = "system") -> ProvenanceEntry:
+    return ProvenanceEntry(
+        uid=None, source="schema.org", generated_at=now_iso(),
+        attributed_to=agent, activity="seeding",
+    )
+
+
+def build_registry_entities(
+    classes: dict[str, dict],
+) -> tuple[dict[str, RegistryProperty], dict[str, RegistryClass]]:
+    """
+    Convert collect_classes()'s output into content-hashed RegistryProperty/
+    RegistryClass instances — the same shape ingest_linkml.py produces, so
+    schema.org is written by the exact same graph writers as any other source.
+
+    A schema.org class can have multiple rdfs:subClassOf parents; RegistryClass
+    only has one `is_a` (LinkML's single-inheritance convention, matching how
+    write_structural_edges() only ever creates one SUBCLASS_OF edge per class),
+    so only the first resolvable parent is used — any additional parents are
+    not represented as edges.
+    """
+    properties: dict[str, RegistryProperty] = {}
+    seen_prop_iris: dict[str, str] = {}   # prop iri -> name, dedupes by IRI
+
+    for info in classes.values():
+        for prop in info["props"]:
+            if prop["iri"] in seen_prop_iris:
+                continue
+            seen_prop_iris[prop["iri"]] = prop["name"]
+            value_range = prop["ranges"][0] if prop["ranges"] else "xsd:string"
+            p = RegistryProperty(
+                name=prop["name"],
+                description=prop["comment"] or "",
+                range=value_range,
+                slot_uri=prop["iri"] or None,
+                provenance=[_provenance()],
+            )
+            p.hash_id = compute_hash_id(p)
+            properties[prop["iri"]] = p
+
+    registry_classes: dict[str, RegistryClass] = {}
+
+    def resolve_class(name: str) -> RegistryClass | None:
+        if name in registry_classes:
+            return registry_classes[name]
+        info = classes.get(name)
+        if info is None:
+            return None  # parent outside SEED_ROOTS — left unresolved
+
+        parent_name = next(
+            (p for p in info["subclass_of"] if p in classes), None,
+        )
+        parent = resolve_class(parent_name) if parent_name else None
+
+        prop_hash_ids = sorted({
+            properties[prop["iri"]].hash_id for prop in info["props"]
+        })
+        rc = RegistryClass(
+            name=name,
+            description=info["comment"] or "",
+            class_uri=info["iri"] or None,
+            abstract=False,
+            is_a=parent.hash_id if parent else None,
+            properties=prop_hash_ids,
+            provenance=[_provenance()],
+        )
+        rc.hash_id = compute_hash_id(rc)
+        registry_classes[name] = rc
+        return rc
+
+    for name in classes:
+        resolve_class(name)
+
+    return properties, registry_classes
+
+
 def seed(db_path: str = "./registry.lbug",
          dry_run: bool = False,
          wipe: bool = False,
@@ -152,16 +235,22 @@ def seed(db_path: str = "./registry.lbug",
     conn = get_connection(db_path)
 
     if wipe and not dry_run:
-        print("Wiping existing RegistryClass and RegistryProperty nodes …")
-        conn.execute("MATCH (n:RegistryClass) DETACH DELETE n")
-        conn.execute("MATCH (n:RegistryProperty) DETACH DELETE n")
+        print("Wiping existing schema.org attestations …")
+        conn.execute("""
+            MATCH (:RegistryClass)-[:HAS_PROVENANCE]->(pe:ProvenanceEntry {source: 'schema.org'})
+            DETACH DELETE pe
+        """)
+        conn.execute("""
+            MATCH (:RegistryProperty)-[:HAS_PROVENANCE_P]->(pe:ProvenanceEntry {source: 'schema.org'})
+            DETACH DELETE pe
+        """)
 
     # Idempotency check
     if not dry_run and not wipe:
-        r = conn.execute(
-            "MATCH (n:RegistryClass {iri: $iri}) RETURN n.hash_id LIMIT 1",
-            {"iri": "https://schema.org/Thing"}
-        )
+        r = conn.execute("""
+            MATCH (n:RegistryClass {name: 'Thing'})-[:HAS_PROVENANCE]->(:ProvenanceEntry {source: 'schema.org'})
+            RETURN n.hash_id LIMIT 1
+        """)
         if r.has_next():
             print("schema.org seed already present — skipping. "
                   "Use --wipe to re-seed.")
@@ -170,115 +259,31 @@ def seed(db_path: str = "./registry.lbug",
     g = fetch_schema_graph()
     classes = collect_classes(g)
 
-    print(f"Inserting {len(classes)} classes …")
-    class_hash_id: dict[str, str] = {}   # short_name → hash_id
-
-    # Pass 1: insert all class nodes
-    # LadybugDB requires hash_id (PK) in the MATCH clause of MERGE, so we do
-    # a manual existence check + CREATE instead.
-    for name, info in classes.items():
-        b = make_base(name, iri=info["iri"])
-        class_hash_id[name] = b["hash_id"]
-        if dry_run:
-            continue
-        exists = conn.execute(
-            "MATCH (n:RegistryClass {iri: $iri}) RETURN n.hash_id LIMIT 1",
-            {"iri": info["iri"]}
-        ).has_next()
-        if exists:
-            continue
-        conn.execute("""
-            CREATE (:RegistryClass {
-                hash_id:       $hash_id,
-                iri:           $iri,
-                created_by:    $created_by,
-                created_at:    $created_at,
-                name:          $name,
-                definition:    $definition,
-                is_abstract:   false,
-                source_label:  'schema.org'
-            })
-        """, {**b,
-              "name":       info["label"],
-              "definition": info["comment"]})
-
-    # Pass 2: subclass relationships
-    print("Linking subclass relationships …")
-    for name, info in classes.items():
-        for parent_name in info["subclass_of"]:
-            if parent_name not in classes:
-                continue
-            if dry_run:
-                continue
-            # Only link if BOTH nodes already exist — don't create orphan parent nodes
-            conn.execute("""
-                MATCH (c:RegistryClass {iri: $ciri}),
-                      (p:RegistryClass {iri: $piri})
-                WHERE p.source_label IS NOT NULL AND p.source_label <> ''
-                MERGE (c)-[:SUBCLASS_OF]->(p)
-            """, {"ciri": info["iri"],
-                  "piri": f"https://schema.org/{parent_name}"})
-
-    # Pass 3: properties
-    total_props = sum(len(info["props"]) for info in classes.values())
-    print(f"Inserting {total_props} properties …")
-    seen_props: set[str] = set()   # avoid duplicate RegistryProperty nodes
-
-    for name, info in classes.items():
-        for prop in info["props"]:
-            prop_key = prop["iri"]
-
-            if dry_run:
-                continue
-
-            # Insert the property node once per unique IRI
-            if prop_key not in seen_props:
-                seen_props.add(prop_key)
-                b = make_base(prop["name"], iri=prop["iri"])
-                value_range = prop["ranges"][0] if prop["ranges"] else "xsd:string"
-                exists = conn.execute(
-                    "MATCH (p:RegistryProperty {iri: $iri}) RETURN p.hash_id LIMIT 1",
-                    {"iri": prop["iri"]}
-                ).has_next()
-                if not exists:
-                    conn.execute("""
-                        CREATE (:RegistryProperty {
-                            hash_id:      $hash_id,
-                            iri:          $iri,
-                            created_by:   $created_by,
-                            created_at:   $created_at,
-                            name:         $name,
-                            definition:   $definition,
-                            value_range:  $value_range,
-                            multivalued:  false,
-                            required:     false,
-                            source_label: 'schema.org'
-                        })
-                    """, {**b,
-                          "name":        prop["label"],
-                          "definition":  prop["comment"],
-                          "value_range": value_range})
-
-            # Link class → property
-            conn.execute("""
-                MATCH (c:RegistryClass    {iri: $ciri}),
-                      (p:RegistryProperty {iri: $piri})
-                MERGE (c)-[:HAS_PROPERTY]->(p)
-            """, {"ciri": info["iri"], "piri": prop_key})
+    print(f"Building {len(classes)} classes …")
+    properties, registry_classes = build_registry_entities(classes)
 
     if dry_run:
         print(f"\n[dry-run] Would insert:")
-        print(f"  {len(classes)} RegistryClass nodes")
-        print(f"  {total_props} RegistryProperty nodes (deduplicated)")
+        print(f"  {len(registry_classes)} RegistryClass nodes")
+        print(f"  {len(properties)} RegistryProperty nodes (deduplicated)")
         for name, info in sorted(classes.items())[:12]:
             print(f"    {name}: {len(info['props'])} props, "
                   f"parents={info['subclass_of']}")
         print("  … (showing first 12)")
-    else:
-        # Summary
-        nc = conn.execute("MATCH (n:RegistryClass) RETURN count(n)").get_next()[0]
-        np = conn.execute("MATCH (n:RegistryProperty) RETURN count(n)").get_next()[0]
-        print(f"\nDone. Registry now has {nc} classes, {np} properties.")
+        return
+
+    stats = write_registry_entities(conn, properties, registry_classes)
+    rels  = write_structural_edges(conn, registry_classes)
+
+    print(
+        f"+{stats['classes_new']} classes, ={stats['classes_existing']} existing | "
+        f"+{stats['properties_new']} props, ={stats['properties_existing']} existing | "
+        f"+{stats['provenance_added']} provenance entries | +{rels} edges"
+    )
+
+    nc = conn.execute("MATCH (n:RegistryClass) RETURN count(n)").get_next()[0]
+    np = conn.execute("MATCH (n:RegistryProperty) RETURN count(n)").get_next()[0]
+    print(f"\nDone. Registry now has {nc} classes, {np} properties.")
 
 
 # ---------------------------------------------------------------------------

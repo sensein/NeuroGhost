@@ -65,7 +65,7 @@ USAGE
 """
 
 from __future__ import annotations
-import json, re, sys
+import re, sys
 from pathlib import Path
 from typing import Any
 
@@ -77,7 +77,10 @@ from schema_registry_utils import (
     RegistryClass, RegistryProperty, ProvenanceEntry, compute_hash_id,
 )
 
-from db import get_connection, make_iri, make_uid, now_iso, REG
+from db import (
+    get_connection, make_iri, make_uid, now_iso, REG,
+    write_registry_entities, write_structural_edges,
+)
 
 DB_PATH = "./registry.lbug"
 
@@ -369,148 +372,9 @@ def build_registry_entities(
 # ---------------------------------------------------------------------------
 # Graph writers
 # ---------------------------------------------------------------------------
-
-_LIST_FIELDS = {"provenance", "skos_mappings", "properties", "relations", "mixins"}
-_HAS_PROVENANCE_REL = {"RegistryClass": "HAS_PROVENANCE", "RegistryProperty": "HAS_PROVENANCE_P"}
-
-
-def _scalar_fields(entity) -> dict:
-    """An entity's own node-table columns — excludes list/edge-backed fields."""
-    return {k: v for k, v in entity.model_dump().items() if k not in _LIST_FIELDS}
-
-
-def _entity_exists(conn, label: str, hash_id: str) -> bool:
-    return conn.execute(
-        f"MATCH (n:{label} {{hash_id: $hash_id}}) RETURN n.hash_id LIMIT 1",
-        {"hash_id": hash_id},
-    ).has_next()
-
-
-def _create_entity_node(conn, label: str, entity) -> None:
-    fields = _scalar_fields(entity)
-    prop_str = ", ".join(f"{k}: ${k}" for k in fields)
-    conn.execute(f"CREATE (:{label} {{{prop_str}}})", fields)
-
-
-def _write_provenance(conn, label: str, hash_id: str, prov: ProvenanceEntry) -> bool:
-    """
-    Attach a ProvenanceEntry to an entity, unless this exact source has
-    already attested to it. Returns True if a new ProvenanceEntry was added
-    — this is how "identity is separate from provenance" plays out on disk:
-    the entity node is written once; every source that also has this exact
-    content just adds another ProvenanceEntry pointing at the same node.
-    """
-    rel = _HAS_PROVENANCE_REL[label]
-    already = conn.execute(f"""
-        MATCH (n:{label} {{hash_id: $hash_id}})-[:{rel}]->(pe:ProvenanceEntry {{source: $source}})
-        RETURN pe.uid LIMIT 1
-    """, {"hash_id": hash_id, "source": prov.source}).has_next()
-    if already:
-        return False
-
-    uid = prov.uid or make_uid()
-    conn.execute("""
-        CREATE (:ProvenanceEntry {
-            uid: $uid, source: $source, source_description: $source_description,
-            generated_at: $generated_at, attributed_to: $attributed_to,
-            activity: $activity, derived_from: $derived_from
-        })
-    """, {
-        "uid":                 uid,
-        "source":              prov.source,
-        "source_description":  prov.source_description,
-        "generated_at":        prov.generated_at.isoformat(),
-        "attributed_to":       prov.attributed_to,
-        "activity":            prov.activity,
-        "derived_from":        json.dumps(prov.derived_from),
-    })
-    conn.execute(f"""
-        MATCH (n:{label} {{hash_id: $hash_id}}), (pe:ProvenanceEntry {{uid: $uid}})
-        CREATE (n)-[:{rel}]->(pe)
-    """, {"hash_id": hash_id, "uid": uid})
-    return True
-
-
-def write_registry_entities(
-    conn, properties: dict[str, RegistryProperty],
-    registry_classes: dict[str, RegistryClass], dry_run: bool = False,
-) -> dict:
-    """
-    Write (or reuse) each property/class node by hash_id, then attach this
-    ingestion's ProvenanceEntry to every one of them. Existing nodes are
-    never overwritten — a hash match means identical content, so there is
-    nothing to update; only a new ProvenanceEntry may need attaching.
-    """
-    stats = {
-        "properties_new": 0, "properties_existing": 0,
-        "classes_new":    0, "classes_existing":    0,
-        "provenance_added": 0,
-    }
-
-    for prop in properties.values():
-        is_new = not _entity_exists(conn, "RegistryProperty", prop.hash_id)
-        if is_new and not dry_run:
-            _create_entity_node(conn, "RegistryProperty", prop)
-        stats["properties_new" if is_new else "properties_existing"] += 1
-        if not dry_run:
-            for prov in prop.provenance:
-                if _write_provenance(conn, "RegistryProperty", prop.hash_id, prov):
-                    stats["provenance_added"] += 1
-
-    for rc in registry_classes.values():
-        is_new = not _entity_exists(conn, "RegistryClass", rc.hash_id)
-        if is_new and not dry_run:
-            _create_entity_node(conn, "RegistryClass", rc)
-        stats["classes_new" if is_new else "classes_existing"] += 1
-        if not dry_run:
-            for prov in rc.provenance:
-                if _write_provenance(conn, "RegistryClass", rc.hash_id, prov):
-                    stats["provenance_added"] += 1
-
-    return stats
-
-
-def write_structural_edges(conn, registry_classes: dict[str, RegistryClass]) -> int:
-    """
-    HAS_PROPERTY (from each class's own `properties`) + SUBCLASS_OF.
-
-    No cross-schema name-lookup fallback for unresolved is_a targets: parse_linkml()
-    (via SchemaView) already requires every is_a target to resolve within the
-    submitted schema's own import closure, so a schema that ingests at all can
-    never have a class whose is_a isn't already in registry_classes.
-    """
-    rels = 0
-
-    for rc in registry_classes.values():
-        for prop_hash_id in rc.properties:
-            already = conn.execute("""
-                MATCH (c:RegistryClass {hash_id: $c})-[:HAS_PROPERTY]->(p:RegistryProperty {hash_id: $p})
-                RETURN c.hash_id LIMIT 1
-            """, {"c": rc.hash_id, "p": prop_hash_id}).has_next()
-            if not already:
-                conn.execute("""
-                    MATCH (c:RegistryClass {hash_id: $c}), (p:RegistryProperty {hash_id: $p})
-                    CREATE (c)-[:HAS_PROPERTY]->(p)
-                """, {"c": rc.hash_id, "p": prop_hash_id})
-                rels += 1
-
-    for rc in registry_classes.values():
-        parent_hash_id = rc.is_a
-        if not parent_hash_id:
-            continue
-
-        already = conn.execute("""
-            MATCH (c:RegistryClass {hash_id: $c})-[:SUBCLASS_OF]->(p:RegistryClass {hash_id: $p})
-            RETURN c.hash_id LIMIT 1
-        """, {"c": rc.hash_id, "p": parent_hash_id}).has_next()
-        if not already:
-            conn.execute("""
-                MATCH (c:RegistryClass {hash_id: $c}), (p:RegistryClass {hash_id: $p})
-                CREATE (c)-[:SUBCLASS_OF]->(p)
-            """, {"c": rc.hash_id, "p": parent_hash_id})
-            rels += 1
-
-    return rels
+# entity_exists / create_entity_node / write_provenance / write_registry_entities
+# / write_structural_edges all live in db.py — shared with seed.py, which
+# writes the same two node types the same way.
 
 
 # ---------------------------------------------------------------------------
