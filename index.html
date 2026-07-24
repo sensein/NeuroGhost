@@ -236,7 +236,7 @@ textarea.yaml-editor{width:100%;height:280px;background:transparent;border:none;
 <!-- GRAPH SCHEMA -->
 <div id="view-graph" class="view">
   <div class="section-pad">
-    <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Node types and relationships in the LadybugDB graph. Click a node to inspect its fields.</p>
+    <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Node types and relationships in the LadybugDB graph. Identity is content-addressed (<code style="font-family:var(--mono);color:var(--teal)">hash_id = sha256:…</code>). Click a node to inspect its fields.</p>
     <div id="graph-canvas">
       <svg class="graph-svg" id="graph-svg"></svg>
       <div class="g-legend"><h4>Legend</h4><div class="g-legend-item"><div class="g-legend-dot" style="background:var(--teal)"></div>Node table</div><div class="g-legend-item"><div class="g-legend-dot" style="background:var(--purple)"></div>Relationship</div></div>
@@ -253,32 +253,97 @@ textarea.yaml-editor{width:100%;height:280px;background:transparent;border:none;
 <!-- TRANSFORM -->
 <div id="view-transform" class="view">
   <div class="transform-panel">
-    <h2 style="font-size:18px;font-weight:600;margin-bottom:8px">Transform CSV between schemas</h2>
-    <p style="color:var(--text-dim);font-size:12.5px;margin-bottom:20px;line-height:1.6">Upload a CSV whose columns match one schema, and convert to another. The registry uses stored alignments to auto-map columns.</p>
-
-    <div class="transform-section">
-      <h3>1. Upload CSV</h3>
-      <label class="file-drop">
-        <input type="file" id="tr-file" accept=".csv" onchange="trOnFile(event)"/>
-        <div id="tr-drop-label" style="color:var(--muted);font-size:13px">Click to select a CSV file, or drag here</div>
-      </label>
-      <div id="tr-file-info" style="margin-top:10px;font-size:11.5px;color:var(--text-dim);display:none"></div>
+    <div class="query-tabs" style="margin-bottom:20px">
+      <button class="active" onclick="trTabSwitch('browser',this)">In-browser CSV</button>
+      <button onclick="trTabSwitch('api',this)">API reference</button>
     </div>
 
-    <div class="transform-section" id="tr-schema-picker" style="display:none">
-      <h3>2. Pick schemas</h3>
-      <div class="builder-row"><label>Source schema (CSV format)</label><select id="tr-src" onchange="trBuildMapping()"></select></div>
-      <div class="builder-row"><label>Target schema (convert to)</label><select id="tr-tgt" onchange="trBuildMapping()"></select></div>
+    <!-- In-browser CSV transform -->
+    <div id="tr-tab-browser">
+      <p style="color:var(--text-dim);font-size:12.5px;margin-bottom:20px;line-height:1.6">Upload a CSV whose columns match one schema, and convert to another. Uses stored alignments to auto-map columns. Runs entirely in your browser — no data leaves your machine.</p>
+
+      <div class="transform-section">
+        <h3>1. Upload CSV</h3>
+        <label class="file-drop">
+          <input type="file" id="tr-file" accept=".csv" onchange="trOnFile(event)"/>
+          <div id="tr-drop-label" style="color:var(--muted);font-size:13px">Click to select a CSV file, or drag here</div>
+        </label>
+        <div id="tr-file-info" style="margin-top:10px;font-size:11.5px;color:var(--text-dim);display:none"></div>
+      </div>
+
+      <div class="transform-section" id="tr-schema-picker" style="display:none">
+        <h3>2. Pick schemas</h3>
+        <div class="builder-row"><label>Source schema (CSV format)</label><select id="tr-src" onchange="trBuildMapping()"></select></div>
+        <div class="builder-row"><label>Target schema (convert to)</label><select id="tr-tgt" onchange="trBuildMapping()"></select></div>
+      </div>
+
+      <div class="transform-section" id="tr-mapping" style="display:none">
+        <h3>3. Column mapping</h3>
+        <p style="color:var(--muted);font-size:11.5px;margin-bottom:10px">Auto-matches shown. Adjust any dropdowns to override.</p>
+        <table class="mapping-table" id="tr-mapping-table"></table>
+      </div>
+
+      <div class="transform-section" id="tr-convert" style="display:none">
+        <button class="btn" onclick="trConvert()">Convert and download</button>
+      </div>
     </div>
 
-    <div class="transform-section" id="tr-mapping" style="display:none">
-      <h3>3. Column mapping</h3>
-      <p style="color:var(--muted);font-size:11.5px;margin-bottom:10px">Auto-matches shown. Adjust any dropdowns to override.</p>
-      <table class="mapping-table" id="tr-mapping-table"></table>
-    </div>
+    <!-- API reference -->
+    <div id="tr-tab-api" style="display:none">
+      <p style="color:var(--text-dim);font-size:12.5px;margin-bottom:20px;line-height:1.6">
+        The registry exposes read endpoints today. Transform endpoints are planned — field mapping as a static file, data transform via a serverless function.
+      </p>
 
-    <div class="transform-section" id="tr-convert" style="display:none">
-      <button class="btn" onclick="trConvert()">Convert and download</button>
+      <div class="transform-section">
+        <h3 style="display:flex;align-items:center;gap:8px;color:var(--text)">
+          <span style="background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal-line);border-radius:4px;padding:2px 7px;font-family:var(--mono);font-size:10px">GET</span>
+          Field mapping between two schemas
+          <span style="background:var(--green-soft);color:var(--green);border:1px solid rgba(52,211,153,.3);border-radius:4px;padding:1px 6px;font-size:9px;font-family:var(--mono)">PLANNED</span>
+        </h3>
+        <div class="cypher-preview" id="tr-api-get-url" style="cursor:pointer;user-select:all" title="click to copy"></div>
+        <p style="color:var(--muted);font-size:11.5px;margin:10px 0 8px">Returns the pre-computed field-to-field mapping derived from alignment scores. Servable as a static file — no extra infrastructure needed.</p>
+        <pre style="background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-family:var(--mono);font-size:11.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.7">{
+  "from": "bbqs",  "to": "bids",
+  "mappings": [
+    {
+      "from_class": "Subject",  "to_class": "Participant",  "distance": 0.12,
+      "field_mappings": [
+        { "from_field": "subject_id", "to_field": "participant_id", "confidence": 0.85 },
+        { "from_field": "age",        "to_field": "age",            "confidence": 0.97 }
+      ]
+    }
+  ]
+}</pre>
+      </div>
+
+      <div class="transform-section">
+        <h3 style="display:flex;align-items:center;gap:8px;color:var(--text)">
+          <span style="background:var(--purple-soft);color:var(--purple);border:1px solid var(--purple-line);border-radius:4px;padding:2px 7px;font-family:var(--mono);font-size:10px">POST</span>
+          Transform a dataset
+          <span style="background:var(--yellow-soft);color:var(--yellow);border:1px solid rgba(251,191,36,.3);border-radius:4px;padding:1px 6px;font-size:9px;font-family:var(--mono)">NEEDS COMPUTE</span>
+        </h3>
+        <div class="cypher-preview">POST https://sensein.group/NeuroGhost/api/transform</div>
+        <p style="color:var(--muted);font-size:11.5px;margin:10px 0 8px">Accepts a record in one schema's format and returns it remapped. Requires a serverless compute layer (Cloudflare Worker or equivalent).</p>
+        <pre style="background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-family:var(--mono);font-size:11.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.7"># Request
+{ "from": "bbqs", "to": "bids", "data": { "subject_id": "sub-01", "age": 24 } }
+
+# Response
+{ "from": "bbqs", "to": "bids",
+  "result": { "participant_id": "sub-01", "age": 24 },
+  "unmapped_fields": [], "warnings": [] }</pre>
+      </div>
+
+      <div class="transform-section">
+        <h3 style="color:var(--text)">Live read endpoints</h3>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <thead><tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Method</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em">URL</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em">Description</th>
+          </tr></thead>
+          <tbody id="tr-api-endpoints"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -447,7 +512,8 @@ slots:
 <script>
 const REGISTRY_JSON="./data/registry.json";
 const PROVENANCE_JSON="./data/provenance.json";
-const GITHUB_REPO="sensein/NeuroRegistry";
+const GITHUB_REPO="sensein/NeuroGhost";
+const API_BASE="https://sensein.group/NeuroGhost";
 
 let allClasses=[],allSources=[],provenance=[],classHistories={},propHistories={},schemaHistories={};
 let activeSource="all",treeSrc="all",trCsv=null,trHeaders=[],trRows=[],trMapping={},selectedHist={schema:null,class:null,property:null};
@@ -462,14 +528,19 @@ async function boot(){
       // this UI reads uid / datatype / version. Map new→old, keeping old as-is.
       allClasses=(d.classes||[]).map(c=>({
         ...c,
-        uid: c.uid||c.hash_id,
+        uid: c.uid||c.hash_id||"",
         version: c.version||c.registry_version||"",
-        abstract: c.abstract??c.is_abstract,
-        alignments: c.alignments||[],
+        abstract: c.abstract??c.is_abstract??false,
+        source: c.source||(Array.isArray(c.sources)?c.sources[0]:"")||"",
+        alignments: (c.alignments||[]).map(a=>({
+          ...a,
+          target_uid: a.target_uid||a.target_hash_id||"",
+        })),
         properties: (c.properties||[]).map(p=>({
           ...p,
-          uid: p.uid||p.hash_id,
+          uid: p.uid||p.hash_id||"",
           datatype: p.datatype||p.value_range||"",
+          source: p.source||(Array.isArray(p.sources)?p.sources[0]:"")||"",
         })),
       }));
       allSources=d.sources||[];
@@ -501,7 +572,8 @@ function dlClass(uid){const c=allClasses.find(x=>x.uid===uid);if(c)dlJSON(c,c.na
 function dlClassYAML(uid){
   const c=allClasses.find(x=>x.uid===uid);if(!c)return;
   const lines=[`# ${c.name} · ${c.source}`,`# IRI: ${c.iri}`,``,`classes:`,`  ${c.name}:`,`    description: "${(c.definition||"").replace(/"/g,'\\"')}"`,`    class_uri: "${c.iri}"`];
-  if(c.properties.length){lines.push(`    slots:`);c.properties.forEach(p=>lines.push(`      - ${p.name}`));lines.push(``,`slots:`);c.properties.forEach(p=>{lines.push(`  ${p.name}:`);if(p.definition)lines.push(`    description: "${p.definition.replace(/"/g,'\\"')}"`);if(p.datatype)lines.push(`    range: ${p.datatype.replace("xsd:","")}`);if(p.multivalued)lines.push(`    multivalued: true`);if(p.required)lines.push(`    required: true`);});}
+  if(c.abstract)lines.splice(5,0,`    abstract: true`);
+  if(c.properties.length){lines.push(`    slots:`);c.properties.forEach(p=>lines.push(`      - ${p.name}`));lines.push(``,`slots:`);c.properties.forEach(p=>{lines.push(`  ${p.name}:`);if(p.definition)lines.push(`    description: "${p.definition.replace(/"/g,'\\"')}"`);const rng=(p.datatype||p.value_range||"").replace("xsd:","");if(rng)lines.push(`    range: ${rng}`);if(p.multivalued)lines.push(`    multivalued: true`);});}
   dlText(lines.join("\n"),c.name+".yml","application/yaml");
 }
 function dlDiffCSV(){
@@ -582,18 +654,21 @@ function renderDiff(){
 
 // GRAPH SCHEMA
 const GN=[
-  {id:"SchemaClass",fields:["uid PK","iri","uri","version","created_at","name","definition","abstract","source_label","registry_version"],x:.42,y:.10},
-  {id:"SchemaProperty",fields:["uid PK","iri","uri","version","created_at","name","definition","datatype","range_uri","multivalued","required","source_label","registry_version"],x:.08,y:.35},
-  {id:"SchemaRule",fields:["uid PK","iri","uri","version","created_at","name","rule_spec","units","min_val","max_val","pattern","multivalued","required","registry_version"],x:.72,y:.35},
-  {id:"SchemaSource",fields:["uid PK","iri","uri","label","mime_type","registry_version"],x:.24,y:.65},
-  {id:"SchemaActivity",fields:["uid PK","activity","agent","started_at","issue_number","registry_version"],x:.56,y:.65},
-  {id:"SchemaVersionSnapshot",fields:["uid PK","schema_label","version","yml_path","class_count","property_count","changes_summary","registry_version"],x:.88,y:.65},
+  {id:"RegistryClass",fields:["hash_id PK","iri","name","definition","is_abstract"],x:.42,y:.08},
+  {id:"RegistryProperty",fields:["hash_id PK","iri","name","definition","value_range","multivalued"],x:.08,y:.35},
+  {id:"SkosMapping",fields:["hash_id PK","predicate","object_iri","confidence"],x:.75,y:.35},
+  {id:"ProvenanceEntry",fields:["hash_id PK","generated_at","attributed_to","activity","registry_version","issue_number"],x:.25,y:.65},
+  {id:"SchemaSource",fields:["uid PK","label","iri","mime_type"],x:.55,y:.65},
+  {id:"SchemaVersionSnapshot",fields:["uid PK","schema_label","version","yml_path","class_count","property_count"],x:.88,y:.65},
 ];
 const GR=[
-  {f:"SchemaClass",t:"SchemaProperty",l:"HAS_PROPERTY"},{f:"SchemaClass",t:"SchemaClass",l:"SUBCLASS_OF"},
-  {f:"SchemaClass",t:"SchemaClass",l:"ALIGNED_TO"},{f:"SchemaClass",t:"SchemaClass",l:"PRIOR_VERSION"},
-  {f:"SchemaProperty",t:"SchemaProperty",l:"PRIOR_VERSION_P"},{f:"SchemaRule",t:"SchemaClass",l:"APPLIES_TO"},
-  {f:"SchemaClass",t:"SchemaActivity",l:"PROV_GENERATED"},{f:"SchemaClass",t:"SchemaSource",l:"FROM_SOURCE"},
+  {f:"RegistryClass",t:"RegistryProperty",l:"HAS_PROPERTY"},
+  {f:"RegistryClass",t:"RegistryClass",l:"SUBCLASS_OF"},
+  {f:"RegistryClass",t:"RegistryClass",l:"ALIGNED_TO"},
+  {f:"RegistryClass",t:"ProvenanceEntry",l:"HAS_PROVENANCE"},
+  {f:"RegistryProperty",t:"ProvenanceEntry",l:"HAS_PROVENANCE"},
+  {f:"RegistryClass",t:"SkosMapping",l:"HAS_SKOS_MAPPING"},
+  {f:"RegistryClass",t:"SchemaVersionSnapshot",l:"SNAPSHOTTED_IN"},
 ];
 let selNode=null;
 function renderGraph(){
@@ -730,6 +805,12 @@ function renderHistDetail(kind,key){
 }
 
 // TRANSFORM
+function trTabSwitch(tab,btn){
+  document.querySelectorAll("#view-transform .query-tabs button").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("tr-tab-browser").style.display=tab==="browser"?"block":"none";
+  document.getElementById("tr-tab-api").style.display=tab==="api"?"block":"none";
+}
 function initTransform(){
   const src=document.getElementById("tr-src"),tgt=document.getElementById("tr-tgt");
   src.innerHTML="";tgt.innerHTML="";
@@ -738,6 +819,25 @@ function initTransform(){
     const o2=document.createElement("option");o2.value=s.label;o2.textContent=s.label;tgt.appendChild(o2);
     if(i===1)o1.selected=true; if(i===0)o2.selected=true;
   });
+  // Populate API tab
+  const firstSrc=allSources[0]?.label||"bbqs";
+  const secondSrc=allSources[1]?.label||"bids";
+  const getUrl=`${API_BASE}/api/transform?from=${firstSrc}&to=${secondSrc}`;
+  const urlEl=document.getElementById("tr-api-get-url");
+  if(urlEl){urlEl.textContent=`GET ${getUrl}`;urlEl.onclick=()=>cpText(getUrl);}
+  const tbody=document.getElementById("tr-api-endpoints");
+  if(tbody){
+    const endpoints=[
+      {method:"GET",url:`${API_BASE}/data/registry.json`,desc:"Full registry — all schemas, classes, alignments"},
+      {method:"GET",url:`${API_BASE}/data/versions/{ver}.json`,desc:"Frozen snapshot at a specific registry version"},
+      {method:"GET",url:`${API_BASE}/data/provenance.json`,desc:"Changelog of every schema ingestion"},
+    ];
+    tbody.innerHTML=endpoints.map(e=>`<tr style="border-bottom:1px solid var(--border-soft)">
+      <td style="padding:7px 10px"><span style="background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal-line);border-radius:4px;padding:1px 6px;font-family:var(--mono);font-size:10px">${e.method}</span></td>
+      <td style="padding:7px 10px;font-family:var(--mono);font-size:11px;color:var(--teal)"><a href="${e.url}" target="_blank" style="color:var(--teal);text-decoration:none">${e.url.replace(API_BASE,"")}</a></td>
+      <td style="padding:7px 10px;color:var(--text-dim);font-size:11.5px">${e.desc}</td>
+    </tr>`).join("");
+  }
 }
 function trOnFile(e){
   const file=e.target.files[0];if(!file)return;
@@ -816,17 +916,17 @@ function runQuery(){
   const name=(document.getElementById("q-name").value||"").toLowerCase();
 
   // Build Cypher preview
-  let cypher=`MATCH (n:${what==="properties"?"SchemaProperty":"SchemaClass"})`;
+  let cypher=`MATCH (n:${what==="properties"?"RegistryProperty":"RegistryClass"})`;
   const clauses=[];
-  if(src)clauses.push(`n.source_label = '${src}'`);
+  if(src)clauses.push(`'${src}' IN n.sources`);
   if(name)clauses.push(`n.name CONTAINS '${name}'`);
   if(alnSrc&&what==="classes"){
-    cypher+=`-[r:ALIGNED_TO]->(t:SchemaClass)`;
-    clauses.push(`t.source_label = '${alnSrc}'`);
+    cypher+=`-[r:ALIGNED_TO]->(t:RegistryClass)`;
+    clauses.push(`'${alnSrc}' IN t.sources`);
     clauses.push(`r.distance <= ${dist}`);
   }
   if(clauses.length)cypher+=`\nWHERE ${clauses.join("\n  AND ")}`;
-  cypher+=`\nRETURN n.name, n.iri, n.source_label${alnSrc&&what==="classes"?", t.name, r.distance":""}`;
+  cypher+=`\nRETURN n.name, n.iri, n.hash_id${alnSrc&&what==="classes"?", t.name, r.distance":""}`;
 
   document.getElementById("q-cypher").style.display="block";
   document.getElementById("q-cypher").textContent=cypher;
