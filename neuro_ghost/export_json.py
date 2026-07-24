@@ -63,14 +63,13 @@ def export_snapshot(conn, registry_version: str) -> dict:
     # has a single "source" — it has a `sources` list, one per ProvenanceEntry.
     cls_rows = conn.execute("""
         MATCH (n:RegistryClass)
-        RETURN n.hash_id, n.class_uri, n.name, n.description,
-               n.abstract, n.registry_version
+        RETURN n.hash_id, n.class_uri, n.name, n.description, n.abstract
         ORDER BY n.name
     """).get_all()
 
     classes = []
     for row in cls_rows:
-        hash_id, class_uri, name, desc, is_abstract, reg_ver = row
+        hash_id, class_uri, name, desc, is_abstract = row
 
         props = conn.execute("""
             MATCH (c:RegistryClass {hash_id: $hash_id})-[:HAS_PROPERTY]->(p:RegistryProperty)
@@ -98,7 +97,6 @@ def export_snapshot(conn, registry_version: str) -> dict:
             "iri":              class_uri or "",
             "name":             name or "",
             "definition":       desc or "",
-            "registry_version": reg_ver or "",
             "is_abstract":      bool(is_abstract),
             "sources":          _attesting_sources(conn, "RegistryClass", "HAS_PROVENANCE", hash_id),
             "properties": [
