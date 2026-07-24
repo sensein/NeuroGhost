@@ -123,6 +123,7 @@ def write_provenance(conn, label: str, hash_id: str, prov) -> bool:
     conn.execute("""
         CREATE (:ProvenanceEntry {
             uid: $uid, source: $source, source_description: $source_description,
+            registry_version: $registry_version,
             generated_at: $generated_at, attributed_to: $attributed_to,
             activity: $activity, derived_from: $derived_from
         })
@@ -130,6 +131,7 @@ def write_provenance(conn, label: str, hash_id: str, prov) -> bool:
         "uid":                uid,
         "source":             prov.source,
         "source_description": prov.source_description,
+        "registry_version":   prov.registry_version,
         "generated_at":       prov.generated_at.isoformat(),
         "attributed_to":      prov.attributed_to,
         "activity":           prov.activity,

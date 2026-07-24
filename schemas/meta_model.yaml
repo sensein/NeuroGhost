@@ -57,7 +57,6 @@ classes:
       - mixins
       - class_uri
       - abstract
-      - registry_version
 
   RegistryProperty:
     is_a: RegistryEntity
@@ -72,7 +71,6 @@ classes:
       - range
       - units
       - slot_uri
-      - registry_version
 
   ProvenanceEntry:
     description: >-
@@ -88,6 +86,7 @@ classes:
       - uid
       - source
       - source_description
+      - registry_version
       - generated_at
       - attributed_to
       - activity
@@ -229,10 +228,6 @@ slots:
     range: boolean
     description: Whether this registered class is itself declared abstract.
 
-  registry_version:
-    range: string
-    description: Registry snapshot version this entity belongs to.
-
   # --- ProvenanceEntry slots -------------------------------------------------
 
   uid:
@@ -253,6 +248,15 @@ slots:
     description: >-
       This source's own description text for the entity, if it differs
       from the entity's merged description.
+
+  registry_version:
+    range: string
+    description: >-
+      Registry snapshot version in effect when this ProvenanceEntry was
+      generated. Not on RegistryClass/RegistryProperty directly — the same
+      entity can be attested by different sources at different times, each
+      under a different registry version, so it belongs on the per-source
+      attestation, not the entity itself.
 
   generated_at:
     range: datetime

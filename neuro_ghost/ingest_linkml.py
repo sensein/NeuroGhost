@@ -279,11 +279,13 @@ def parse_linkml(path: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _make_provenance(source_label: str, agent: str, issue: str = "",
+                     registry_version: str = "",
                      activity: str = "ingestion") -> ProvenanceEntry:
     attributed_to = f"{agent} (issue #{issue})" if issue else agent
     return ProvenanceEntry(
         uid=make_uid(),
         source=source_label,
+        registry_version=registry_version or None,
         generated_at=now_iso(),
         attributed_to=attributed_to,
         activity=activity,
@@ -292,6 +294,7 @@ def _make_provenance(source_label: str, agent: str, issue: str = "",
 
 def build_registry_entities(
     parsed: dict, source_label: str, agent: str, issue: str = "",
+    registry_version: str = "",
 ) -> tuple[dict[str, RegistryProperty], dict[str, RegistryClass]]:
     """
     Convert parse_linkml()'s intermediate dict into content-hashed
@@ -328,7 +331,7 @@ def build_registry_entities(
             range=slot["value_range"],
             units=slot.get("units") or None,
             slot_uri=slot["iri"] or None,
-            provenance=[_make_provenance(source_label, agent, issue)],
+            provenance=[_make_provenance(source_label, agent, issue, registry_version)],
         )
         prop.hash_id = compute_hash_id(prop)
         properties[slot_name] = prop
@@ -357,7 +360,7 @@ def build_registry_entities(
             abstract=cls["is_abstract"],
             is_a=parent_hash_id,
             properties=prop_hash_ids,
-            provenance=[_make_provenance(source_label, agent, issue)],
+            provenance=[_make_provenance(source_label, agent, issue, registry_version)],
         )
         rc.hash_id = compute_hash_id(rc)
         registry_classes[cls_name] = rc
@@ -459,7 +462,7 @@ def insert_schema(conn, parsed: dict, source_label: str, agent: str = "anonymous
     meta = parsed["meta"]
 
     properties, registry_classes = build_registry_entities(
-        parsed, source_label, agent, issue,
+        parsed, source_label, agent, issue, registry_version,
     )
 
     stats = write_registry_entities(conn, properties, registry_classes, dry_run=dry_run)

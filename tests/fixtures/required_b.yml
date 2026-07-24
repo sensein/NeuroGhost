@@ -1,0 +1,14 @@
+id: https://example.org/required-b
+name: required_b
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+default_range: string
+classes:
+  Participant:
+    description: An enrolled participant
+    attributes:
+      age:
+        description: Age of the subject
+        range: integer
