@@ -427,5 +427,10 @@ def ingest_schema(
 # Entry point
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point for the `neuroghost-mcp` console script."""
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

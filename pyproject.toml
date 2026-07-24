@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "neuroghost-mcp"
+version = "1.0.0"
+description = "MCP server for the NeuroGhost neuroscience schema registry"
+readme = "README.md"
+license = { text = "CC0-1.0" }
+requires-python = ">=3.10"
+keywords = ["neuroscience", "schema", "registry", "mcp", "linkml"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "mcp[cli]>=1.0.0",
+]
+
+[project.urls]
+Homepage   = "https://sensein.group/NeuroGhost/"
+Repository = "https://github.com/sensein/NeuroGhost"
+
+[project.scripts]
+neuroghost-mcp = "neuro_ghost.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+# Only ship the MCP server module — not the full pipeline (which has heavy deps)
+include = ["neuro_ghost/mcp_server.py", "neuro_ghost/__init__.py", "neuro_ghost/__main__.py"]
