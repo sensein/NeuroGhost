@@ -8,7 +8,7 @@
 
 **NeuroGhost** is a public catalog of neuroscience vocabularies. Labs publish their [LinkML](https://linkml.io/) schema; the registry compares it to every other schema and surfaces which terms mean the same thing across projects.
 
-**Distance score** — 0.0 = identical, 1.0 = unrelated. Computed from IRI match (60%), name embeddings (15%), and definition embeddings (25%). Adjustable live on the Concepts page.
+**Distance score** — 0.0 = identical, 1.0 = unrelated. Computed via the Proteus pipeline: name similarity, token Jaccard, alias overlap, definition embeddings, IRI anchor, and unit dimensional veto. Adjustable live on the Concepts page.
 
 ---
 
@@ -73,6 +73,26 @@ curl -X POST https://sensein.group/NeuroGhost/api/transform \
   -d '{ "from": "bbqs", "to": "bids", "data": { "subject_id": "sub-01", "age": 24 } }'
 ```
 </details>
+
+---
+
+## How alignment works
+
+Alignment runs the **Proteus pipeline** ([github.com/neurovium/Proteus](https://github.com/neurovium/Proteus)) — inlined into [`neuro_ghost/align.py`](neuro_ghost/align.py). Six stages:
+
+| Stage | Name | What it does |
+|-------|------|--------------|
+| 0 | Load | Reads every class from LadybugDB into a `MatchingProfile` (name, aliases, IRI, units, definition) |
+| 1 | Block + Unit veto | Generates candidate pairs across schema pairs (recall-focused). Hard-vetoes pairs whose units have known but incompatible SI dimensions (e.g. Hz vs V). This is the **only** precision filter at this stage. |
+| 2 | SignalVector | For each candidate pair, computes a frozen evidence bundle: name similarity, token Jaccard, alias overlap, definition cosine (sentence-transformers), unit compatibility, anchor relation (IRI match). Absent signals are `None`, never `0.0`. |
+| 3 | Calibrate | Weights the present signals into a confidence score. Weights: name 0.45, token Jaccard 0.35, alias overlap 0.20 (renormalized when signals are missing). Adds a 0.05 bonus for known-compatible units. Blends in definition similarity at 25% when embeddings are available. |
+| 4 | Predicate | Two-pathway assignment. **Anchored** (IRI evidence): can reach `skos:exactMatch`, `skos:broadMatch`, `skos:narrowMatch`. **Statistical** (no IRI anchor): caps at `skos:closeMatch`. Pairs below 0.45 confidence are dropped. |
+| 5 | Repair | Structural cleanup — demotes duplicate `exactMatch` claims to `closeMatch`. Never deletes edges. |
+| 6 | Write | Writes `ALIGNED_TO` edges in LadybugDB with `distance`, `skos_relation`, `method`, and per-signal subscores. |
+
+**Distance** is `1 − confidence`, so 0.0 = identical, 1.0 = unrelated.
+
+**Definition embeddings** use `all-MiniLM-L6-v2` and are cached in `data/embeddings.parquet` so CI doesn't recompute from scratch.
 
 ---
 
