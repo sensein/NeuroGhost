@@ -96,8 +96,8 @@ def export_snapshot(conn, registry_version: str) -> dict:
             "hash_id":          hash_id,
             "iri":              class_uri or "",
             "name":             name or "",
-            "definition":  desc or "",
-            "is_abstract": bool(is_abstract),
+            "definition":       desc or "",
+            "is_abstract":      bool(is_abstract),
             "sources":          _attesting_sources(conn, "RegistryClass", "HAS_PROVENANCE", hash_id),
             "properties": [
                 {
