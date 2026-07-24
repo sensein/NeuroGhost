@@ -41,24 +41,59 @@ jobs:
             echo "bump=minor" >> $GITHUB_OUTPUT
           fi
 
-      - name: Extract YAML from issue body
+      - name: Extract and convert schema from issue body
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
           SCHEMA_NAME: ${{ steps.meta.outputs.schema_name }}
         run: |
           python3 - << 'PYEOF'
-          import os, re, sys
+          import os, re, sys, json
+          import yaml
+
           body = os.environ["ISSUE_BODY"]
-          fenced = re.search(r'```ya?ml\s*\n(.*?)```', body, re.DOTALL)
-          yaml_content = fenced.group(1) if fenced else body.strip()
-          if not yaml_content:
-              print("ERROR: no YAML content found in issue body.")
-              sys.exit(1)
           name = os.environ["SCHEMA_NAME"]
+
+          # Detect format from the code-fence language tag:
+          #   ```linkml / ```yaml / ```yml  → already LinkML
+          #   ```json / ```json-schema      → JSON Schema, needs conversion
+          fenced = re.search(r'```([\w-]*)\s*\n(.*?)```', body, re.DOTALL)
+          if fenced:
+              lang    = (fenced.group(1) or "yaml").lower()
+              content = fenced.group(2).strip()
+          else:
+              lang    = "yaml"
+              content = body.strip()
+
+          json_schema_langs = {"json", "json-schema", "jsonschema"}
+          linkml_langs      = {"yaml", "yml", "linkml", ""}
+
           os.makedirs("schemas", exist_ok=True)
-          with open(f"schemas/{name}.yml", "w") as f:
-              f.write(yaml_content)
-          print(f"Wrote schemas/{name}.yml")
+          out_path = f"schemas/{name}.yml"
+
+          if lang in json_schema_langs:
+              print(f"Detected format: JSON Schema (lang={lang!r}) — converting to LinkML…")
+              sys.path.insert(0, ".")
+              from neuro_ghost.converters.from_jsonschema import convert as js2lm
+              try:
+                  data = json.loads(content)
+              except json.JSONDecodeError:
+                  data = yaml.safe_load(content)
+              linkml_dict = js2lm(data, name)
+              with open(out_path, "w") as f:
+                  yaml.dump(linkml_dict, f, default_flow_style=False,
+                            allow_unicode=True, sort_keys=False)
+              print(f"Converted → {out_path}  "
+                    f"({len(linkml_dict['classes'])} classes, "
+                    f"{len(linkml_dict['slots'])} slots)")
+          elif lang in linkml_langs or lang not in json_schema_langs:
+              print(f"Detected format: LinkML (lang={lang!r})")
+              with open(out_path, "w") as f:
+                  f.write(content)
+              print(f"Wrote {out_path}")
+          else:
+              print(f"ERROR: Unsupported schema format '{lang}'. "
+                    "Use ```yaml (LinkML) or ```json (JSON Schema).")
+              sys.exit(1)
           PYEOF
 
       - name: Validate LinkML schema
