@@ -51,8 +51,8 @@ jobs:
           body = os.environ["ISSUE_BODY"]
           fenced = re.search(r'```ya?ml\s*\n(.*?)```', body, re.DOTALL)
           yaml_content = fenced.group(1) if fenced else body.strip()
-          if "classes:" not in yaml_content:
-              print("ERROR: missing 'classes:' key — not valid LinkML.")
+          if not yaml_content:
+              print("ERROR: no YAML content found in issue body.")
               sys.exit(1)
           name = os.environ["SCHEMA_NAME"]
           os.makedirs("schemas", exist_ok=True)
@@ -61,29 +61,19 @@ jobs:
           print(f"Wrote schemas/{name}.yml")
           PYEOF
 
-      - name: Validate YAML
+      - name: Validate LinkML schema
         run: |
-          python3 - << 'PYEOF'
-          import yaml, sys
-          name = "${{ steps.meta.outputs.schema_name }}"
-          with open(f"schemas/{name}.yml") as f:
-              data = yaml.safe_load(f)
-          missing = [k for k in ["classes","slots"] if k not in data]
-          if missing:
-              print(f"ERROR: missing keys: {missing}")
-              sys.exit(1)
-          print(f"Valid: {len(data['classes'])} classes, {len(data['slots'])} slots")
-          PYEOF
+          python neuro_ghost/validate_schema.py schemas/${{ steps.meta.outputs.schema_name }}.yml
 
       - name: Seed schema.org (if DB not cached)
         run: |
-          python neuro_registry/seed.py \
+          python neuro_ghost/seed.py \
             --db registry.lbug \
             --registry-version 1.0.0
 
       - name: Ingest schema
         run: |
-          python neuro_registry/ingest_linkml.py \
+          python neuro_ghost/ingest_linkml.py \
             --file schemas/${{ steps.meta.outputs.schema_name }}.yml \
             --db registry.lbug \
             --issue ${{ github.event.issue.number }} \
@@ -91,13 +81,13 @@ jobs:
 
       - name: Run alignment
         run: |
-          python neuro_registry/align.py \
+          python neuro_ghost/align.py \
             --source ${{ steps.meta.outputs.schema_name }} \
             --db registry.lbug
 
       - name: Export + version registry
         run: |
-          python neuro_registry/export_json.py \
+          python neuro_ghost/export_json.py \
             --db registry.lbug \
             --bump ${{ steps.meta.outputs.bump }} \
             --issue ${{ github.event.issue.number }} \
@@ -153,7 +143,8 @@ jobs:
               body: [
                 `❌ **Ingestion failed.**`,
                 ``,
-                `Check that your YAML is valid LinkML with \`classes:\` and \`slots:\` keys.`,
+                `Check the run log for the specific LinkML validation error (e.g. an undefined slot, ` +
+                `\`is_a\` parent, or range reference).`,
                 ``,
                 `[View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
               ].join("\n"),

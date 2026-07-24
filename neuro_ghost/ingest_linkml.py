@@ -68,12 +68,12 @@ USAGE
 """
 
 from __future__ import annotations
-import datetime, uuid, os
+import datetime, uuid, os, re
 from pathlib import Path
 from typing import Any
 
 import click
-import yaml
+from linkml_runtime.utils.schemaview import SchemaView
 
 from db import (
     get_connection, make_base, make_uid, make_iri, now_iso,
@@ -148,20 +148,64 @@ def resolve_prefix(curie: str, prefixes: dict[str, str]) -> str:
 # LinkML parser
 # ---------------------------------------------------------------------------
 
+def _slot_to_dict(slot, prefixes: dict[str, str]) -> dict:
+    """
+    Convert a SchemaView-induced SlotDefinition into our internal slot dict.
+
+    "Induced" means inheritance (is_a), mixins, and schema-level default_range
+    have already been resolved onto this slot by SchemaView — so a slot
+    inherited from a mixin or parent class arrives here fully formed, exactly
+    as if it had been declared directly.
+    """
+    slot_uri     = slot.slot_uri or ""
+    resolved_iri = resolve_prefix(slot_uri, prefixes) if slot_uri else ""
+
+    raw_range = slot.range if isinstance(slot.range, str) and slot.range else "string"
+    if raw_range in LINKML_PRIMITIVES:
+        value_range = LINKML_PRIMITIVES[raw_range]
+    else:
+        # It's a reference to another class/type/enum — store as a resolved IRI
+        value_range = (resolve_prefix(raw_range, prefixes)
+                      if ":" in raw_range else make_iri(raw_range))
+
+    # Extract units from description if present (common in neuro schemas)
+    desc = str(slot.description or "")
+    units = ""
+    if desc and "(units:" in desc.lower():
+        m = re.search(r'\(units?:\s*([^)]+)\)', desc, re.IGNORECASE)
+        if m:
+            units = m.group(1).strip()
+
+    return {
+        "iri":         resolved_iri,
+        "definition":  desc,
+        "value_range": value_range,
+        "units":       units,
+        "multivalued": bool(slot.multivalued),
+        "required":    bool(slot.required),
+        "pattern":     slot.pattern or "",
+    }
+
+
 def parse_linkml(path: Path) -> dict[str, Any]:
     """
-    Read a LinkML YAML file and return a clean, normalised Python dict.
+    Load a LinkML YAML file via SchemaView and return a clean, normalised dict.
 
-    Input (LinkML YAML):
-      classes:
-        Person:
-          description: A person
-          class_uri: schema:Person
-          slots: [name, email]
-      slots:
-        name:
-          range: string
-          slot_uri: schema:name
+    Using SchemaView instead of a hand-rolled YAML walk means classes get
+    their real, induced slot set: slots inherited via is_a or mixins, slots
+    declared inline as `attributes:`, and ranges defaulted from the schema's
+    `default_range` all resolve exactly as LinkML defines them. A class that
+    lists no slots of its own but has `is_a: Device` still gets Device's
+    slots attached — the hand-rolled version silently dropped those.
+
+    IRI resolution intentionally does NOT use SchemaView's own get_uri():
+    imports (e.g. linkml:types) can declare their own "schema" prefix and,
+    depending on import-merge order, shadow a schema's own `prefixes:`
+    declaration — which would silently flip schema.org IRIs from
+    https:// to http://, breaking identity matching against the
+    https://schema.org/ IRIs seed.py uses. Resolving CURIEs ourselves from
+    the schema's own top-level `prefixes:` block (schema's own declarations
+    always win over KNOWN_PREFIXES) avoids that.
 
     Output (our internal format):
       {
@@ -186,76 +230,39 @@ def parse_linkml(path: Path) -> dict[str, Any]:
           }
         }
       }
-
-    The key normalisation step is value_range:
-      - If range is a LinkML primitive (string, integer, etc.) → XSD CURIE
-      - If range is a class name or CURIE → resolved IRI
     """
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    sv = SchemaView(str(path))
 
-    prefixes = {k: v for k, v in (raw.get("prefixes") or {}).items()}
-    version  = str(raw.get("version", "1.0.0"))
+    prefixes = {k: v.prefix_reference for k, v in (sv.schema.prefixes or {}).items()}
 
     meta = {
-        "id":          raw.get("id", ""),
-        "name":        raw.get("name", path.stem),
-        "version":     version,
-        "description": raw.get("description", ""),
+        "id":          sv.schema.id or "",
+        "name":        sv.schema.name or path.stem,
+        "version":     str(sv.schema.version or "1.0.0"),
+        "description": sv.schema.description or "",
     }
 
-    # Parse slots first — classes reference them by name
-    slots: dict[str, dict] = {}
-    for slot_name, slot_def in (raw.get("slots") or {}).items():
-        slot_def   = slot_def or {}
-        raw_range  = slot_def.get("range", "string")
-        slot_uri   = slot_def.get("slot_uri", "")
-        resolved_iri = resolve_prefix(slot_uri, prefixes) if slot_uri else ""
-
-        # Normalise raw_range — can be None if the YAML slot has no range defined
-        if not raw_range or not isinstance(raw_range, str):
-            raw_range = "string"
-
-        if raw_range in LINKML_PRIMITIVES:
-            value_range = LINKML_PRIMITIVES[raw_range]
-        else:
-            # It's a reference to another class — store as a resolved IRI
-            value_range = (resolve_prefix(raw_range, prefixes)
-                          if ":" in raw_range else make_iri(raw_range))
-
-        # Extract units from description if present (common in neuro schemas)
-        desc = slot_def.get("description") or ""
-        desc = str(desc) if desc is not None else ""
-        units = ""
-        if desc and "(units:" in desc.lower():
-            import re
-            m = re.search(r'\(units?:\s*([^)]+)\)', desc, re.IGNORECASE)
-            if m:
-                units = m.group(1).strip()
-
-        slots[slot_name] = {
-            "iri":         resolved_iri,
-            "definition":  desc,
-            "value_range": value_range,
-            "units":       units,
-            "multivalued": bool(slot_def.get("multivalued", False)),
-            "required":    bool(slot_def.get("required", False)),
-            "pattern":     slot_def.get("pattern", ""),
-        }
-
-    # Parse classes
     classes: dict[str, dict] = {}
-    for cls_name, cls_def in (raw.get("classes") or {}).items():
-        cls_def   = cls_def or {}
-        class_uri = cls_def.get("class_uri", "")
+    slots: dict[str, dict] = {}
+
+    for cls_name in sv.all_classes():
+        cls_def       = sv.get_class(cls_name)
+        induced_slots = sv.class_induced_slots(cls_name)
+
+        class_uri    = cls_def.class_uri or ""
         resolved_iri = resolve_prefix(class_uri, prefixes) if class_uri else ""
 
         classes[cls_name] = {
             "iri":         resolved_iri,
-            "definition":  cls_def.get("description", ""),
-            "is_a":        cls_def.get("is_a", None),
-            "is_abstract": bool(cls_def.get("abstract", False)),
-            "slots":       cls_def.get("slots") or [],
+            "definition":  cls_def.description or "",
+            "is_a":        cls_def.is_a,
+            "is_abstract": bool(cls_def.abstract),
+            "slots":       [slot.name for slot in induced_slots],
         }
+
+        for slot in induced_slots:
+            if slot.name not in slots:
+                slots[slot.name] = _slot_to_dict(slot, prefixes)
 
     return {
         "meta":     meta,

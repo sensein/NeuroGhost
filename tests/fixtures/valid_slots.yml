@@ -1,0 +1,27 @@
+id: https://example.org/valid-slots
+name: valid_slots
+description: A minimal schema where a class references top-level slots.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  ex: https://example.org/schema#
+default_prefix: ex
+default_range: string
+imports:
+  - linkml:types
+
+classes:
+  Person:
+    description: A research investigator
+    class_uri: ex:Person
+    slots:
+      - name
+      - orcid
+
+slots:
+  name:
+    description: Full name
+    range: string
+  orcid:
+    description: ORCID identifier
+    range: string
+    pattern: "^\\d{4}-\\d{4}-\\d{4}-\\d{3}[0-9X]$"
