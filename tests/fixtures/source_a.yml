@@ -1,0 +1,14 @@
+id: https://example.org/source-a
+name: source_a
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+default_range: string
+classes:
+  Subject:
+    description: A study participant
+    attributes:
+      age:
+        description: Age of the subject
+        range: integer

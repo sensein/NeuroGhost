@@ -33,6 +33,16 @@ DB_PATH  = "./registry.lbug"
 # Export helpers
 # ---------------------------------------------------------------------------
 
+def _attesting_sources(conn, label: str, rel: str, hash_id: str) -> list[str]:
+    """Every distinct source that has a ProvenanceEntry for this entity."""
+    return sorted({
+        r[0] for r in conn.execute(f"""
+            MATCH (:{label} {{hash_id: $hash_id}})-[:{rel}]->(pe:ProvenanceEntry)
+            RETURN pe.source
+        """, {"hash_id": hash_id}).get_all()
+    })
+
+
 def export_snapshot(conn, registry_version: str) -> dict:
     # ---- sources -----------------------------------------------------------
     src_rows = conn.execute(
@@ -41,42 +51,43 @@ def export_snapshot(conn, registry_version: str) -> dict:
 
     sources = []
     for _, label, ver in src_rows:
-        count = conn.execute(
-            "MATCH (n:RegistryClass {source_label: $src}) RETURN count(n)",
-            {"src": label}
-        ).get_next()[0]
+        count = conn.execute("""
+            MATCH (n:RegistryClass)-[:HAS_PROVENANCE]->(:ProvenanceEntry {source: $src})
+            RETURN count(DISTINCT n)
+        """, {"src": label}).get_next()[0]
         sources.append({"label": label, "version": ver or "1.0.0",
                         "class_count": count})
 
     # ---- classes -----------------------------------------------------------
+    # Identity is shared across sources now, so a class/property no longer
+    # has a single "source" — it has a `sources` list, one per ProvenanceEntry.
     cls_rows = conn.execute("""
         MATCH (n:RegistryClass)
-        RETURN n.hash_id, n.iri, n.name, n.definition,
-               n.is_abstract, n.source_label, n.registry_version
-        ORDER BY n.source_label, n.name
+        RETURN n.hash_id, n.class_uri, n.name, n.description,
+               n.abstract, n.registry_version
+        ORDER BY n.name
     """).get_all()
 
     classes = []
     for row in cls_rows:
-        hash_id, iri, name, defn, is_abstract, source, reg_ver = row
+        hash_id, class_uri, name, desc, is_abstract, reg_ver = row
 
         props = conn.execute("""
             MATCH (c:RegistryClass {hash_id: $hash_id})-[:HAS_PROPERTY]->(p:RegistryProperty)
-            RETURN p.hash_id, p.iri, p.name, p.definition,
-                   p.value_range, p.multivalued, p.required, p.source_label
+            RETURN p.hash_id, p.slot_uri, p.name, p.description, p.range, p.units
             ORDER BY p.name
         """, {"hash_id": hash_id}).get_all()
 
         subclass_of = [
             r[0] for r in conn.execute("""
                 MATCH (c:RegistryClass {hash_id: $hash_id})-[:SUBCLASS_OF]->(p:RegistryClass)
-                RETURN p.iri
+                RETURN p.class_uri
             """, {"hash_id": hash_id}).get_all() if r[0]
         ]
 
         align_rows = conn.execute("""
             MATCH (c:RegistryClass {hash_id: $hash_id})-[a:ALIGNED_TO]->(t:RegistryClass)
-            RETURN t.hash_id, t.name, t.iri, t.source_label,
+            RETURN t.hash_id, t.name, t.class_uri,
                    a.distance, a.method,
                    a.score_iri, a.score_name, a.score_desc, a.score_slot
             ORDER BY a.distance
@@ -84,12 +95,12 @@ def export_snapshot(conn, registry_version: str) -> dict:
 
         classes.append({
             "hash_id":          hash_id,
-            "iri":              iri or "",
+            "iri":              class_uri or "",
             "name":             name or "",
-            "definition":       defn or "",
+            "definition":       desc or "",
             "registry_version": reg_ver or "",
             "is_abstract":      bool(is_abstract),
-            "source":           source or "",
+            "sources":          _attesting_sources(conn, "RegistryClass", "HAS_PROVENANCE", hash_id),
             "properties": [
                 {
                     "hash_id":     r[0],
@@ -97,9 +108,8 @@ def export_snapshot(conn, registry_version: str) -> dict:
                     "name":        r[2] or "",
                     "definition":  r[3] or "",
                     "value_range": r[4] or "",
-                    "multivalued": bool(r[5]),
-                    "required":    bool(r[6]),
-                    "source":      r[7] or "",
+                    "units":       r[5] or "",
+                    "sources":     _attesting_sources(conn, "RegistryProperty", "HAS_PROVENANCE_P", r[0]),
                 }
                 for r in props
             ],
@@ -109,14 +119,13 @@ def export_snapshot(conn, registry_version: str) -> dict:
                     "target_hash_id": r[0],
                     "target_name":    r[1] or "",
                     "target_iri":     r[2] or "",
-                    "target_source":  r[3] or "",
-                    "distance":       float(r[4]) if r[4] is not None else 1.0,
-                    "method":         r[5] or "",
+                    "distance":       float(r[3]) if r[3] is not None else 1.0,
+                    "method":         r[4] or "",
                     "scores": {
-                        "iri":  float(r[6]) if r[6] is not None else 0.0,
-                        "name": float(r[7]) if r[7] is not None else 0.0,
-                        "desc": float(r[8]) if r[8] is not None else 0.0,
-                        "slot": float(r[9]) if r[9] is not None else 0.0,
+                        "iri":  float(r[5]) if r[5] is not None else 0.0,
+                        "name": float(r[6]) if r[6] is not None else 0.0,
+                        "desc": float(r[7]) if r[7] is not None else 0.0,
+                        "slot": float(r[8]) if r[8] is not None else 0.0,
                     }
                 }
                 for r in align_rows

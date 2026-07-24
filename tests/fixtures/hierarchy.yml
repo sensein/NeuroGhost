@@ -1,0 +1,19 @@
+id: https://example.org/hierarchy
+name: hierarchy
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+default_range: string
+classes:
+  Device:
+    description: A piece of equipment
+    attributes:
+      manufacturer:
+        range: string
+  Sensor:
+    description: A device that senses something
+    is_a: Device
+    attributes:
+      sampling_rate:
+        range: float

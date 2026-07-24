@@ -23,8 +23,9 @@ imports:
 # Classes
 # ---------------------------------------------------------------------------
 # RegistryClass and RegistryProperty are the core entities.
-# ProvenanceInfo is a value object — always inlined (flattened) into the
-# parent node table, never a standalone graph node (db_inline: true).
+# ProvenanceEntry is a standalone node (one per source attestation) — an
+# entity accumulates a ProvenanceEntry per source rather than being tied to
+# a single source, which is how identity stays separate from provenance.
 # Rule, Transform, and ValueSet are stubs: present so the model shape is
 # visible, slots intentionally left minimal until that work is scoped.
 
@@ -36,11 +37,11 @@ classes:
       Common base for content-addressed, provenance-tracked objects registered
       in the schema registry. Identity (hash_id) is derived from content, so
       there is no separate version slot: a change produces a new hash_id, with
-      lineage tracked via derived_from in provenance.
+      lineage tracked via derived_from on each ProvenanceEntry.
     slots:
       - hash_id
       - name
-      - definition
+      - description
       - provenance
       - skos_mappings
 
@@ -52,41 +53,45 @@ classes:
     slots:
       - properties
       - relations
-      - parent_class
+      - is_a
       - mixins
-      - iri
-      - is_abstract
-      - source_label
+      - class_uri
+      - abstract
       - registry_version
 
   RegistryProperty:
     is_a: RegistryEntity
     description: >-
       A registered property (data element) representing a characteristic or
-      attribute that can be attached to a RegistryClass, e.g. "age".
+      attribute that can be attached to a RegistryClass, e.g. "age". Usage
+      constraints (required, multivalued, min/max, pattern) are deliberately
+      not here — they belong on Rule, since the same property can be required
+      in one source's usage and optional in another's without being a
+      different concept.
     slots:
-      - value_range
+      - range
       - units
-      - multivalued
-      - required
-      - iri
-      - source_label
+      - slot_uri
       - registry_version
 
-  ProvenanceInfo:
+  ProvenanceEntry:
     description: >-
-      Structured provenance metadata for a registry entity or action.
-      Always inlined into the parent node table (db_inline: true) — not
-      stored as a standalone graph node.
-    annotations:
-      db_inline: true
+      One source's attestation of a registry entity — where it came from and
+      how/when this record was generated (W3C PROV-O fields). An entity
+      accumulates one ProvenanceEntry per source that attests to it; identity
+      (hash_id) never depends on provenance, so the same entity can carry many.
+      Stored as its own node, linked via HAS_PROVENANCE / HAS_PROVENANCE_P
+      edges (multivalued — cannot be inlined into the parent's node table).
+      Identified by uid, not hash_id — a ProvenanceEntry is a per-attestation
+      record, not a deduplicated, content-addressed registry entity.
     slots:
-      - created_by
-      - created_at
-      - modified_by
-      - modified_at
+      - uid
+      - source
+      - source_description
+      - generated_at
+      - attributed_to
+      - activity
       - derived_from
-      - method
 
   SkosMapping:
     description: >-
@@ -117,7 +122,7 @@ classes:
     slots:
       - hash_id
       - name
-      - definition
+      - description
 
   Transform:
     description: >-
@@ -126,16 +131,16 @@ classes:
     slots:
       - hash_id
       - name
-      - definition
+      - description
 
   ValueSet:
     description: >-
       STUB — a controlled set of permissible values, usable as a
-      RegistryProperty value_range. Slots intentionally minimal; scope TBD.
+      RegistryProperty range. Slots intentionally minimal; scope TBD.
     slots:
       - hash_id
       - name
-      - definition
+      - description
 
 # ---------------------------------------------------------------------------
 # Slots
@@ -157,17 +162,18 @@ slots:
     required: true
     description: Human-readable label for this entity.
 
-  definition:
+  description:
     range: string
     required: true
-    description: Human-readable definition of this entity.
+    description: Human-readable description of this entity.
 
   provenance:
-    range: ProvenanceInfo
+    range: ProvenanceEntry
+    multivalued: true
     required: true
     description: >-
-      Structured provenance for this entity. Inlined into the node table
-      as flat columns (created_by, created_at, …).
+      One ProvenanceEntry per source attesting to this entity. Accumulates
+      as more sources are ingested — never affects hash_id.
 
   skos_mappings:
     range: SkosMapping
@@ -184,7 +190,7 @@ slots:
     multivalued: true
     description: Directed relations from this class to other registry entities.
 
-  parent_class:
+  is_a:
     range: RegistryClass
     description: The class this class inherits from (stored as hash_id FK).
 
@@ -193,7 +199,7 @@ slots:
     multivalued: true
     description: Additional classes mixed into this class.
 
-  value_range:
+  range:
     range: string
     required: true
     description: >-
@@ -205,58 +211,77 @@ slots:
     range: string
     description: Unit of measure for this property's values, if applicable.
 
-  iri:
+  class_uri:
     range: uriorcurie
     description: >-
-      Ontology IRI preserved from the source schema on ingestion. Not
-      part of the content hash; used for alignment and cross-source lookup.
+      Ontology IRI for this class, preserved from the source schema on
+      ingestion. Not part of the content hash; used for alignment and
+      cross-source lookup.
 
-  is_abstract:
+  slot_uri:
+    range: uriorcurie
+    description: >-
+      Ontology IRI for this property, preserved from the source schema on
+      ingestion. Not part of the content hash; used for alignment and
+      cross-source lookup.
+
+  abstract:
     range: boolean
     description: Whether this registered class is itself declared abstract.
-
-  source_label:
-    range: string
-    description: Label of the source schema this entity was ingested from.
 
   registry_version:
     range: string
     description: Registry snapshot version this entity belongs to.
 
-  # --- ProvenanceInfo slots (inlined into parent node tables) --------------
+  # --- ProvenanceEntry slots -------------------------------------------------
 
-  created_by:
+  uid:
+    identifier: true
+    required: true
+    range: string
+    description: >-
+      Random unique identifier for this ProvenanceEntry record (not
+      content-derived — a per-attestation record, not a deduplicated entity).
+
+  source:
     range: string
     required: true
-    description: Agent (user or system) that created this entity.
+    description: Label of the source schema this attestation came from, e.g. "bids".
 
-  created_at:
+  source_description:
+    range: string
+    description: >-
+      This source's own description text for the entity, if it differs
+      from the entity's merged description.
+
+  generated_at:
     range: datetime
     required: true
-    description: ISO-8601 timestamp of creation.
+    slot_uri: prov:generatedAtTime
+    description: ISO-8601 timestamp this ProvenanceEntry was generated.
 
-  modified_by:
+  attributed_to:
     range: string
-    description: Agent that last modified this entity.
+    required: true
+    slot_uri: prov:wasAttributedTo
+    description: Agent (user or system) that generated this ProvenanceEntry.
 
-  modified_at:
-    range: datetime
-    description: ISO-8601 timestamp of last modification.
+  activity:
+    range: string
+    slot_uri: prov:wasGeneratedBy
+    description: >-
+      The activity that produced this ProvenanceEntry, e.g. "ingestion",
+      "manual", "alignment".
 
   derived_from:
     range: string
     multivalued: true
+    slot_uri: prov:wasDerivedFrom
     annotations:
       db_json: true
     description: >-
-      hash_ids of entities this entity was derived from. Stored as a
-      JSON-encoded string array in the graph database.
-
-  method:
-    range: string
-    description: >-
-      Free-text description of how this entity was created or derived
-      (e.g. "manual", "linkml-ingest", "semantic-alignment").
+      hash_ids of entities this entity was derived from, if any. Stored as
+      a JSON-encoded string array in the graph database.
 
   # --- Relation slots ------------------------------------------------------
 
@@ -285,16 +310,6 @@ slots:
   target:
     range: uriorcurie
     description: The external concept this mapping points to.
-
-  # --- RegistryProperty extra slots ----------------------------------------
-
-  multivalued:
-    range: boolean
-    description: Whether this property can hold multiple values.
-
-  required:
-    range: boolean
-    description: Whether this property must always be present.
 
 # ---------------------------------------------------------------------------
 # Enums

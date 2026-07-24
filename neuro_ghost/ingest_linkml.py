@@ -37,48 +37,47 @@ For every slot  → one RegistryProperty node
 For every class→slot relationship → one HAS_PROPERTY edge
 For every is_a relationship → one SUBCLASS_OF edge
 For every schema file → one SchemaSource node + one SchemaVersionSnapshot
-For every node → a FROM_SOURCE edge back to the SchemaSource
-
-VERSION DETECTION AND DIFFS
-----------------------------
-This file doesn't blindly overwrite. Before inserting anything, it checks
-whether a class or property already exists from this source. If it does, it
-computes a diff (what changed?) and only if something changed does it create
-a new version node and link it to the old one via a PRIOR_VERSION edge.
-
-This means re-running this file on the same schema is safe — it is idempotent
-if nothing changed, and version-bumping if something did.
+For every (entity, source) attestation → one ProvenanceEntry node,
+  linked via HAS_PROVENANCE / HAS_PROVENANCE_P
 
 CONTENT-ADDRESSED IDENTITY
 ---------------------------
-Every RegistryProperty gets a content_id — a SHA-256 hash of its semantic
-fields (iri, value_range, units, constraints). Two properties from different
-schemas with the same content_id are automatically the same concept. This
-is how we deduplicate across BIDS, NWB, DANDI, etc. without any human
-needing to manually say "these are the same thing."
+A RegistryClass/RegistryProperty's hash_id is computed from its own semantic
+content (name, description, range/units for properties; name, description,
+properties/is_a/mixins for classes) — see schema_registry_utils.hashing.
+Two properties from different schemas with identical content get the SAME
+hash_id automatically; there is no separate content_id/SemanticIdentity
+lookup layer anymore.
 
-See db.py: compute_content_id() for the hash function.
+Identity is separate from provenance: ingesting the same content from a
+second source doesn't create a second node, it adds a second ProvenanceEntry
+to the existing one. There is no "version" or diff mechanism — a genuine
+content change produces a different hash_id (a new entity), not an edit of
+the old one.
 
 USAGE
 -----
   python ingest_linkml.py --file schemas/bbqs.yml
   python ingest_linkml.py                          # all schemas/*.yml
   python ingest_linkml.py --dry-run                # preview, no writes
-  python ingest_linkml.py --wipe --file schemas/bbqs.yml  # wipe and re-ingest
+  python ingest_linkml.py --wipe --file schemas/bbqs.yml  # remove this source's
+                                                            # attestations first
 """
 
 from __future__ import annotations
-import datetime, uuid, os, re
+import json, re, sys
 from pathlib import Path
 from typing import Any
 
 import click
 from linkml_runtime.utils.schemaview import SchemaView
 
-from db import (
-    get_connection, make_base, make_uid, make_iri, now_iso,
-    compute_content_id, REG,
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from schema_registry_utils import (
+    RegistryClass, RegistryProperty, ProvenanceEntry, compute_hash_id,
 )
+
+from db import get_connection, make_iri, make_uid, now_iso, REG
 
 DB_PATH = "./registry.lbug"
 
@@ -130,7 +129,7 @@ def resolve_prefix(curie: str, prefixes: dict[str, str]) -> str:
 
     Why: Storing full IRIs instead of CURIEs makes the graph self-contained.
     Two schemas using different prefixes for the same thing will resolve to
-    the same IRI and thus get the same content_id.
+    the same IRI.
     """
     if not curie or ":" not in curie:
         return curie
@@ -273,176 +272,273 @@ def parse_linkml(path: Path) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Version detection helpers
+# Parsed dict → content-hashed RegistryClass / RegistryProperty
 # ---------------------------------------------------------------------------
-# These functions query the graph to find the most recent version of a class
-# or property. "Most recent" means: no other node has a PRIOR_VERSION edge
-# pointing TO this one (i.e. nothing is older than it in the chain).
-#
-# Why this query?  If we have:
-#   Person v2 -[PRIOR_VERSION]-> Person v1
-#
-# Then v2 is the latest because nothing points PRIOR_VERSION to it.
-# v1 is older because v2 points to it.
 
-def _read_class(conn, iri: str, source_label: str) -> dict | None:
-    """
-    Find the latest version of a class in the graph by its IRI and source.
+def _make_provenance(source_label: str, agent: str, issue: str = "",
+                     activity: str = "ingestion") -> ProvenanceEntry:
+    attributed_to = f"{agent} (issue #{issue})" if issue else agent
+    return ProvenanceEntry(
+        uid=make_uid(),
+        source=source_label,
+        generated_at=now_iso(),
+        attributed_to=attributed_to,
+        activity=activity,
+    )
 
-    Returns a dict with hash_id, definition, is_abstract, and the set of
-    property IRIs currently attached to it. Returns None if no class exists.
+
+def build_registry_entities(
+    parsed: dict, source_label: str, agent: str, issue: str = "",
+) -> tuple[dict[str, RegistryProperty], dict[str, RegistryClass]]:
     """
-    r = conn.execute("""
-        MATCH (n:RegistryClass {iri: $iri, source_label: $src})
-        WHERE NOT EXISTS {
-            MATCH (newer:RegistryClass)-[:PRIOR_VERSION]->(n)
-        }
-        RETURN n.hash_id, n.definition, n.is_abstract
-        LIMIT 1
-    """, {"iri": iri, "src": source_label})
-    if not r.has_next():
-        return None
-    hash_id, defn, is_abstract = r.get_next()
-    # Also get the set of property IRIs currently attached to this class.
-    # We need this to detect if properties were added or removed.
-    props_r = conn.execute("""
-        MATCH (c:RegistryClass {hash_id: $hash_id})-[:HAS_PROPERTY]->(p:RegistryProperty)
-        RETURN p.iri
-    """, {"hash_id": hash_id})
-    prop_iris = {row[0] for row in props_r.get_all() if row[0]}
-    return {
-        "hash_id":     hash_id,
-        "definition":  defn or "",
-        "is_abstract": bool(is_abstract),
-        "prop_iris":   prop_iris,
+    Convert parse_linkml()'s intermediate dict into content-hashed
+    RegistryProperty/RegistryClass instances, keyed by their original
+    slot/class name in the source schema.
+
+    Properties are built first (classes reference them by hash_id in their
+    own `properties` list, which itself feeds the class's hash — the same
+    set of properties always produces the same class hash regardless of
+    declaration order, since compute_hash_id() sorts reference lists).
+
+    A class's `is_a` is resolved to its parent's hash_id recursively, so
+    multi-level hierarchies resolve correctly regardless of declaration
+    order. This always succeeds for any schema that reaches this point:
+    parse_linkml() (via SchemaView) already requires every is_a target to
+    resolve within the submitted schema's own import closure, so `classes`
+    is guaranteed to contain it.
+    """
+    slots   = parsed["slots"]
+    classes = parsed["classes"]
+
+    used_slots: set[str] = set()
+    for cls in classes.values():
+        used_slots.update(cls["slots"])
+
+    properties: dict[str, RegistryProperty] = {}
+    for slot_name in used_slots:
+        slot = slots.get(slot_name)
+        if not slot:
+            continue
+        prop = RegistryProperty(
+            name=slot_name,
+            description=slot["definition"] or "",
+            range=slot["value_range"],
+            units=slot.get("units") or None,
+            slot_uri=slot["iri"] or None,
+            provenance=[_make_provenance(source_label, agent, issue)],
+        )
+        prop.hash_id = compute_hash_id(prop)
+        properties[slot_name] = prop
+
+    registry_classes: dict[str, RegistryClass] = {}
+
+    def resolve_class(cls_name: str) -> RegistryClass | None:
+        if cls_name in registry_classes:
+            return registry_classes[cls_name]
+        cls = classes.get(cls_name)
+        if cls is None:
+            return None  # is_a points outside this schema — left unresolved
+
+        parent_hash_id = None
+        if cls["is_a"]:
+            parent = resolve_class(cls["is_a"])
+            parent_hash_id = parent.hash_id if parent else None
+
+        prop_hash_ids = sorted({
+            properties[s].hash_id for s in cls["slots"] if s in properties
+        })
+        rc = RegistryClass(
+            name=cls_name,
+            description=cls["definition"] or "",
+            class_uri=cls["iri"] or None,
+            abstract=cls["is_abstract"],
+            is_a=parent_hash_id,
+            properties=prop_hash_ids,
+            provenance=[_make_provenance(source_label, agent, issue)],
+        )
+        rc.hash_id = compute_hash_id(rc)
+        registry_classes[cls_name] = rc
+        return rc
+
+    for cls_name in classes:
+        resolve_class(cls_name)
+
+    return properties, registry_classes
+
+
+# ---------------------------------------------------------------------------
+# Graph writers
+# ---------------------------------------------------------------------------
+
+_LIST_FIELDS = {"provenance", "skos_mappings", "properties", "relations", "mixins"}
+_HAS_PROVENANCE_REL = {"RegistryClass": "HAS_PROVENANCE", "RegistryProperty": "HAS_PROVENANCE_P"}
+
+
+def _scalar_fields(entity) -> dict:
+    """An entity's own node-table columns — excludes list/edge-backed fields."""
+    return {k: v for k, v in entity.model_dump().items() if k not in _LIST_FIELDS}
+
+
+def _entity_exists(conn, label: str, hash_id: str) -> bool:
+    return conn.execute(
+        f"MATCH (n:{label} {{hash_id: $hash_id}}) RETURN n.hash_id LIMIT 1",
+        {"hash_id": hash_id},
+    ).has_next()
+
+
+def _create_entity_node(conn, label: str, entity) -> None:
+    fields = _scalar_fields(entity)
+    prop_str = ", ".join(f"{k}: ${k}" for k in fields)
+    conn.execute(f"CREATE (:{label} {{{prop_str}}})", fields)
+
+
+def _write_provenance(conn, label: str, hash_id: str, prov: ProvenanceEntry) -> bool:
+    """
+    Attach a ProvenanceEntry to an entity, unless this exact source has
+    already attested to it. Returns True if a new ProvenanceEntry was added
+    — this is how "identity is separate from provenance" plays out on disk:
+    the entity node is written once; every source that also has this exact
+    content just adds another ProvenanceEntry pointing at the same node.
+    """
+    rel = _HAS_PROVENANCE_REL[label]
+    already = conn.execute(f"""
+        MATCH (n:{label} {{hash_id: $hash_id}})-[:{rel}]->(pe:ProvenanceEntry {{source: $source}})
+        RETURN pe.uid LIMIT 1
+    """, {"hash_id": hash_id, "source": prov.source}).has_next()
+    if already:
+        return False
+
+    uid = prov.uid or make_uid()
+    conn.execute("""
+        CREATE (:ProvenanceEntry {
+            uid: $uid, source: $source, source_description: $source_description,
+            generated_at: $generated_at, attributed_to: $attributed_to,
+            activity: $activity, derived_from: $derived_from
+        })
+    """, {
+        "uid":                 uid,
+        "source":              prov.source,
+        "source_description":  prov.source_description,
+        "generated_at":        prov.generated_at.isoformat(),
+        "attributed_to":       prov.attributed_to,
+        "activity":            prov.activity,
+        "derived_from":        json.dumps(prov.derived_from),
+    })
+    conn.execute(f"""
+        MATCH (n:{label} {{hash_id: $hash_id}}), (pe:ProvenanceEntry {{uid: $uid}})
+        CREATE (n)-[:{rel}]->(pe)
+    """, {"hash_id": hash_id, "uid": uid})
+    return True
+
+
+def write_registry_entities(
+    conn, properties: dict[str, RegistryProperty],
+    registry_classes: dict[str, RegistryClass], dry_run: bool = False,
+) -> dict:
+    """
+    Write (or reuse) each property/class node by hash_id, then attach this
+    ingestion's ProvenanceEntry to every one of them. Existing nodes are
+    never overwritten — a hash match means identical content, so there is
+    nothing to update; only a new ProvenanceEntry may need attaching.
+    """
+    stats = {
+        "properties_new": 0, "properties_existing": 0,
+        "classes_new":    0, "classes_existing":    0,
+        "provenance_added": 0,
     }
 
+    for prop in properties.values():
+        is_new = not _entity_exists(conn, "RegistryProperty", prop.hash_id)
+        if is_new and not dry_run:
+            _create_entity_node(conn, "RegistryProperty", prop)
+        stats["properties_new" if is_new else "properties_existing"] += 1
+        if not dry_run:
+            for prov in prop.provenance:
+                if _write_provenance(conn, "RegistryProperty", prop.hash_id, prov):
+                    stats["provenance_added"] += 1
 
-def _read_property(conn, iri: str, source_label: str) -> dict | None:
+    for rc in registry_classes.values():
+        is_new = not _entity_exists(conn, "RegistryClass", rc.hash_id)
+        if is_new and not dry_run:
+            _create_entity_node(conn, "RegistryClass", rc)
+        stats["classes_new" if is_new else "classes_existing"] += 1
+        if not dry_run:
+            for prov in rc.provenance:
+                if _write_provenance(conn, "RegistryClass", rc.hash_id, prov):
+                    stats["provenance_added"] += 1
+
+    return stats
+
+
+def write_structural_edges(conn, registry_classes: dict[str, RegistryClass]) -> int:
     """
-    Find the latest version of a property in the graph by IRI and source.
-    Returns None if not found.
+    HAS_PROPERTY (from each class's own `properties`) + SUBCLASS_OF.
+
+    No cross-schema name-lookup fallback for unresolved is_a targets: parse_linkml()
+    (via SchemaView) already requires every is_a target to resolve within the
+    submitted schema's own import closure, so a schema that ingests at all can
+    never have a class whose is_a isn't already in registry_classes.
     """
-    r = conn.execute("""
-        MATCH (n:RegistryProperty {iri: $iri, source_label: $src})
-        WHERE NOT EXISTS {
-            MATCH (newer:RegistryProperty)-[:PRIOR_VERSION_P]->(n)
-        }
-        RETURN n.hash_id, n.definition, n.value_range,
-               n.units, n.multivalued, n.required
-        LIMIT 1
-    """, {"iri": iri, "src": source_label})
-    if not r.has_next():
-        return None
-    hash_id, defn, value_range, units, mv, req = r.get_next()
-    return {
-        "hash_id":     hash_id,
-        "definition":  defn        or "",
-        "value_range": value_range or "",
-        "units":       units       or "",
-        "multivalued": bool(mv),
-        "required":    bool(req),
-    }
+    rels = 0
+
+    for rc in registry_classes.values():
+        for prop_hash_id in rc.properties:
+            already = conn.execute("""
+                MATCH (c:RegistryClass {hash_id: $c})-[:HAS_PROPERTY]->(p:RegistryProperty {hash_id: $p})
+                RETURN c.hash_id LIMIT 1
+            """, {"c": rc.hash_id, "p": prop_hash_id}).has_next()
+            if not already:
+                conn.execute("""
+                    MATCH (c:RegistryClass {hash_id: $c}), (p:RegistryProperty {hash_id: $p})
+                    CREATE (c)-[:HAS_PROPERTY]->(p)
+                """, {"c": rc.hash_id, "p": prop_hash_id})
+                rels += 1
+
+    for rc in registry_classes.values():
+        parent_hash_id = rc.is_a
+        if not parent_hash_id:
+            continue
+
+        already = conn.execute("""
+            MATCH (c:RegistryClass {hash_id: $c})-[:SUBCLASS_OF]->(p:RegistryClass {hash_id: $p})
+            RETURN c.hash_id LIMIT 1
+        """, {"c": rc.hash_id, "p": parent_hash_id}).has_next()
+        if not already:
+            conn.execute("""
+                MATCH (c:RegistryClass {hash_id: $c}), (p:RegistryClass {hash_id: $p})
+                CREATE (c)-[:SUBCLASS_OF]->(p)
+            """, {"c": rc.hash_id, "p": parent_hash_id})
+            rels += 1
+
+    return rels
 
 
 # ---------------------------------------------------------------------------
-# Diff computation
+# SchemaSource / SchemaVersionSnapshot (unchanged in spirit from before)
 # ---------------------------------------------------------------------------
-# A diff tells us: what changed between the existing version in the graph
-# and the new version we're about to ingest?
-#
-# If nothing changed → return None (don't create a new version, don't waste
-# storage)
-# If something changed → return a dict describing what changed, so we can
-# store it on the PRIOR_VERSION edge for history browsing.
 
-def _diff_class(existing: dict, new_cls: dict,
-                new_prop_iris: set) -> dict | None:
-    """
-    Compare an existing class to its incoming new definition.
+def _ensure_schema_source(conn, source_label: str, version: str, registry_version: str) -> str:
+    """One SchemaSource node per source label, reused across ingests."""
+    r = conn.execute(
+        "MATCH (s:SchemaSource {label: $label}) RETURN s.uid LIMIT 1",
+        {"label": source_label},
+    )
+    if r.has_next():
+        return r.get_next()[0]
+    uid = make_uid()
+    conn.execute("""
+        CREATE (:SchemaSource {
+            uid: $uid, iri: $uri, uri: $uri,
+            version: $version, created_at: $t,
+            label: $label, mime_type: 'application/yaml',
+            registry_version: $rv
+        })
+    """, {
+        "uid": uid, "uri": f"{REG}source/{uid}", "version": version,
+        "t": now_iso(), "label": source_label, "rv": registry_version,
+    })
+    return uid
 
-    Returns None if nothing changed (signals: skip, reuse existing hash_id).
-    Returns a diff dict if something changed (signals: create new version).
-
-    The diff dict is stored on the PRIOR_VERSION edge so the Provenance
-    view can show exactly what changed and when.
-    """
-    changed = []
-
-    # Check text fields
-    if existing["definition"] != new_cls["definition"]:
-        changed.append("definition")
-    if existing["is_abstract"] != new_cls["is_abstract"]:
-        changed.append("is_abstract")
-
-    # Check property set changes
-    # added = in new but not in existing
-    # removed = in existing but not in new
-    added   = new_prop_iris - existing["prop_iris"]
-    removed = existing["prop_iris"] - new_prop_iris
-    if added:
-        changed.append("added_properties")
-    if removed:
-        changed.append("removed_properties")
-
-    if not changed:
-        return None  # Nothing changed — caller should reuse existing hash_id
-
-    # Build a human-readable summary of what changed
-    parts = []
-    if "definition" in changed:
-        parts.append("definition updated")
-    if "is_abstract" in changed:
-        parts.append(f"is_abstract → {new_cls['is_abstract']}")
-    if added:
-        parts.append(f"+{len(added)} properties")
-    if removed:
-        parts.append(f"-{len(removed)} properties")
-
-    return {
-        "changed_fields":      ",".join(changed),
-        "added_properties":    ",".join(sorted(added)),
-        "removed_properties":  ",".join(sorted(removed)),
-        "definition_from":     existing["definition"],
-        "definition_to":       new_cls["definition"],
-        "diff_summary":        "; ".join(parts),
-    }
-
-
-def _diff_property(existing: dict, new_slot: dict) -> dict | None:
-    """
-    Compare an existing property to its incoming new definition.
-    Same pattern as _diff_class — returns None if nothing changed.
-    """
-    changed = []
-    if existing["definition"] != new_slot["definition"]:   changed.append("definition")
-    if existing["value_range"] != new_slot["value_range"]: changed.append("value_range")
-    if existing["units"] != new_slot.get("units", ""):     changed.append("units")
-    if existing["multivalued"] != new_slot["multivalued"]: changed.append("multivalued")
-    if existing["required"]    != new_slot["required"]:    changed.append("required")
-
-    if not changed:
-        return None
-
-    parts = []
-    if "definition"  in changed: parts.append("definition updated")
-    if "value_range" in changed:
-        parts.append(f"value_range: {existing['value_range']} → {new_slot['value_range']}")
-    if "units"       in changed: parts.append("units updated")
-
-    return {
-        "changed_fields":  ",".join(changed),
-        "definition_from": existing["definition"],
-        "definition_to":   new_slot["definition"],
-        "datatype_from":   existing["value_range"],   # column name kept for compat
-        "datatype_to":     new_slot["value_range"],
-        "diff_summary":    "; ".join(parts) or "metadata updated",
-    }
-
-
-# ---------------------------------------------------------------------------
-# Semver helpers (used for SchemaVersionSnapshot versioning)
-# ---------------------------------------------------------------------------
 
 def _prev_schema_version(conn, source_label: str) -> str | None:
     """Find the most recent SchemaVersionSnapshot for this schema, or None."""
@@ -476,565 +572,84 @@ def _bump_semver(ver: str, level: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# SemanticIdentity helpers
-# ---------------------------------------------------------------------------
-# A SemanticIdentity node is the canonical home for a content_id.
-# When BIDS "participant_name" and AIND "subject_name" both hash to xyz789,
-# they both get a HAS_IDENTITY_P edge pointing to the same SemanticIdentity
-# node with content_id=xyz789.
-#
-# This is the deduplication mechanism across sources.
-
-def _ensure_semantic_identity(conn, content_id: str, iri: str,
-                               value_range: str, units: str,
-                               registry_version: str) -> str:
-    """
-    Find or create a SemanticIdentity node for this content_id.
-
-    Returns the uid of the SemanticIdentity node.
-
-    Why "find or create"? Because the first source to ingest a concept
-    creates the SemanticIdentity. Subsequent sources that hash to the same
-    content_id just reuse it — this is the automatic deduplication.
-    """
-    r = conn.execute(
-        "MATCH (n:SemanticIdentity {content_id: $cid}) RETURN n.uid LIMIT 1",
-        {"cid": content_id}
-    )
-    if r.has_next():
-        return r.get_next()[0]
-
-    # First time we've seen this content_id — create the canonical node
-    uid = make_uid()
-    canonical_uri = f"{REG}id/{content_id}"
-    conn.execute("""
-        CREATE (:SemanticIdentity {
-            uid:           $uid,
-            content_id:    $cid,
-            canonical_uri: $uri,
-            datatype:      $dt,
-            units:         $units,
-            iri:           $iri,
-            created_at:    $t
-        })
-    """, {
-        "uid":   uid,
-        "cid":   content_id,
-        "uri":   canonical_uri,
-        "dt":    value_range,
-        "units": units,
-        "iri":   iri,
-        "t":     now_iso(),
-    })
-    return uid
-
-
-# ---------------------------------------------------------------------------
 # Main insertion logic
 # ---------------------------------------------------------------------------
 
-def insert_schema(conn, parsed: dict, source_label: str,
-                  dry_run: bool = False,
-                  registry_version: str = "",
-                  yml_path: str = "") -> dict:
+def insert_schema(conn, parsed: dict, source_label: str, agent: str = "anonymous",
+                  issue: str = "", dry_run: bool = False,
+                  registry_version: str = "", yml_path: str = "") -> dict:
     """
-    Insert (or update) a parsed LinkML schema into the LadybugDB graph.
+    Insert a parsed LinkML schema into the LadybugDB graph.
 
-    This is the core function of the ingestion pipeline. It:
-      1. Creates or reuses the SchemaSource node for this schema
-      2. For each slot/property:
-         a. Computes its content_id (SHA-256 hash of semantic fields)
-         b. Checks if it already exists in the graph from this source
-         c. If new → create with make_base(), link to SemanticIdentity
-         d. If changed → compute diff, create new node,
-            link old→new with PRIOR_VERSION_P carrying the diff
-         e. If unchanged → reuse existing hash_id, nothing created
-      3. Same logic for classes, but classes version-bump when their
-         property set changes (added or removed properties)
-      4. Creates SUBCLASS_OF and HAS_PROPERTY edges
-      5. Creates a SchemaVersionSnapshot recording the state of the whole
-         schema at this ingest time, with its own independent semver
+      1. Build content-hashed RegistryProperty/RegistryClass instances
+      2. Write each one (skipped if its hash_id already exists) and attach
+         this ingestion's ProvenanceEntry (skipped if this source already
+         attested to it)
+      3. Create HAS_PROPERTY and SUBCLASS_OF edges
+      4. Record a SchemaVersionSnapshot — "minor" if any class/property was
+         newly created, "patch" if only a new ProvenanceEntry was added
+         (same content, newly attested by this source), unchanged otherwise
 
-    Returns a stats dict showing what was created/updated/skipped.
+    Returns a stats dict.
     """
-    meta    = parsed["meta"]
-    classes = parsed["classes"]
-    slots   = parsed["slots"]
+    meta = parsed["meta"]
 
-    stats = {
-        "classes_created":    0,
-        "classes_updated":    0,
-        "classes_unchanged":  0,
-        "properties_created": 0,
-        "properties_updated": 0,
-        "properties_unchanged": 0,
-        "rels":               0,
-        "class_diffs":        [],
-        "property_diffs":     [],
-    }
+    properties, registry_classes = build_registry_entities(
+        parsed, source_label, agent, issue,
+    )
 
-    # ------------------------------------------------------------------
-    # Step 1: SchemaSource node
-    # ------------------------------------------------------------------
-    # Each schema file gets one SchemaSource node. If this source has been
-    # ingested before, we reuse the existing SchemaSource uid (we don't want
-    # duplicate SchemaSource nodes for repeated ingests of the same schema).
+    stats = write_registry_entities(conn, properties, registry_classes, dry_run=dry_run)
 
-    src_uid = make_uid()
-    src_uri = f"{REG}source/{src_uid}"
-    if not dry_run:
-        r = conn.execute(
-            "MATCH (s:SchemaSource {label: $label}) RETURN s.uid LIMIT 1",
-            {"label": source_label}
-        )
-        if r.has_next():
-            src_uid = r.get_next()[0]
-        else:
-            conn.execute("""
-                CREATE (:SchemaSource {
-                    uid: $uid, iri: $uri, uri: $uri,
-                    version: $version, created_at: $t,
-                    label: $label, mime_type: 'application/yaml',
-                    registry_version: $rv
-                })
-            """, {
-                "uid":     src_uid,
-                "uri":     src_uri,
-                "version": meta["version"],
-                "t":       now_iso(),
-                "label":   source_label,
-                "rv":      registry_version,
-            })
+    if dry_run:
+        return stats
 
-    # ------------------------------------------------------------------
-    # Step 2: Pre-compute which property IRIs belong to each class
-    # ------------------------------------------------------------------
-    # We need to know the new property set for each class BEFORE we process
-    # classes, so we can diff the class's property set against what's in the
-    # graph. This is done up front to avoid order-of-processing issues.
+    _ensure_schema_source(conn, source_label, meta["version"], registry_version)
+    stats["rels"] = write_structural_edges(conn, registry_classes)
 
-    class_new_prop_iris: dict[str, set] = {}
-    for cls_name, cls in classes.items():
-        piris = set()
-        for slot_name in cls["slots"]:
-            slot = slots.get(slot_name)
-            if slot:
-                piris.add(slot["iri"] or make_iri(slot_name))
-        class_new_prop_iris[cls_name] = piris
+    has_new_content = bool(stats["classes_new"] or stats["properties_new"])
+    has_any_change   = has_new_content or bool(stats["provenance_added"])
 
-    # Collect all slot names used across any class in this schema
-    used_slots: set[str] = set()
-    for cls in classes.values():
-        used_slots.update(cls["slots"])
+    prev_ver = _prev_schema_version(conn, source_label)
+    if prev_ver is None:
+        schema_ver = meta.get("version") or "1.0.0"
+    elif not has_any_change:
+        stats["schema_version"] = prev_ver
+        stats["schema_unchanged"] = True
+        return stats
+    else:
+        level = "minor" if has_new_content else "patch"
+        schema_ver = _bump_semver(prev_ver, level)
 
-    # ------------------------------------------------------------------
-    # Step 3: Process properties (slots)
-    # ------------------------------------------------------------------
-    # We process properties before classes because a class's version may
-    # need to bump due to property changes, and we need the property hash_ids
-    # to create HAS_PROPERTY edges after classes are processed.
+    changes_summary = (
+        f"+{stats['classes_new']} classes, +{stats['properties_new']} props, "
+        f"{stats['provenance_added']} provenance entries added"
+    )
 
-    prop_hash_id_map: dict[str, str] = {}  # slot_name → hash_id of latest version
-
-    for slot_name in used_slots:
-        slot = slots.get(slot_name)
-        if not slot:
-            continue
-
-        iri = slot["iri"] or make_iri(slot_name)
-
-        # Compute the content_id for SemanticIdentity deduplication.
-        # Two properties that hash identically ARE the same concept,
-        # regardless of what source they came from or what they're named.
-        cid = compute_content_id(
-            iri         = iri,
-            datatype    = slot["value_range"],
-            units       = slot.get("units", ""),
-            pattern     = slot.get("pattern", ""),
-            multivalued = slot["multivalued"],
-            required    = slot["required"],
-        )
-
-        # Check if this property already exists in the graph from this source
-        existing = _read_property(conn, iri, source_label) if not dry_run else None
-
-        if existing is None:
-            # New property — never seen before from this source
-            b = make_base(slot_name, iri=iri)
-            prop_hash_id_map[slot_name] = b["hash_id"]
-
-            if dry_run:
-                stats["properties_created"] += 1
-                continue
-
-            conn.execute("""
-                CREATE (:RegistryProperty {
-                    hash_id:      $hash_id,
-                    iri:          $iri,
-                    created_by:   $created_by,
-                    created_at:   $created_at,
-                    name:         $name,
-                    definition:   $definition,
-                    value_range:  $value_range,
-                    units:        $units,
-                    multivalued:  $multivalued,
-                    required:     $required,
-                    source_label: $source_label,
-                    registry_version: $rv
-                })
-            """, {
-                **b,
-                "name":           slot_name,
-                "definition":     slot["definition"] or "",
-                "value_range":    slot["value_range"],
-                "units":          slot.get("units", ""),
-                "multivalued":    slot["multivalued"],
-                "required":       slot["required"],
-                "source_label":   source_label,
-                "rv":             registry_version,
-            })
-
-            # Link to SemanticIdentity (find or create based on content_id)
-            si_uid = _ensure_semantic_identity(
-                conn, cid, iri, slot["value_range"],
-                slot.get("units", ""), registry_version
-            )
-            conn.execute("""
-                MATCH (p:RegistryProperty {hash_id: $phash_id}),
-                      (si:SemanticIdentity {uid: $siuid})
-                CREATE (p)-[:HAS_IDENTITY_P]->(si)
-            """, {"phash_id": b["hash_id"], "siuid": si_uid})
-
-            # Track where this property came from
-            conn.execute("""
-                MATCH (p:RegistryProperty {hash_id: $phash_id}),
-                      (s:SchemaSource {uid: $suid})
-                CREATE (p)-[:FROM_SOURCE_P]->(s)
-            """, {"phash_id": b["hash_id"], "suid": src_uid})
-
-            stats["properties_created"] += 1
-
-        else:
-            # Property exists — check if anything changed
-            diff = _diff_property(existing, slot)
-
-            if diff is None:
-                # Nothing changed — reuse the existing hash_id as-is
-                prop_hash_id_map[slot_name] = existing["hash_id"]
-                stats["properties_unchanged"] += 1
-            else:
-                # Something changed — mint a new version node
-                b = make_base(slot_name, iri=iri)
-                prop_hash_id_map[slot_name] = b["hash_id"]
-
-                conn.execute("""
-                    CREATE (:RegistryProperty {
-                        hash_id:      $hash_id,
-                        iri:          $iri,
-                        created_by:   $created_by,
-                        created_at:   $created_at,
-                        name:         $name,
-                        definition:   $definition,
-                        value_range:  $value_range,
-                        units:        $units,
-                        multivalued:  $multivalued,
-                        required:     $required,
-                        source_label: $source_label,
-                        registry_version: $rv
-                    })
-                """, {
-                    **b,
-                    "name":           slot_name,
-                    "definition":     slot["definition"] or "",
-                    "value_range":    slot["value_range"],
-                    "units":          slot.get("units", ""),
-                    "multivalued":    slot["multivalued"],
-                    "required":       slot["required"],
-                    "source_label":   source_label,
-                    "rv":             registry_version,
-                })
-
-                # PRIOR_VERSION_P edge: new node → old node, carrying the diff.
-                # This creates the version chain we can walk to see history.
-                conn.execute("""
-                    MATCH (new:RegistryProperty {hash_id: $nhash_id}),
-                          (old:RegistryProperty {hash_id: $ohash_id})
-                    CREATE (new)-[:PRIOR_VERSION_P {
-                        diff_summary:    $ds,
-                        changed_fields:  $cf,
-                        definition_from: $df,
-                        definition_to:   $dt,
-                        datatype_from:   $dtf,
-                        datatype_to:     $dtt,
-                        registry_version: $rv,
-                        created_at:      $ca
-                    }]->(old)
-                """, {
-                    "nhash_id": b["hash_id"],
-                    "ohash_id": existing["hash_id"],
-                    "ds":   diff["diff_summary"],
-                    "cf":   diff["changed_fields"],
-                    "df":   diff["definition_from"],
-                    "dt":   diff["definition_to"],
-                    "dtf":  diff["datatype_from"],
-                    "dtt":  diff["datatype_to"],
-                    "rv":   registry_version,
-                    "ca":   now_iso(),
-                })
-
-                stats["properties_updated"] += 1
-                stats["property_diffs"].append({
-                    "name": slot_name,
-                    "iri":  iri,
-                    **diff,
-                })
-
-    # ------------------------------------------------------------------
-    # Step 4: Process classes
-    # ------------------------------------------------------------------
-
-    class_hash_id_map: dict[str, str] = {}  # cls_name → hash_id of latest version
-
-    for cls_name, cls in classes.items():
-        iri           = cls["iri"] or make_iri(cls_name)
-        new_prop_iris = class_new_prop_iris[cls_name]
-
-        existing = _read_class(conn, iri, source_label) if not dry_run else None
-
-        if existing is None:
-            # New class
-            b = make_base(cls_name, iri=iri)
-            class_hash_id_map[cls_name] = b["hash_id"]
-
-            if dry_run:
-                stats["classes_created"] += 1
-                continue
-
-            conn.execute("""
-                CREATE (:RegistryClass {
-                    hash_id:      $hash_id,
-                    iri:          $iri,
-                    created_by:   $created_by,
-                    created_at:   $created_at,
-                    name:         $name,
-                    definition:   $definition,
-                    is_abstract:  $is_abstract,
-                    source_label: $source_label,
-                    registry_version: $rv
-                })
-            """, {
-                **b,
-                "name":           cls_name,
-                "definition":     cls["definition"] or "",
-                "is_abstract":    cls["is_abstract"],
-                "source_label":   source_label,
-                "rv":             registry_version,
-            })
-
-            conn.execute("""
-                MATCH (c:RegistryClass {hash_id: $chash_id}),
-                      (s:SchemaSource {uid: $suid})
-                CREATE (c)-[:FROM_SOURCE]->(s)
-            """, {"chash_id": b["hash_id"], "suid": src_uid})
-
-            stats["classes_created"] += 1
-
-        else:
-            diff = _diff_class(existing, cls, new_prop_iris)
-
-            if diff is None:
-                class_hash_id_map[cls_name] = existing["hash_id"]
-                stats["classes_unchanged"] += 1
-            else:
-                b = make_base(cls_name, iri=iri)
-                class_hash_id_map[cls_name] = b["hash_id"]
-
-                conn.execute("""
-                    CREATE (:RegistryClass {
-                        hash_id:      $hash_id,
-                        iri:          $iri,
-                        created_by:   $created_by,
-                        created_at:   $created_at,
-                        name:         $name,
-                        definition:   $definition,
-                        is_abstract:  $is_abstract,
-                        source_label: $source_label,
-                        registry_version: $rv
-                    })
-                """, {
-                    **b,
-                    "name":           cls_name,
-                    "definition":     cls["definition"] or "",
-                    "is_abstract":    cls["is_abstract"],
-                    "source_label":   source_label,
-                    "rv":             registry_version,
-                })
-
-                # PRIOR_VERSION edge with diff data
-                conn.execute("""
-                    MATCH (new:RegistryClass {hash_id: $nhash_id}),
-                          (old:RegistryClass {hash_id: $ohash_id})
-                    CREATE (new)-[:PRIOR_VERSION {
-                        diff_summary:       $ds,
-                        changed_fields:     $cf,
-                        added_properties:   $ap,
-                        removed_properties: $rp,
-                        definition_from:    $df,
-                        definition_to:      $dt,
-                        registry_version:   $rv,
-                        created_at:         $ca
-                    }]->(old)
-                """, {
-                    "nhash_id": b["hash_id"],
-                    "ohash_id": existing["hash_id"],
-                    "ds":   diff["diff_summary"],
-                    "cf":   diff["changed_fields"],
-                    "ap":   diff["added_properties"],
-                    "rp":   diff["removed_properties"],
-                    "df":   diff["definition_from"],
-                    "dt":   diff["definition_to"],
-                    "rv":   registry_version,
-                    "ca":   now_iso(),
-                })
-
-                stats["classes_updated"] += 1
-                stats["class_diffs"].append({
-                    "name": cls_name,
-                    "iri":  iri,
-                    **diff,
-                })
-
-    # ------------------------------------------------------------------
-    # Step 5: Structural relationships
-    # ------------------------------------------------------------------
-    # Now that all nodes exist, we wire up the edges.
-    # We check for existing edges before creating to avoid duplicates
-    # (important because ingest is designed to be re-runnable safely).
-
-    if not dry_run:
-        # SUBCLASS_OF: class inheritance chains
-        for cls_name, cls in classes.items():
-            if not cls["is_a"]:
-                continue
-            child_hash_id  = class_hash_id_map.get(cls_name)
-            parent_hash_id = class_hash_id_map.get(cls["is_a"])
-
-            if child_hash_id and parent_hash_id:
-                already = conn.execute("""
-                    MATCH (c:RegistryClass {hash_id: $chash_id})-[:SUBCLASS_OF]->(p:RegistryClass {hash_id: $phash_id})
-                    RETURN c.hash_id LIMIT 1
-                """, {"chash_id": child_hash_id, "phash_id": parent_hash_id}).has_next()
-                if not already:
-                    conn.execute("""
-                        MATCH (c:RegistryClass {hash_id: $chash_id}),
-                              (p:RegistryClass {hash_id: $phash_id})
-                        CREATE (c)-[:SUBCLASS_OF]->(p)
-                    """, {"chash_id": child_hash_id, "phash_id": parent_hash_id})
-                    stats["rels"] += 1
-            elif child_hash_id and cls["is_a"]:
-                # Parent might be from schema.org or another source —
-                # try matching by name across all sources
-                r = conn.execute(
-                    "MATCH (p:RegistryClass {name: $name}) RETURN p.hash_id LIMIT 1",
-                    {"name": cls["is_a"]}
-                )
-                if r.has_next():
-                    p_hash_id = r.get_next()[0]
-                    conn.execute("""
-                        MATCH (c:RegistryClass {hash_id: $chash_id}),
-                              (p:RegistryClass {hash_id: $phash_id})
-                        CREATE (c)-[:SUBCLASS_OF]->(p)
-                    """, {"chash_id": child_hash_id, "phash_id": p_hash_id})
-                    stats["rels"] += 1
-
-        # HAS_PROPERTY: class → its properties
-        for cls_name, cls in classes.items():
-            cls_hash_id = class_hash_id_map.get(cls_name)
-            if not cls_hash_id:
-                continue
-            for slot_name in cls["slots"]:
-                prop_hash_id = prop_hash_id_map.get(slot_name)
-                if not prop_hash_id:
-                    continue
-                already = conn.execute("""
-                    MATCH (c:RegistryClass {hash_id: $chash_id})-[:HAS_PROPERTY]->(p:RegistryProperty {hash_id: $phash_id})
-                    RETURN c.hash_id LIMIT 1
-                """, {"chash_id": cls_hash_id, "phash_id": prop_hash_id}).has_next()
-                if not already:
-                    conn.execute("""
-                        MATCH (c:RegistryClass {hash_id: $chash_id}),
-                              (p:RegistryProperty {hash_id: $phash_id})
-                        CREATE (c)-[:HAS_PROPERTY]->(p)
-                    """, {"chash_id": cls_hash_id, "phash_id": prop_hash_id})
-                    stats["rels"] += 1
-
-    # ------------------------------------------------------------------
-    # Step 6: Schema version snapshot
-    # ------------------------------------------------------------------
-    # Once all classes and properties are processed, we record a whole-schema
-    # snapshot. This has its own independent semver, separate from individual
-    # class/property version chains.
-    #
-    # Schema semver meaning:
-    #   patch → only text/definition changes
-    #   minor → classes or properties added/removed
-    #   (major → breaking, handled manually via the 'breaking' issue label)
-
-    if not dry_run:
-        prev_ver = _prev_schema_version(conn, source_label)
-        if prev_ver is None:
-            schema_ver = meta.get("version") or "1.0.0"
-        else:
-            has_structural_change = bool(
-                stats["classes_created"] or
-                stats["properties_created"] or
-                any(d.get("added_properties") or d.get("removed_properties")
-                    for d in stats["class_diffs"])
-            )
-            has_any_change = bool(
-                stats["classes_created"] or stats["classes_updated"] or
-                stats["properties_created"] or stats["properties_updated"]
-            )
-            if not has_any_change:
-                # Nothing changed — no snapshot needed
-                stats["schema_version"] = prev_ver
-                stats["schema_unchanged"] = True
-                return stats
-            level      = "minor" if has_structural_change else "patch"
-            schema_ver = _bump_semver(prev_ver, level)
-
-        changes_summary = (
-            f"+{stats['classes_created']} classes, "
-            f"~{stats['classes_updated']} updated, "
-            f"+{stats['properties_created']} props, "
-            f"~{stats['properties_updated']} updated"
-        )
-
-        snap_uid = make_uid()
-        snap_iri = f"{REG}schema/{source_label}/v/{schema_ver}"
-        conn.execute("""
-            CREATE (:SchemaVersionSnapshot {
-                uid: $uid, iri: $iri, uri: $uri,
-                version: $version, created_at: $created_at,
-                schema_label: $sl, yml_path: $yp,
-                class_count: $cc, property_count: $pc, rule_count: $rc,
-                changes_summary: $cs, registry_version: $rv
-            })
-        """, {
-            "uid":        snap_uid,
-            "iri":        snap_iri,
-            "uri":        snap_iri,
-            "version":    schema_ver,
-            "created_at": now_iso(),
-            "sl":  source_label,
-            "yp":  yml_path,
-            "cc":  len(classes),
-            "pc":  len(used_slots),
-            "rc":  0,
-            "cs":  changes_summary,
-            "rv":  registry_version,
+    snap_uid = make_uid()
+    snap_iri = f"{REG}schema/{source_label}/v/{schema_ver}"
+    conn.execute("""
+        CREATE (:SchemaVersionSnapshot {
+            uid: $uid, iri: $iri, uri: $uri,
+            version: $version, created_at: $created_at,
+            schema_label: $sl, yml_path: $yp,
+            class_count: $cc, property_count: $pc, rule_count: $rc,
+            changes_summary: $cs, registry_version: $rv
         })
-        stats["schema_version"] = schema_ver
+    """, {
+        "uid":        snap_uid,
+        "iri":        snap_iri,
+        "uri":        snap_iri,
+        "version":    schema_ver,
+        "created_at": now_iso(),
+        "sl":  source_label,
+        "yp":  yml_path,
+        "cc":  len(registry_classes),
+        "pc":  len(properties),
+        "rc":  0,
+        "cs":  changes_summary,
+        "rv":  registry_version,
+    })
+    stats["schema_version"] = schema_ver
 
     return stats
 
@@ -1050,7 +665,7 @@ def insert_schema(conn, parsed: dict, source_label: str,
 @click.option("--dry-run", is_flag=True,
               help="Parse and count without writing to DB.")
 @click.option("--wipe",    is_flag=True,
-              help="Delete existing nodes for this source before re-ingesting.")
+              help="Remove this source's attestations before re-ingesting.")
 @click.option("--registry-version", default="",
               help="Registry semver to stamp on created nodes.")
 @click.option("--issue",   default="", help="GitHub issue number (for provenance).")
@@ -1091,18 +706,22 @@ def cli(file, db, dry_run, wipe, registry_version, issue, agent) -> None:
                    f"({len(parsed['classes'])} classes, {len(parsed['slots'])} slots)")
 
         if wipe and not dry_run:
-            click.echo(f"  Wiping existing nodes for '{source_label}' …")
-            conn.execute(
-                "MATCH (n:RegistryClass {source_label: $src}) DETACH DELETE n",
-                {"src": source_label}
-            )
-            conn.execute(
-                "MATCH (n:RegistryProperty {source_label: $src}) DETACH DELETE n",
-                {"src": source_label}
-            )
+            click.echo(f"  Removing '{source_label}' attestations …")
+            # Identity is shared across sources, so wiping a source means
+            # detaching its ProvenanceEntry nodes, not deleting the
+            # RegistryClass/RegistryProperty nodes themselves (another
+            # source may still attest to the same content).
+            conn.execute("""
+                MATCH (:RegistryClass)-[:HAS_PROVENANCE]->(pe:ProvenanceEntry {source: $src})
+                DETACH DELETE pe
+            """, {"src": source_label})
+            conn.execute("""
+                MATCH (:RegistryProperty)-[:HAS_PROVENANCE_P]->(pe:ProvenanceEntry {source: $src})
+                DETACH DELETE pe
+            """, {"src": source_label})
 
         stats = insert_schema(
-            conn, parsed, source_label,
+            conn, parsed, source_label, agent=agent, issue=issue,
             dry_run=dry_run,
             registry_version=registry_version,
             yml_path=str(path),
@@ -1111,12 +730,11 @@ def cli(file, db, dry_run, wipe, registry_version, issue, agent) -> None:
         prefix = "[dry-run]" if dry_run else "Result:"
         click.echo(
             f"  {prefix} "
-            f"+{stats.get('classes_created',0)} classes, "
-            f"~{stats.get('classes_updated',0)} updated, "
-            f"={stats.get('classes_unchanged',0)} unchanged | "
-            f"+{stats.get('properties_created',0)} props, "
-            f"~{stats.get('properties_updated',0)} updated, "
-            f"={stats.get('properties_unchanged',0)} unchanged"
+            f"+{stats.get('classes_new',0)} classes, "
+            f"={stats.get('classes_existing',0)} existing | "
+            f"+{stats.get('properties_new',0)} props, "
+            f"={stats.get('properties_existing',0)} existing | "
+            f"+{stats.get('provenance_added',0)} provenance entries"
         )
         if stats.get("schema_version"):
             click.echo(f"  Schema version: {stats['schema_version']}")
@@ -1126,8 +744,8 @@ def cli(file, db, dry_run, wipe, registry_version, issue, agent) -> None:
         if not dry_run:
             nc = conn.execute("MATCH (n:RegistryClass) RETURN count(n)").get_next()[0]
             np = conn.execute("MATCH (n:RegistryProperty) RETURN count(n)").get_next()[0]
-            ni = conn.execute("MATCH (n:SemanticIdentity) RETURN count(n)").get_next()[0]
-            click.echo(f"  Registry: {nc} classes, {np} properties, {ni} identities")
+            npe = conn.execute("MATCH (n:ProvenanceEntry) RETURN count(n)").get_next()[0]
+            click.echo(f"  Registry: {nc} classes, {np} properties, {npe} provenance entries")
 
 
 if __name__ == "__main__":

@@ -176,8 +176,8 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
     non-abstract, non-inline classes.
 
     Column rules per slot:
-    - db_inline class ref (e.g. ProvenanceInfo) → flatten its slots inline.
-    - Multivalued class ref → REL table (handled in _REL_DDL below; skipped here).
+    - db_inline class ref → flatten its slots inline.
+    - Multivalued class ref (e.g. provenance) → REL table (handled in _REL_DDL below; skipped here).
     - Non-multivalued class ref → STRING column (hash_id FK).
     - Scalar with db_json or multivalued → STRING (stored as JSON array).
     - Plain scalar → mapped type; identifier slots get PRIMARY KEY.
@@ -322,6 +322,9 @@ _REL_DDL: list[str] = [
     "CREATE REL TABLE IF NOT EXISTS HAS_RELATION       (FROM RegistryClass    TO Relation)",
     "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING   (FROM RegistryClass    TO SkosMapping)",
     "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING_P (FROM RegistryProperty TO SkosMapping)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE     (FROM RegistryClass    TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_P   (FROM RegistryProperty TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_R   (FROM Relation         TO ProvenanceEntry)",
     "CREATE REL TABLE IF NOT EXISTS MIXIN              (FROM RegistryClass    TO RegistryClass)",
     "CREATE REL TABLE IF NOT EXISTS SUBCLASS_OF        (FROM RegistryClass    TO RegistryClass)",
 

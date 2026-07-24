@@ -3,14 +3,19 @@ import json
 
 from schema_registry_utils.models import RegistryClass, RegistryProperty
 
-_EXCLUDED_FIELDS = {"hash_id", "provenance", "skos_mappings"}
+_EXCLUDED_FIELDS = {
+    "hash_id", "provenance", "skos_mappings",
+    # Operational/origin metadata, not identity-defining content: an entity's
+    # hash_id must stay the same across sources and registry versions.
+    "class_uri", "slot_uri", "registry_version",
+}
 
 
 def compute_hash_id(entity: RegistryClass | RegistryProperty) -> str:
     """Compute a content-based hash_id for a RegistryClass or RegistryProperty.
 
-    Everything but hash_id, provenance, and skos_mappings is treated as
-    identity-defining content.
+    Everything but hash_id, provenance, skos_mappings, class_uri/slot_uri,
+    and registry_version is treated as identity-defining content.
     """
     content = entity.model_dump(exclude=_EXCLUDED_FIELDS)
     canonical = json.dumps(_normalize(content), sort_keys=True, separators=(",", ":"))
