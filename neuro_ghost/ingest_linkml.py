@@ -252,9 +252,13 @@ def parse_linkml(path: Path) -> dict[str, Any]:
 
         try:
             induced_slots = sv.class_induced_slots(cls_name)
-        except (ValueError, KeyError):
-            # is_a points to a class outside this schema (e.g. NWB's "Container")
-            # Fall back to directly-declared slots only.
+        except (ValueError, KeyError) as exc:
+            msg = str(exc)
+            # Only tolerate "No such class" — that means is_a points outside
+            # this schema (e.g. NWB's NWBContainer → Container).  A missing
+            # slot is a genuine schema error; re-raise so the caller sees it.
+            if "No such class" not in msg:
+                raise
             induced_slots = list(cls_def.attributes.values())
             for sname in (cls_def.slots or []):
                 try:
