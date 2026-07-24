@@ -6,234 +6,87 @@
 
 ---
 
-## What is this?
+**NeuroGhost** is a public catalog of neuroscience vocabularies. Labs publish their [LinkML](https://linkml.io/) schema; the registry compares it to every other schema and surfaces which terms mean the same thing across projects.
 
-Every neuroscience lab describes its data a little differently. One group calls
-someone an *Investigator*, another calls them a *Person*, another calls them a
-*Researcher*. Same idea, three names. Multiply that across every concept —
-brains, experiments, devices, subjects, publications — and it becomes very hard
-for different groups to share or combine data.
-
-**NeuroGhost is a public catalog of these vocabularies.** Any lab or project
-can publish their schema (their definitions), and the registry automatically
-compares it to every other schema already in the catalog, so you can see:
-
-- What terms already exist for a concept you care about
-- Which terms across different schemas actually mean the same thing
-- Which are unique to a particular project
-- How the definitions have evolved over time
-
-Think of it as a **Rosetta Stone for neuroscience data models.**
+**Distance score** — 0.0 = identical, 1.0 = unrelated. Computed from IRI match (60%), name embeddings (15%), and definition embeddings (25%). Adjustable live on the Concepts page.
 
 ---
 
-## Key concepts (short version)
+## Website
 
-**Schema** — one group's vocabulary. A list of the things they care about
-(*classes*), the things they measure (*properties*), and any constraints
-(*rules*). Schemas are written in a simple text format called
-[LinkML](https://linkml.io/), one file per project.
-
-**Class** — a type of thing. `Person`, `BrainRegion`, `Recording`, `Publication`.
-
-**Property** — something a class has or does. A `Person` has a `name` and an `orcid`.
-
-**Rule** — a constraint on a property. `age` must be a positive integer.
-`sampling_rate` must be measured in Hz.
-
-**Alignment** — the registry's automatic comparison between two classes from
-different schemas, expressed as a number between 0 and 1:
-
-- **0.0** = "these are definitely the same thing"
-- **0.5** = "these are related but not identical"
-- **1.0** = "these have nothing to do with each other"
-
-**Registry version** — every time a schema is added or updated, the whole
-registry gets a new version number (like `1.2.0`). Old versions never disappear
-— you can always go back and see what the registry looked like at any point in
-time.
+**[sensein.group/NeuroGhost](https://sensein.group/NeuroGhost/)** — seven tabs: **Concepts**, **Diff**, **Graph Schema**, **Transform**, **Query**, **Provenance**, **Register**. Every view has download buttons.
 
 ---
 
-## How the distance function works (in plain English)
+## API
 
-When the registry compares two classes, it looks at three things and combines
-them into a single distance score:
+Static JSON via GitHub Pages — no auth, no rate limits, CORS open.
 
-1. **IRI match** *(weight: 60%)* — Do the two classes explicitly point to the
-   same universal identifier? For example, both saying "this is the same as
-   schema.org's Person" is a perfect match.
+| Method | URL | Status |
+|--------|-----|--------|
+| `GET` | [`/data/registry.json`](https://sensein.group/NeuroGhost/data/registry.json) | ✅ Live |
+| `GET` | [`/data/versions/{version}.json`](https://sensein.group/NeuroGhost/data/versions/1.7.0.json) | ✅ Live |
+| `GET` | [`/data/provenance.json`](https://sensein.group/NeuroGhost/data/provenance.json) | ✅ Live |
+| `GET` | `/api/transform?from={schema}&to={schema}` | 🔜 Planned |
+| `POST` | `/api/transform` | 🔜 Planned |
 
-2. **Name similarity** *(weight: 15%)* — Do the class names mean similar things?
-   Uses AI embeddings (the same math that powers modern search) to compare, so
-   `Investigator` and `Researcher` register as similar even though the letters
-   are different.
+`distance`: **0.0** = identical · **1.0** = unrelated.
 
-3. **Definition similarity** *(weight: 25%)* — Do the plain-English descriptions
-   describe similar things? Same embedding approach.
+<details>
+<summary>Response shapes</summary>
 
-You can play with these weights live on the **Concepts** page of the website —
-slide them around and watch alignments recompute in real time.
-
----
-
-## Using the website
-
-Go to **[sensein.group/NeuroGhost](https://sensein.group/NeuroGhost/)**.
-You'll see seven tabs:
-
-- **Concepts** — classes grouped by meaning. Aligned classes from different
-  schemas collapse into a single card.
-- **Diff** — pick any two schemas, see which classes overlap and which are unique
-  to each.
-- **Graph Schema** — how the underlying database is structured (for the curious).
-- **Transform** — convert a CSV from one schema's format to another.
-- **Query** — structured query builder + Claude-assisted natural language queries.
-- **Provenance** — a full timeline of every change to the registry, with per-class
-  version diffs.
-- **Register** — submit a new schema.
-
-Every view has download buttons. You can grab a single class, a whole schema,
-the entire registry, or a CSV diff between two schemas.
-
----
-
-## API Reference
-
-Static JSON served by GitHub Pages — no auth, no rate limits, CORS open.
-
-| Method | URL | Description | Status |
-|--------|-----|-------------|--------|
-| `GET` | [`/data/registry.json`](https://sensein.group/NeuroGhost/data/registry.json) | Full registry: all schemas, classes, properties, alignments | ✅ Live |
-| `GET` | [`/data/versions/{version}.json`](https://sensein.group/NeuroGhost/data/versions/1.7.0.json) | Frozen snapshot at a specific registry version | ✅ Live |
-| `GET` | [`/data/provenance.json`](https://sensein.group/NeuroGhost/data/provenance.json) | Changelog of every schema ingestion | ✅ Live |
-| `GET` | `/api/transform?from={schema}&to={schema}` | Field-to-field mapping between two schemas | 🔜 Planned |
-| `POST` | `/api/transform` | Transform a dataset from one schema format to another | 🔜 Planned |
-
----
-
-### `GET /data/registry.json`
-
-```bash
-curl https://sensein.group/NeuroGhost/data/registry.json
-```
-
+**`GET /data/registry.json`**
 ```json
 {
   "registry_version": "1.7.0",
   "generated_at": "2026-07-23T12:40:24Z",
-  "sources": [
-    { "label": "bbqs", "version": "1.0.0", "class_count": 29 }
-  ],
-  "classes": [
-    {
-      "hash_id":    "sha256:abc123...",
-      "iri":        "https://registry.sensein.io/obj/Subject",
-      "name":       "Subject",
-      "definition": "A research participant.",
-      "source":     "bbqs",
-      "properties": [
-        { "hash_id": "sha256:def456...", "name": "age", "value_range": "xsd:integer", "multivalued": false, "required": false }
-      ],
-      "alignments": [
-        { "target_name": "Participant", "target_source": "bids", "distance": 0.12, "method": "composite" }
-      ]
-    }
-  ]
+  "sources": [{ "label": "bbqs", "version": "1.0.0", "class_count": 29 }],
+  "classes": [{
+    "hash_id": "sha256:abc123...",
+    "iri": "https://registry.sensein.io/obj/Subject",
+    "name": "Subject",
+    "definition": "A research participant.",
+    "sources": ["bbqs"],
+    "properties": [{ "hash_id": "sha256:def456...", "name": "age", "value_range": "xsd:integer" }],
+    "alignments": [{ "target_name": "Participant", "distance": 0.12, "method": "composite" }]
+  }]
 }
 ```
 
-`distance`: **0.0** = identical · **1.0** = unrelated.
-
----
-
-### `GET /data/versions/{version}.json`
-
-Same shape as `registry.json`. Snapshots are permanent — they never change.
-
-```bash
-curl https://sensein.group/NeuroGhost/data/versions/1.2.0.json
-```
-
----
-
-### `GET /data/provenance.json`
-
-```bash
-curl https://sensein.group/NeuroGhost/data/provenance.json
-```
-
----
-
-### `GET /api/transform?from={schema}&to={schema}` *(planned)*
-
-Returns the pre-computed field mapping between two schemas. Derived from the
-alignment graph; can be served as a static file with no extra infrastructure.
-
-```bash
-curl "https://sensein.group/NeuroGhost/api/transform?from=bbqs&to=bids"
-```
-
+**`GET /api/transform?from=bbqs&to=bids`** *(planned)*
 ```json
 {
   "from": "bbqs", "to": "bids",
-  "mappings": [
-    {
-      "from_class": "Subject", "to_class": "Participant", "distance": 0.12,
-      "field_mappings": [
-        { "from_field": "subject_id", "to_field": "participant_id", "confidence": 0.85 },
-        { "from_field": "age",        "to_field": "age",            "confidence": 0.97 }
-      ]
-    }
-  ]
+  "mappings": [{
+    "from_class": "Subject", "to_class": "Participant", "distance": 0.12,
+    "field_mappings": [
+      { "from_field": "subject_id", "to_field": "participant_id", "confidence": 0.85 }
+    ]
+  }]
 }
 ```
 
----
-
-### `POST /api/transform` *(planned)*
-
-Send a record in one schema's format; receive it remapped to another.
-Requires a serverless compute layer (Cloudflare Worker or equivalent).
-
+**`POST /api/transform`** *(planned — needs serverless layer)*
 ```bash
 curl -X POST https://sensein.group/NeuroGhost/api/transform \
   -H "Content-Type: application/json" \
   -d '{ "from": "bbqs", "to": "bids", "data": { "subject_id": "sub-01", "age": 24 } }'
 ```
-
-```json
-{ "from": "bbqs", "to": "bids", "result": { "participant_id": "sub-01", "age": 24 }, "unmapped_fields": [], "warnings": [] }
-```
+</details>
 
 ---
 
-## Adding your own schema
+## Adding a schema
 
-The easiest way, no setup required:
+1. Write a LinkML `.yml` file (copy `schemas/bbqs.yml` as a template).
+2. Go to the [Register tab](https://sensein.group/NeuroGhost/), paste your YAML, click **Open GitHub Issue**.
+3. A GitHub Action validates, ingests, aligns, and archives it within minutes.
 
-1. Write your schema as a LinkML `.yml` file (see the
-   [LinkML tutorial](https://linkml.io/linkml/intro/tutorial01.html) or copy
-   `schemas/bbqs.yml` from this repo as a template).
-2. Go to the [Register tab](https://sensein.group/NeuroGhost/) on the website.
-3. Paste your YAML, give it a name, click **Open GitHub Issue**.
-4. A GitHub Issue opens in a new tab, pre-filled. Click **Submit**.
-5. Within a couple of minutes, an automated workflow will:
-   - Validate your schema
-   - Add it to the registry graph
-   - Compute alignments against every other schema
-   - Bump the registry version
-   - Archive a permanent snapshot
-   - Comment on your issue with a link to your schema in the browser
-
-That's it. No installation, no pull request, no reviewers required.
+No installation, no pull request, no reviewers required.
 
 ---
 
-## Running it locally (optional)
-
-Only needed if you want to develop the registry itself, or bulk-load schemas
-outside the web flow.
+## Running locally
 
 ```bash
 git clone https://github.com/sensein/NeuroGhost.git
@@ -241,64 +94,32 @@ cd NeuroGhost
 pip install -r requirements.txt
 ```
 
-**Full rebuild** (seeds schema.org, fetches external schemas, ingests everything, aligns, exports):
-
 ```bash
-python neuro_ghost/pipeline.py --fresh
+python neuro_ghost/pipeline.py --fresh                              # full rebuild
+python neuro_ghost/pipeline.py --fresh --skip-converters            # local schemas only
+python neuro_ghost/pipeline.py --skip-converters --schemas schemas/bbqs.yml  # one schema
 ```
 
-**Local schemas only** (skips the external network fetch):
+Options: `--fresh` (wipe DB), `--skip-converters` (skip BIDS/NWB/DANDI/openMINDS/AIND fetch), `--schemas FILE`, `--bump major|minor|patch`, `--agent TEXT`.
 
-```bash
-python neuro_ghost/pipeline.py --fresh --skip-converters
-```
+Open `index.html` in a browser when done.
 
-**One schema** (incremental, adds to an existing DB):
+---
 
-```bash
-python neuro_ghost/pipeline.py --skip-converters --schemas schemas/bbqs.yml
-```
+## Stack
 
-```
-Options:
-  --fresh             Delete the DB first (fixes version-mismatch errors)
-  --skip-converters   Skip fetching BIDS, NWB, DANDI, openMINDS, AIND
-  --schemas FILE      One or more specific .yml files to ingest
-  --bump              Version bump type: major / minor / patch  [default: minor]
-  --agent TEXT        Name recorded in provenance  [default: local]
-```
-
-Then open `index.html` in a browser to see the local snapshot.
-
-
-## Under the hood
-
-Nothing exotic:
-
-- **[LadybugDB](https://ladybugdb.com/)** — embedded graph database that stores
-  every class, property, and relationship. Runs as a Python package, no server.
-- **[LinkML](https://linkml.io/)** — the human-friendly schema format everyone
-  writes their vocabularies in.
-- **[sentence-transformers](https://sbert.net/)** — the local embedding model
-  (`all-MiniLM-L6-v2`) that powers semantic distance.
-- **Static HTML + GitHub Pages** — the website is one file, no framework.
-- **GitHub Actions** — the automation that runs on every schema submission.
-
-Every design decision favors "nothing to run, nothing to maintain." The
-registry lives in a single GitHub repo. The website lives on GitHub Pages. The
-database is rebuilt fresh in CI from the source `.yml` files every time
-something changes.
+- **[LadybugDB](https://ladybugdb.com/)** — embedded graph DB, no server
+- **[LinkML](https://linkml.io/)** — schema format
+- **[sentence-transformers](https://sbert.net/)** — `all-MiniLM-L6-v2` for semantic distance
+- **Static HTML + GitHub Pages** — one-file frontend, no framework
+- **GitHub Actions** — CI/CD on every schema submission
 
 ---
 
 ## Contributing
 
-- **Register a schema:** use the [Register tab](https://sensein.group/NeuroGhost/) on the site.
-- **Report an issue or suggest a feature:** [open an issue](https://github.com/sensein/NeuroGhost/issues/new).
-- **Improve the tooling:** PRs welcome, especially around the distance function.
+- Register a schema via the [Register tab](https://sensein.group/NeuroGhost/).
+- [Open an issue](https://github.com/sensein/NeuroGhost/issues/new) to report bugs or suggest features.
+- PRs welcome, especially around the distance function.
 
----
-
-## License
-
-CC0-1.0 — public domain. Fork it, remix it, run your own registry.
+**License:** CC0-1.0 — public domain.
