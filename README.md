@@ -78,7 +78,7 @@ curl -X POST https://sensein.group/NeuroGhost/api/transform \
 
 ## How alignment works
 
-Alignment runs the **Proteus pipeline** ([github.com/neurovium/Proteus](https://github.com/neurovium/Proteus)) — inlined into [`neuro_ghost/align.py`](neuro_ghost/align.py). **Distance** is `1 − confidence`, so 0.0 = identical, 1.0 = unrelated. Definition embeddings use `all-MiniLM-L6-v2`, cached in `data/embeddings.parquet`.
+The pipeline below is the **Proteus alignment design** ([github.com/neurovium/Proteus](https://github.com/neurovium/Proteus)) — it describes how alignment is meant to work, not what currently runs inline. [`neuro_ghost/align.py`](neuro_ghost/align.py) itself is a **minimal placeholder**: it writes `ALIGNED_TO` (`skos:exactMatch`) edges only between classes that share an exact `class_uri`. The full pipeline — multi-signal scoring, embeddings, unit compatibility, structural repair — is meant to be sourced from Proteus's own `proteus-align` package (tracked below) rather than kept as an inline copy that needs updating every time the meta-model changes.
 
 ```mermaid
 flowchart TD

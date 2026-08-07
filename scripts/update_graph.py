@@ -76,15 +76,34 @@ def build(mm: dict) -> tuple[list[dict], list[dict]]:
     classes   = mm.get("classes", {}) or {}
     slot_defs = mm.get("slots",   {}) or {}
 
+    # db_inline classes (e.g. UnitOfMeasure) flatten onto their referencing
+    # class's own node — matching db.py's _build_registry_ddl(), which never
+    # gives them their own table or a real edge. No node, no edge for these.
+    inline_classes = {
+        name for name, cdef in classes.items()
+        if cdef.get("annotations", {}).get("db_inline")
+    }
+
+    def _field_labels(cname: str) -> list[str]:
+        labels = []
+        for s in _all_slots(cname, classes):
+            sdef = slot_defs.get(s, {})
+            rng  = sdef.get("range", "")
+            if rng in inline_classes:
+                labels.extend(
+                    _slot_label(sub_s, slot_defs.get(sub_s, {}))
+                    for sub_s in _own_slots(classes[rng])
+                )
+            else:
+                labels.append(_slot_label(s, sdef))
+        return labels
+
     # --- Nodes ---------------------------------------------------------------
     nodes: list[dict] = []
     for cname, cdef in classes.items():
-        if cdef.get("abstract") or cname in ABSTRACT_BASES:
+        if cdef.get("abstract") or cname in ABSTRACT_BASES or cname in inline_classes:
             continue
-        fields = [
-            _slot_label(s, slot_defs.get(s, {}))
-            for s in _all_slots(cname, classes)
-        ]
+        fields = _field_labels(cname)
         is_stub = (cdef.get("description") or "").lstrip().startswith("STUB")
         nodes.append({
             "id":     cname,
@@ -95,8 +114,8 @@ def build(mm: dict) -> tuple[list[dict], list[dict]]:
 
     # --- Layout --------------------------------------------------------------
     # Tier 0: concrete classes that inherit from an abstract base (core entities)
-    # Tier 1: standalone classes (ProvenanceEntry, SkosMapping, Relation …)
-    # Tier 2: stubs (Rule, Transform, ValueSet)
+    # Tier 1: standalone classes (ProvenanceEntry, Mapping, ValueSet …)
+    # Tier 2: stubs (Rule, Transform)
     def _tier(n: dict) -> int:
         if n["_stub"]:
             return 2

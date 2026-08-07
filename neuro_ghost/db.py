@@ -12,7 +12,7 @@ Single source of truth for:
         unused now (superseded by content-hash identity + ProvenanceEntry)
         but not yet removed — a separate cleanup pass, not touched here.
       Relationship tables → defined here.
-  - Identity helpers (make_uid, make_iri, now_iso)
+  - Identity helpers (make_id, make_iri, now_iso)
   - Graph writers for content-addressed entities (scalar_fields,
     entity_exists, create_entity_node, write_provenance)
 
@@ -23,7 +23,6 @@ so every script gets the same tables without duplicating DDL.
 from __future__ import annotations
 import datetime
 import hashlib as _hashlib
-import json as _json
 import uuid
 from pathlib import Path
 
@@ -49,9 +48,9 @@ SCHEMA_YAML = Path(__file__).parent.parent / "schemas" / "meta_model.yaml"
 def now_iso() -> str:
     return datetime.datetime.now(datetime.UTC).isoformat()
 
-def make_uid() -> str:
+def make_id() -> str:
     """Generate a random UUID string, for non-content-addressed entities
-    (ProvenanceEntry, SchemaSource, SchemaVersionSnapshot, ...)."""
+    (ProvenanceEntry, SchemaSource, SchemaVersionSnapshot, Mapping, ...)."""
     return str(uuid.uuid4())
 
 def make_iri(object_id: str) -> str:
@@ -81,20 +80,51 @@ def bump_version(ver: str, bump: str = "patch") -> str:
 # it. This is how "identity is separate from provenance" plays out on disk.
 #
 # Duck-typed on purpose (entity just needs .model_dump(); prov just needs
-# .uid/.source/.source_description/.generated_at/.attributed_to/.activity/
-# .derived_from) so this module doesn't need to import schema_registry_utils.
+# .id/.had_primary_source/.source_description/.generated_at_time/
+# .was_attributed_to/.was_generated_by/.was_derived_from) so this module
+# doesn't need to import schema_registry_utils.
 
-LIST_FIELDS = {"provenance", "skos_mappings", "properties", "relations", "mixins", "permissible_values"}
+LIST_FIELDS = {"provenance", "skos_mappings", "properties", "mixins", "permissible_values"}
 HAS_PROVENANCE_REL = {
     "RegistryClass":    "HAS_PROVENANCE",
     "RegistryProperty": "HAS_PROVENANCE_P",
     "ValueSet":         "HAS_PROVENANCE_VS",
+    "PermissibleValue": "HAS_PROVENANCE_PV",
+}
+
+# Inline class fields (db_inline in the meta-model): each one's sub-fields
+# become their own columns on the *parent's* node table (see
+# _build_registry_ddl()), never a "unit"-named column of their own. Kept
+# explicit here, matching LIST_FIELDS/HAS_PROVENANCE_REL's style, rather than
+# introspecting meta_model.yaml at write time.
+INLINE_FIELDS = {
+    "unit": ("ucum_code", "has_quantity_kind", "symbol", "abbreviation", "descriptive_name"),
 }
 
 
 def scalar_fields(entity) -> dict:
-    """An entity's own node-table columns — excludes list/edge-backed fields."""
-    return {k: v for k, v in entity.model_dump().items() if k not in LIST_FIELDS}
+    """
+    An entity's own node-table columns — excludes list/edge-backed fields.
+
+    A plain list-of-scalars field (e.g. aliases) is passed through as a real
+    Python list, bound against a native list column (e.g. STRING[]) — see
+    _build_registry_ddl(). Do NOT JSON-encode it into a STRING column: a
+    bound string that looks like a Cypher list literal gets silently
+    reparsed and corrupted by the DB engine.
+
+    An inline-class field (e.g. unit) is flattened into its sub-fields —
+    always, even when the whole thing is None — since the DDL never creates
+    a column named after the field itself, only after its sub-fields.
+    """
+    fields = {k: v for k, v in entity.model_dump().items() if k not in LIST_FIELDS}
+    flattened: dict = {}
+    for k, v in fields.items():
+        if k in INLINE_FIELDS:
+            sub = v or {}
+            flattened.update({name: sub.get(name) for name in INLINE_FIELDS[k]})
+        else:
+            flattened[k] = v
+    return flattened
 
 
 def entity_exists(conn, label: str, hash_id: str) -> bool:
@@ -114,38 +144,83 @@ def write_provenance(conn, label: str, hash_id: str, prov) -> bool:
     """
     Attach a ProvenanceEntry to an entity, unless this exact source has
     already attested to it. Returns True if a new ProvenanceEntry was added.
+
+    had_primary_source is a real Entity->Entity link (prov:hadPrimarySource)
+    to the attesting SchemaSource, not a denormalized label — so this also
+    creates the HAD_PRIMARY_SOURCE edge alongside the ProvenanceEntry node.
+    prov.had_primary_source must already be a SchemaSource id (the caller
+    ensures that source exists before building any ProvenanceEntry).
     """
     rel = HAS_PROVENANCE_REL[label]
     already = conn.execute(f"""
-        MATCH (n:{label} {{hash_id: $hash_id}})-[:{rel}]->(pe:ProvenanceEntry {{source: $source}})
-        RETURN pe.uid LIMIT 1
-    """, {"hash_id": hash_id, "source": prov.source}).has_next()
+        MATCH (n:{label} {{hash_id: $hash_id}})-[:{rel}]->(pe:ProvenanceEntry {{had_primary_source: $had_primary_source}})
+        RETURN pe.id LIMIT 1
+    """, {"hash_id": hash_id, "had_primary_source": prov.had_primary_source}).has_next()
     if already:
         return False
 
-    uid = prov.uid or make_uid()
+    pe_id = prov.id or make_id()
     conn.execute("""
         CREATE (:ProvenanceEntry {
-            uid: $uid, source: $source, source_description: $source_description,
+            id: $id, had_primary_source: $had_primary_source, source_description: $source_description,
             registry_version: $registry_version,
-            generated_at: $generated_at, attributed_to: $attributed_to,
-            activity: $activity, derived_from: $derived_from
+            generated_at_time: $generated_at_time, was_attributed_to: $was_attributed_to,
+            was_generated_by: $was_generated_by, was_derived_from: $was_derived_from
         })
     """, {
-        "uid":                uid,
-        "source":             prov.source,
+        "id":                  pe_id,
+        "had_primary_source": prov.had_primary_source,
         "source_description": prov.source_description,
         "registry_version":   prov.registry_version,
-        "generated_at":       prov.generated_at.isoformat(),
-        "attributed_to":      prov.attributed_to,
-        "activity":           prov.activity,
-        "derived_from":       _json.dumps(prov.derived_from),
+        "generated_at_time":  prov.generated_at_time.isoformat(),
+        "was_attributed_to":  prov.was_attributed_to,
+        "was_generated_by":   prov.was_generated_by,
+        "was_derived_from":   prov.was_derived_from,
     })
     conn.execute(f"""
-        MATCH (n:{label} {{hash_id: $hash_id}}), (pe:ProvenanceEntry {{uid: $uid}})
+        MATCH (n:{label} {{hash_id: $hash_id}}), (pe:ProvenanceEntry {{id: $id}})
         CREATE (n)-[:{rel}]->(pe)
-    """, {"hash_id": hash_id, "uid": uid})
+    """, {"hash_id": hash_id, "id": pe_id})
+    conn.execute("""
+        MATCH (pe:ProvenanceEntry {id: $id}), (ss:SchemaSource {id: $ss_id})
+        CREATE (pe)-[:HAD_PRIMARY_SOURCE]->(ss)
+    """, {"id": pe_id, "ss_id": prov.had_primary_source})
     return True
+
+
+def ensure_schema_source(conn, source_label: str, version: str, registry_version: str,
+                         dry_run: bool = False) -> str:
+    """
+    One SchemaSource node per source label, reused across ingests. Shared by
+    ingest_linkml.py and seed.py, same as the other entity/provenance writers.
+
+    Must run before any ProvenanceEntry is built, since
+    ProvenanceEntry.had_primary_source is a real FK to it — including in
+    --dry-run, which must stay read-only. In dry-run, an as-yet-unseen
+    source gets a throwaway placeholder id instead of a real CREATE;
+    nothing downstream persists it anyway.
+    """
+    r = conn.execute(
+        "MATCH (s:SchemaSource {label: $label}) RETURN s.id LIMIT 1",
+        {"label": source_label},
+    )
+    if r.has_next():
+        return r.get_next()[0]
+    if dry_run:
+        return f"dry-run-placeholder:{source_label}"
+    source_id = make_id()
+    conn.execute("""
+        CREATE (:SchemaSource {
+            id: $id, source_iri: $source_iri,
+            source_version: $source_version, created_at: $t,
+            label: $label, mime_type: 'application/yaml',
+            registry_version: $rv
+        })
+    """, {
+        "id": source_id, "source_iri": f"{REG}source/{source_id}", "source_version": version,
+        "t": now_iso(), "label": source_label, "rv": registry_version,
+    })
+    return source_id
 
 
 def write_registry_entities(conn, properties: dict, registry_classes: dict,
@@ -284,7 +359,11 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
     - db_inline class ref → flatten its slots inline.
     - Multivalued class ref (e.g. provenance) → REL table (handled in _REL_DDL below; skipped here).
     - Non-multivalued class ref → STRING column (hash_id FK).
-    - Scalar with db_json or multivalued → STRING (stored as JSON array).
+    - Multivalued scalar (e.g. aliases) → native list column, e.g. STRING[].
+      NOT a JSON-encoded STRING: a bound parameter string that looks like a
+      Cypher list literal (starts with "[") gets silently reparsed and
+      corrupted by the DB engine, so multivalued scalars must go through
+      as real Python lists bound against a real list column.
     - Plain scalar → mapped type; identifier slots get PRIMARY KEY.
     """
     schema = _yaml.safe_load(Path(yaml_path).read_text())
@@ -310,7 +389,6 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
             range_    = slot_def.get("range", "string")
             multi     = slot_def.get("multivalued", False)
             is_id     = slot_def.get("identifier", False)
-            db_json   = slot_def.get("annotations", {}).get("db_json", False)
 
             if range_ in inline_classes:
                 if not multi:
@@ -319,13 +397,12 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
                     ).items():
                         sub_range = sub_def.get("range", "string")
                         sub_multi = sub_def.get("multivalued", False)
-                        sub_json  = sub_def.get("annotations", {}).get("db_json", False)
                         if sub_range not in classes:
-                            if sub_json or sub_multi:
-                                columns.append(f"    {sub_name:<24} STRING")
+                            sub_db_type = _LINKML_TYPE_MAP.get(sub_range, "STRING")
+                            if sub_multi:
+                                columns.append(f"    {sub_name:<24} {sub_db_type}[]")
                             else:
-                                db_type = _LINKML_TYPE_MAP.get(sub_range, "STRING")
-                                columns.append(f"    {sub_name:<24} {db_type}")
+                                columns.append(f"    {sub_name:<24} {sub_db_type}")
                 # multivalued inline → not supported; skip
 
             elif range_ in classes:
@@ -336,16 +413,15 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
 
             else:
                 # Scalar
-                if db_json or multi:
-                    columns.append(f"    {slot_name:<24} STRING")
+                db_type = _LINKML_TYPE_MAP.get(range_, "STRING")
+                if multi:
+                    columns.append(f"    {slot_name:<24} {db_type}[]")
+                elif is_id:
+                    columns.append(
+                        f"    {slot_name:<24} {db_type} PRIMARY KEY"
+                    )
                 else:
-                    db_type = _LINKML_TYPE_MAP.get(range_, "STRING")
-                    if is_id:
-                        columns.append(
-                            f"    {slot_name:<24} {db_type} PRIMARY KEY"
-                        )
-                    else:
-                        columns.append(f"    {slot_name:<24} {db_type}")
+                    columns.append(f"    {slot_name:<24} {db_type}")
 
         if columns:
             col_str = ",\n".join(columns)
@@ -365,35 +441,13 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
 _REGISTRY_NODE_DDL: list[str] = _build_registry_ddl()
 
 # Infrastructure node tables — not part of the meta-model; defined here.
+# SchemaSource / SchemaVersionSnapshot used to be hand-written here too, but
+# are now first-class meta-model classes (_REGISTRY_NODE_DDL, generated from
+# schemas/meta_model.yaml) — that duplicate definition (with the pre-rework
+# field names: iri/uri/version/rule_count) was dead code (IF NOT EXISTS made
+# it a silent no-op, since _REGISTRY_NODE_DDL always runs first) and has been
+# removed.
 _INFRASTRUCTURE_NODE_DDL: list[str] = [
-    # SchemaSource — origin schemas ingested into the registry
-    """CREATE NODE TABLE IF NOT EXISTS SchemaSource (
-        uid              STRING PRIMARY KEY,
-        iri              STRING,
-        uri              STRING,
-        version          STRING,
-        created_at       STRING,
-        label            STRING,
-        mime_type        STRING,
-        registry_version STRING
-    )""",
-
-    # SchemaVersionSnapshot — one per (schema_name, semver) pair
-    """CREATE NODE TABLE IF NOT EXISTS SchemaVersionSnapshot (
-        uid              STRING PRIMARY KEY,
-        iri              STRING,
-        uri              STRING,
-        version          STRING,
-        created_at       STRING,
-        schema_label     STRING,
-        yml_path         STRING,
-        class_count      INT64,
-        property_count   INT64,
-        rule_count       INT64,
-        changes_summary  STRING,
-        registry_version STRING
-    )""",
-
     # SchemaActivity — PROV-O activity log (defined but not yet written by any script)
     """CREATE NODE TABLE IF NOT EXISTS SchemaActivity (
         uid              STRING PRIMARY KEY,
@@ -424,12 +478,11 @@ _INFRASTRUCTURE_NODE_DDL: list[str] = [
 _REL_DDL: list[str] = [
     # --- Meta-model multivalued edges ---
     "CREATE REL TABLE IF NOT EXISTS HAS_PROPERTY       (FROM RegistryClass    TO RegistryProperty)",
-    "CREATE REL TABLE IF NOT EXISTS HAS_RELATION       (FROM RegistryClass    TO Relation)",
-    "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING   (FROM RegistryClass    TO SkosMapping)",
-    "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING_P (FROM RegistryProperty TO SkosMapping)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING   (FROM RegistryClass    TO Mapping)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING_P (FROM RegistryProperty TO Mapping)",
     "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE     (FROM RegistryClass    TO ProvenanceEntry)",
     "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_P   (FROM RegistryProperty TO ProvenanceEntry)",
-    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_R   (FROM Relation         TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAD_PRIMARY_SOURCE (FROM ProvenanceEntry  TO SchemaSource)",
     "CREATE REL TABLE IF NOT EXISTS MIXIN              (FROM RegistryClass    TO RegistryClass)",
     "CREATE REL TABLE IF NOT EXISTS SUBCLASS_OF        (FROM RegistryClass    TO RegistryClass)",
 
@@ -467,6 +520,8 @@ _REL_DDL: list[str] = [
     # --- ValueSet / PermissibleValue ---
     "CREATE REL TABLE IF NOT EXISTS HAS_PERMISSIBLE_VALUE (FROM ValueSet TO PermissibleValue)",
     "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_VS     (FROM ValueSet TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_PV     (FROM PermissibleValue TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING_PV   (FROM PermissibleValue TO Mapping)",
 
     # --- Infrastructure edges ---
     "CREATE REL TABLE IF NOT EXISTS APPLIES_TO         (FROM Rule             TO RegistryClass)",

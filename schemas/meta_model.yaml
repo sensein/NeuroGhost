@@ -11,6 +11,8 @@ prefixes:
   linkml: https://w3id.org/linkml/
   skos:   http://www.w3.org/2004/02/skos/core#
   prov:   http://www.w3.org/ns/prov#
+  qudt:   http://qudt.org/schema/qudt/
+  rdfs:   http://www.w3.org/2000/01/rdf-schema#
   screg:  https://example.org/schema-registry-utils/
 
 default_prefix: screg
@@ -18,6 +20,13 @@ default_range: string
 
 imports:
   - linkml:types
+
+subsets:
+  HashSubset:
+    description: >-
+      Slots that are part of a RegistryEntity subclass's content hash
+      (hash_id). schema_registry_utils/hashing.py derives the identity
+      field set from each field's in_subset metadata.
 
 # ---------------------------------------------------------------------------
 # Classes
@@ -44,6 +53,7 @@ classes:
       - description
       - provenance
       - skos_mappings
+      - aliases
 
   RegistryClass:
     is_a: RegistryEntity
@@ -52,7 +62,6 @@ classes:
       in the registry, e.g. "Patient".
     slots:
       - properties
-      - relations
       - is_a
       - mixins
       - class_uri
@@ -69,7 +78,7 @@ classes:
       different concept.
     slots:
       - range
-      - units
+      - unit
       - slot_uri
 
   ProvenanceEntry:
@@ -80,38 +89,54 @@ classes:
       (hash_id) never depends on provenance, so the same entity can carry many.
       Stored as its own node, linked via HAS_PROVENANCE / HAS_PROVENANCE_P
       edges (multivalued — cannot be inlined into the parent's node table).
-      Identified by uid, not hash_id — a ProvenanceEntry is a per-attestation
+      Identified by id, not hash_id — a ProvenanceEntry is a per-attestation
       record, not a deduplicated, content-addressed registry entity.
     slots:
-      - uid
-      - source
+      - id
+      - had_primary_source
       - source_description
       - registry_version
-      - generated_at
-      - attributed_to
-      - activity
-      - derived_from
+      - generated_at_time
+      - was_attributed_to
+      - was_generated_by
+      - was_derived_from
 
-  SkosMapping:
+  MappingProvenanceEntry:
+    is_a: ProvenanceEntry
     description: >-
-      A semantic mapping from a registry entity to an external vocabulary
-      concept (SKOS mapping relation). Stored as its own node and linked via
-      HAS_SKOS_MAPPING / HAS_SKOS_MAPPING_P edges.
+      ProvenanceEntry, but had_primary_source isn't required — a Mapping is
+      often cross-schema (comparing content from two sources) or produced
+      by a pure algorithmic process with no single schema to attribute to,
+      unlike a RegistryClass/RegistryProperty attestation which always
+      traces back to exactly one SchemaSource. Also carries the fields that
+      describe *how* the mapping was produced (justification, evidence,
+      tool) — those belong here rather than on Mapping itself, alongside
+      was_generated_by/generated_at_time.
+    slot_usage:
+      had_primary_source:
+        required: false
     slots:
-      - hash_id
+      - mapping_justification
+      - match_string
+      - mapping_tool
+
+  Mapping:
+    description: >-
+      A semantic mapping from a registry entity to a target — another
+      registry entity (by hash_id) or an external vocabulary concept (by
+      IRI). Covers both a source-declared mapping and one align.py
+      computes, distinguished by provenance.mapping_justification, not by
+      class. Identified by id, not hash_id — not is_a RegistryEntity.
+    slots:
+      - id
       - mapping_type
       - target
-
-  Relation:
-    description: >-
-      A directed relationship between two registry entities (classes or
-      properties), with its own content-addressed identity and provenance.
-    slots:
-      - hash_id
-      - subject
-      - predicate
-      - object
+      - confidence
+      - review_status
       - provenance
+    slot_usage:
+      provenance:
+        range: MappingProvenanceEntry
 
   Rule:
     description: >-
@@ -133,14 +158,14 @@ classes:
       - description
 
   PermissibleValue:
+    is_a: RegistryEntity
     description: >-
       A single permissible value within a ValueSet enumeration. The `name`
       field holds the value text (e.g. "EXACT_MATCH"); `meaning` optionally
       maps it to an external ontology IRI. Identity is content-addressed on
-      (name, meaning) — identical values across sources share one node.
+      (name, description, meaning) — identical values across sources share
+      one node, with provenance accumulating like any other RegistryEntity.
     slots:
-      - hash_id
-      - name
       - meaning
 
   ValueSet:
@@ -153,15 +178,39 @@ classes:
     slots:
       - permissible_values
 
+  UnitOfMeasure:
+    class_uri: qudt:Unit
+    annotations:
+      db_inline: true
+    description: >-
+      A structured unit of measure for a RegistryProperty, inlined (not its
+      own content-addressed entity). Field names/slot_uri follow LinkML's
+      own linkml:units module — defined locally rather than imported, since
+      db.py's DDL generator reads meta_model.yaml's own classes directly and
+      doesn't resolve LinkML imports (see git history for the import-vs-
+      repeat discussion). LinkML's own alignment for units *is* QUDT/rdfs —
+      there's no separate "linkml:" URI for these concepts to also target.
+    slots:
+      - ucum_code
+      - has_quantity_kind
+      - symbol
+      - abbreviation
+      - descriptive_name
+
   SchemaSource:
     description: >-
       Registry record for a schema source (one node per ingested schema label).
       Tracks the source's IRI, MIME type, and the registry version it was first
-      added under. Identity uses uid (not hash_id) because this is a mutable
+      added under. Identity uses id (not hash_id) because this is a mutable
       administrative record, not a content-addressed entity.
     slots:
-      - uid
+      - id
       - label
+      - title
+      - publisher
+      - contact
+      - homepage
+      - is_hub
       - source_iri
       - source_version
       - mime_type
@@ -173,8 +222,24 @@ classes:
       An immutable snapshot of a schema at a specific version, created each
       time a schema ingestion produces new or changed content. Records the
       class and property counts and a human-readable summary of changes.
+
+      QUESTIONABLE (as of 2026-08-04): likely unnecessary. It's write-only —
+      nothing outside ingest_linkml.py's own _prev_schema_version() ever
+      reads it back (not export_json.py, not mcp_server.py, not any CI
+      workflow). Its source_version is a self-invented semver bump
+      (_bump_semver()) that, after the first ingestion, ignores the source
+      file's real declared meta["version"] entirely — and it duplicates
+      SchemaSource.source_version, which has its own bug (frozen at
+      first-ingestion value, never updated). The one thing it enables (the
+      "schema unchanged, skip" short-circuit) doesn't need stored history:
+      write_registry_entities() is already idempotent, so stats
+      (classes_new/properties_new/provenance_added) tell you the same thing
+      fresh on every run. Added incidentally in a1dba23 ("Auto-sync graph
+      schema from meta_model.yaml via CI"), not from a deliberate versioning
+      design. Candidate for removal — same category as the Relation class
+      (removed in c599c2b): present in the schema, never actually needed.
     slots:
-      - uid
+      - id
       - schema_label
       - source_version
       - yml_path
@@ -202,18 +267,23 @@ slots:
   name:
     range: string
     required: true
+    in_subset:
+      - HashSubset
     description: Human-readable label for this entity.
 
   description:
     range: string
     required: true
+    slot_uri: skos:definition
+    in_subset:
+      - HashSubset
     description: Human-readable description of this entity.
 
   provenance:
     range: ProvenanceEntry
     multivalued: true
     required: true
-    # Inlined so generated code carries ProvenanceEntry objects rather than uid
+    # Inlined so generated code carries ProvenanceEntry objects rather than id
     # references: the pipeline builds entries in memory and hands them to the
     # graph writers, which split them into their own nodes on write.
     inlined: true
@@ -223,45 +293,72 @@ slots:
       as more sources are ingested — never affects hash_id.
 
   skos_mappings:
-    range: SkosMapping
+    range: Mapping
     multivalued: true
     inlined: true
     inlined_as_list: true
-    description: Semantic mappings to external vocabulary concepts.
+    description: Semantic mappings to external vocabulary concepts, or to other registry entities (align.py's computed correspondences).
+
+  aliases:
+    range: string
+    multivalued: true
+    slot_uri: skos:altLabel
+    # Not in_subset: HashSubset — like class_uri/slot_uri, these are
+    # alternate names a source happens to supply, not part of what the
+    # entity *is*. Two sources asserting the same property/class with
+    # different aliases must still collapse to one entity.
+    description: >-
+      Alternate names/synonyms/abbreviations for this entity (e.g. "lfp" for
+      "local field potential"), preserved from the source schema. Used as
+      alignment evidence (align.py's alias_overlap signal) — not part of
+      the schema's own semantics.
 
   properties:
     range: RegistryProperty
     multivalued: true
+    in_subset:
+      - HashSubset
     description: The set of properties that belong to this class.
-
-  relations:
-    range: Relation
-    multivalued: true
-    description: Directed relations from this class to other registry entities.
 
   is_a:
     range: RegistryClass
+    slot_uri: linkml:is_a
+    in_subset:
+      - HashSubset
     description: The class this class inherits from (stored as hash_id FK).
 
   mixins:
     range: RegistryClass
     multivalued: true
+    in_subset:
+      - HashSubset
     description: Additional classes mixed into this class.
 
   range:
     range: string
     required: true
+    slot_uri: linkml:range
+    in_subset:
+      - HashSubset
     description: >-
       The data type or value range for this property (e.g. a primitive type
       name such as "string" or "integer", or the hash_id of a ValueSet for
       enumerated values).
 
-  units:
-    range: string
-    description: Unit of measure for this property's values, if applicable.
+  unit:
+    range: UnitOfMeasure
+    inlined: true
+    slot_uri: qudt:unit
+    in_subset:
+      - HashSubset
+    description: >-
+      Structured unit of measure for this property's values, if applicable.
+      ucum_code is the primary field for programmatic unit-compatibility
+      checks (align.py's unit veto); the others are supplementary.
 
   class_uri:
     range: uriorcurie
+    slot_uri: linkml:class_uri
     description: >-
       Ontology IRI for this class, preserved from the source schema on
       ingestion. Not part of the content hash; used for alignment and
@@ -276,34 +373,46 @@ slots:
 
   abstract:
     range: boolean
+    slot_uri: linkml:abstract
+    in_subset:
+      - HashSubset
     # Defaults to false rather than null: `abstract` is identity-defining, so a
     # null would hash differently from a false and silently change every
     # RegistryClass hash_id. LinkML has no equivalent for the multivalued slots
-    # (properties/relations/mixins), which still default to null — builders
+    # (properties/mixins), which still default to null — builders
     # must pass them explicitly, and compute_hash_id_for() enforces that.
     ifabsent: 'false'
     description: Whether this registered class is itself declared abstract.
 
-  # --- ProvenanceEntry slots -------------------------------------------------
+  # --- Plain (non-content-hashed) identifier, shared by every class that
+  # --- isn't part of the RegistryEntity family -------------------------------
 
-  uid:
+  id:
     identifier: true
     required: true
     range: string
     description: >-
-      Random unique identifier for this ProvenanceEntry record (not
-      content-derived — a per-attestation record, not a deduplicated entity).
+      Plain unique identifier, used by every class that isn't part of the
+      content-addressed RegistryEntity family (ProvenanceEntry, SchemaSource,
+      SchemaVersionSnapshot, Mapping) — LinkML's own conventional name
+      for a non-content-derived identifier. hash_id is reserved for
+      RegistryEntity subclasses.
 
-  source:
-    range: string
+  had_primary_source:
+    range: SchemaSource
     required: true
-    description: Label of the source schema this attestation came from, e.g. "bids".
+    slot_uri: prov:hadPrimarySource
+    description: >-
+      The SchemaSource this attestation came from (stored as id FK, like
+      is_a). A real Entity->Entity link, not a denormalized label copy —
+      PROV-O's own hadPrimarySource is a relationship between entities.
 
   source_description:
     range: string
     description: >-
       This source's own description text for the entity, if it differs
-      from the entity's merged description.
+      from the entity's merged description. No direct PROV-O term; a
+      registry-specific extension.
 
   registry_version:
     range: string
@@ -312,56 +421,37 @@ slots:
       generated. Not on RegistryClass/RegistryProperty directly — the same
       entity can be attested by different sources at different times, each
       under a different registry version, so it belongs on the per-source
-      attestation, not the entity itself.
+      attestation, not the entity itself. No PROV-O term — purely our own
+      versioning concept.
 
-  generated_at:
+  generated_at_time:
     range: datetime
     required: true
     slot_uri: prov:generatedAtTime
     description: ISO-8601 timestamp this ProvenanceEntry was generated.
 
-  attributed_to:
+  was_attributed_to:
     range: string
     required: true
     slot_uri: prov:wasAttributedTo
     description: Agent (user or system) that generated this ProvenanceEntry.
 
-  activity:
+  was_generated_by:
     range: string
     slot_uri: prov:wasGeneratedBy
     description: >-
       The activity that produced this ProvenanceEntry, e.g. "ingestion",
       "manual", "alignment".
 
-  derived_from:
+  was_derived_from:
     range: string
     multivalued: true
     slot_uri: prov:wasDerivedFrom
-    annotations:
-      db_json: true
     description: >-
       hash_ids of entities this entity was derived from, if any. Stored as
-      a JSON-encoded string array in the graph database.
+      a native list column in the graph database.
 
-  # --- Relation slots ------------------------------------------------------
-
-  subject:
-    range: string
-    required: true
-    description: hash_id of the entity this relation points from.
-
-  predicate:
-    range: string
-    required: true
-    description: >-
-      The type of relationship (e.g. isPartOf, isSimilarTo, isDerivedFrom).
-
-  object:
-    range: string
-    required: true
-    description: hash_id of the entity this relation points to.
-
-  # --- SkosMapping slots ---------------------------------------------------
+  # --- Mapping slots ---------------------------------------------------
 
   mapping_type:
     range: SkosMappingTypeEnum
@@ -369,7 +459,46 @@ slots:
 
   target:
     range: uriorcurie
-    description: The external concept this mapping points to.
+    description: >-
+      What this mapping points to — an external ontology concept (IRI), or
+      another registry entity's hash_id for align.py's computed
+      cross-schema correspondences.
+
+  # --- MappingProvenanceEntry-only slots: how the mapping was produced ---
+
+  mapping_justification:
+    range: string
+    description: >-
+      How this mapping came to be, e.g. "manual" for a source-schema-
+      declared mapping, or "exact_class_uri" for align.py's placeholder.
+      Plain string for now rather than a controlled vocabulary (e.g.
+      semapv) — nothing yet produces enough distinct justifications to
+      need one.
+
+  match_string:
+    range: string
+    multivalued: true
+    description: The strings/evidence the match was made on, if any.
+
+  mapping_tool:
+    range: string
+    description: Name of the tool/process that produced this mapping, e.g. "align.py".
+
+  confidence:
+    range: float
+    minimum_value: 0.0
+    maximum_value: 1.0
+    description: >-
+      Score in [0,1] assigned by whatever process produced this mapping.
+      Not required — a manually-declared mapping may have no numeric score.
+
+  review_status:
+    range: ReviewStatusEnum
+    description: >-
+      Curation lifecycle state. Always PROPOSED for now — nothing in this
+      registry curates mappings yet, so this field exists to be
+      standards-conformant (SSSOM/Proteus), not because anything sets it
+      to ACCEPTED/REJECTED today.
 
   # --- SchemaSource / SchemaVersionSnapshot slots --------------------------
 
@@ -377,6 +506,33 @@ slots:
     range: string
     required: true
     description: Short identifier label for this schema source (e.g. "bids", "nwb").
+
+  title:
+    range: string
+    description: >-
+      Human-readable full name of the schema (e.g. "Brain Imaging Data
+      Structure"), distinct from the short `label` used as its identifier.
+
+  publisher:
+    range: string
+    description: Organization or group that maintains this schema.
+
+  contact:
+    range: string
+    description: Contact point for this schema (person, mailing list, or URL).
+
+  homepage:
+    range: uri
+    description: Documentation or landing page for this schema.
+
+  is_hub:
+    range: boolean
+    ifabsent: 'false'
+    description: >-
+      True if this schema is (part of) the registry's core/bridge
+      vocabulary that other schemas are matched against, rather than
+      matching every schema pairwise. Not auto-derived — set deliberately,
+      since which schema serves as the hub is a curatorial decision.
 
   source_iri:
     range: uriorcurie
@@ -419,6 +575,8 @@ slots:
 
   meaning:
     range: uriorcurie
+    in_subset:
+      - HashSubset
     description: >-
       Ontology IRI this permissible value maps to (e.g. skos:exactMatch
       for the EXACT_MATCH value in SkosMappingTypeEnum).
@@ -426,9 +584,47 @@ slots:
   permissible_values:
     range: PermissibleValue
     multivalued: true
+    in_subset:
+      - HashSubset
     description: >-
       The set of permissible values for this ValueSet. Stored as hash_id
       references; HAS_PERMISSIBLE_VALUE edges are the graph traversal.
+
+  # --- UnitOfMeasure slots ---------------------------------------------------
+
+  ucum_code:
+    range: string
+    slot_uri: qudt:ucumCode
+    description: >-
+      UCUM (Unified Code for Units of Measure) code, e.g. "mV", "deg", "Hz".
+      Compact and machine-parseable — the primary field for programmatic
+      unit-compatibility checks (align.py's unit veto).
+
+  has_quantity_kind:
+    range: uriorcurie
+    slot_uri: qudt:hasQuantityKind
+    description: >-
+      IRI naming the dimension/kind of quantity being measured, e.g. a QUDT
+      quantity-kind IRI for "ElectricPotential" or "PlaneAngle". Lets
+      incommensurable units (different quantity kinds) be vetoed outright,
+      independent of whether a conversion factor is known.
+
+  symbol:
+    range: string
+    slot_uri: qudt:symbol
+    description: Name of the unit encoded as a symbol (e.g. "Ω", "°").
+
+  abbreviation:
+    range: string
+    slot_uri: qudt:abbreviation
+    description: >-
+      Short ASCII abbreviation for the unit, for contexts where non-ASCII
+      symbols would be problematic.
+
+  descriptive_name:
+    range: string
+    slot_uri: rdfs:label
+    description: The spelled-out name of the unit, e.g. "millivolt".
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -454,3 +650,15 @@ enums:
       RELATED_MATCH:
         meaning: skos:relatedMatch
         description: The registry entity is related to the external concept.
+
+  ReviewStatusEnum:
+    description: Curation lifecycle of a Mapping.
+    permissible_values:
+      PROPOSED:
+        description: Machine- or human-proposed; not yet reviewed.
+      ACCEPTED:
+        description: Validated by a reviewer; safe for high-rigor queries.
+      REJECTED:
+        description: Reviewed and refuted; retained as negative evidence.
+      SUPERSEDED:
+        description: Replaced by a newer mapping.

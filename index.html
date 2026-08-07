@@ -681,27 +681,28 @@ function renderDiff(){
 
 // GRAPH SCHEMA
 const GN=[
-  {id:"RegistryClass",fields:["hash_id PK", "name*", "description*", "provenance \u2192 ProvenanceEntry[]", "skos_mappings \u2192 SkosMapping[]", "properties \u2192 RegistryProperty[]", "relations \u2192 Relation[]", "is_a \u2192 RegistryClass", "mixins \u2192 RegistryClass[]", "class_uri", "abstract"],x:0.33,y:0.1},
-  {id:"RegistryProperty",fields:["hash_id PK", "name*", "description*", "provenance \u2192 ProvenanceEntry[]", "skos_mappings \u2192 SkosMapping[]", "range*", "units", "slot_uri"],x:0.67,y:0.1},
+  {id:"RegistryClass",fields:["hash_id PK", "name*", "description*", "provenance \u2192 ProvenanceEntry[]", "skos_mappings \u2192 SkosMapping[]", "aliases", "properties \u2192 RegistryProperty[]", "is_a \u2192 RegistryClass", "mixins \u2192 RegistryClass[]", "class_uri", "abstract"],x:0.25,y:0.1},
+  {id:"RegistryProperty",fields:["hash_id PK", "name*", "description*", "provenance \u2192 ProvenanceEntry[]", "skos_mappings \u2192 SkosMapping[]", "aliases", "range*", "ucum_code", "has_quantity_kind", "symbol", "abbreviation", "descriptive_name", "slot_uri"],x:0.5,y:0.1},
   {id:"ProvenanceEntry",fields:["uid PK", "source*", "source_description", "registry_version", "generated_at*", "attributed_to*", "activity", "derived_from"],x:0.17,y:0.48},
   {id:"SkosMapping",fields:["hash_id PK", "mapping_type \u2192 SkosMappingTypeEnum", "target"],x:0.33,y:0.48},
-  {id:"Relation",fields:["hash_id PK", "subject*", "predicate*", "object*", "provenance \u2192 ProvenanceEntry[]"],x:0.5,y:0.48},
-  {id:"Rule",fields:["hash_id PK", "name*", "description*"],x:0.25,y:0.86},
-  {id:"Transform",fields:["hash_id PK", "name*", "description*"],x:0.5,y:0.86},
-  {id:"ValueSet",fields:["hash_id PK", "name*", "description*"],x:0.75,y:0.86},
-  {id:"SchemaSource",fields:["uid PK", "label*", "source_iri", "source_version", "mime_type", "created_at", "registry_version"],x:0.67,y:0.48},
+  {id:"Rule",fields:["hash_id PK", "name*", "description*"],x:0.33,y:0.86},
+  {id:"Transform",fields:["hash_id PK", "name*", "description*"],x:0.67,y:0.86},
+  {id:"PermissibleValue",fields:["hash_id PK", "name*", "meaning"],x:0.5,y:0.48},
+  {id:"ValueSet",fields:["hash_id PK", "name*", "description*", "provenance \u2192 ProvenanceEntry[]", "skos_mappings \u2192 SkosMapping[]", "aliases", "permissible_values \u2192 PermissibleValue[]"],x:0.75,y:0.1},
+  {id:"SchemaSource",fields:["uid PK", "label*", "title", "publisher", "contact", "homepage", "is_hub", "source_iri", "source_version", "mime_type", "created_at", "registry_version"],x:0.67,y:0.48},
   {id:"SchemaVersionSnapshot",fields:["uid PK", "schema_label*", "source_version", "yml_path", "class_count", "property_count", "changes_summary", "created_at", "registry_version"],x:0.83,y:0.48},
 ];
 const GR=[
   {f:"RegistryClass",t:"ProvenanceEntry",l:"HAS_PROVENANCE"},
   {f:"RegistryClass",t:"SkosMapping",l:"HAS_SKOS_MAPPING"},
   {f:"RegistryClass",t:"RegistryProperty",l:"HAS_PROPERTY"},
-  {f:"RegistryClass",t:"Relation",l:"HAS_RELATION"},
   {f:"RegistryClass",t:"RegistryClass",l:"SUBCLASS_OF"},
   {f:"RegistryClass",t:"RegistryClass",l:"MIXES_IN"},
   {f:"RegistryProperty",t:"ProvenanceEntry",l:"HAS_PROVENANCE"},
   {f:"RegistryProperty",t:"SkosMapping",l:"HAS_SKOS_MAPPING"},
-  {f:"Relation",t:"ProvenanceEntry",l:"HAS_PROVENANCE"},
+  {f:"ValueSet",t:"ProvenanceEntry",l:"HAS_PROVENANCE"},
+  {f:"ValueSet",t:"SkosMapping",l:"HAS_SKOS_MAPPING"},
+  {f:"ValueSet",t:"PermissibleValue",l:"HAS_PERMISSIBLE_VALUES"},
 ];
 let selNode=null;
 function renderGraph(){

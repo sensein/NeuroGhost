@@ -3,21 +3,32 @@ import json
 
 from schema_registry_utils.models import RegistryClass, RegistryProperty
 
-_EXCLUDED_FIELDS = {
-    "hash_id", "provenance", "skos_mappings",
-    # Operational/origin metadata, not identity-defining content: an entity's
-    # hash_id must stay the same regardless of which source(s) attest to it.
-    "class_uri", "slot_uri",
-}
+HASH_SUBSET = "HashSubset"
+
+
+def _identity_fields(model_cls: type) -> set[str]:
+    """
+    The identity-defining fields of a RegistryEntity subclass — everything
+    tagged `in_subset: [HashSubset]` in schemas/meta_model.yaml.
+
+    The schema is the single source of truth for what's identity-defining,
+    not a hand-maintained Python allowlist/denylist that could drift out of
+    sync with it. gen-pydantic carries in_subset into each field's generated
+    json_schema_extra['linkml_meta'], so this is a pure introspection of the
+    already-generated model — no live SchemaView/YAML load needed here.
+    """
+    identity = set()
+    for name, field in model_cls.model_fields.items():
+        linkml_meta = (field.json_schema_extra or {}).get("linkml_meta", {})
+        if HASH_SUBSET in linkml_meta.get("in_subset", []):
+            identity.add(name)
+    return identity
 
 
 def compute_hash_id(entity: RegistryClass | RegistryProperty) -> str:
-    """Compute a content-based hash_id for a RegistryClass or RegistryProperty.
-
-    Everything but hash_id, provenance, skos_mappings, and class_uri/slot_uri
-    is treated as identity-defining content.
-    """
-    return _digest(entity.model_dump(exclude=_EXCLUDED_FIELDS))
+    """Compute a content-based hash_id from entity's HashSubset fields."""
+    identity = _identity_fields(type(entity))
+    return _digest({k: v for k, v in entity.model_dump().items() if k in identity})
 
 
 def compute_hash_id_for(model_cls: type, fields: dict) -> str:
@@ -29,20 +40,20 @@ def compute_hash_id_for(model_cls: type, fields: dict) -> str:
     about to pass, then construct once with the real hash_id, rather than
     constructing with a placeholder and mutating afterwards.
 
-    `fields` must carry every identity-defining slot of `model_cls`; anything
-    in _EXCLUDED_FIELDS may be present and is ignored. Omitting an identity
-    slot raises, because the alternative is a silently different hash the next
-    time the meta-model grows a slot — which would invalidate every stored
-    hash_id in the registry without anything failing.
+    `fields` must carry every HashSubset slot of `model_cls`; anything
+    else may be present and is ignored. Omitting an identity slot raises,
+    because the alternative is a silently different hash the next time the
+    meta-model grows a slot — which would invalidate every stored hash_id in
+    the registry without anything failing.
     """
-    identity = set(model_cls.model_fields) - _EXCLUDED_FIELDS
+    identity = _identity_fields(model_cls)
     missing = identity - set(fields)
     if missing:
         raise ValueError(
             f"{model_cls.__name__}: cannot hash — identity-defining field(s) "
             f"missing from `fields`: {sorted(missing)}"
         )
-    return _digest({k: v for k, v in fields.items() if k not in _EXCLUDED_FIELDS})
+    return _digest({k: v for k, v in fields.items() if k in identity})
 
 
 def _digest(content: dict) -> str:
@@ -72,7 +83,7 @@ def _normalize(value):
     if isinstance(value, list):
         normalized = [_normalize(val) for val in value]
         if all(isinstance(val, str) for val in normalized):
-            # reference lists (properties/relations/mixins) are unordered sets
+            # reference lists (properties/mixins) are unordered sets
             return sorted(normalized)
         return normalized
     return value

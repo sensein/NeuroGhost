@@ -30,6 +30,8 @@ classes:
       - Timestamped
     description: A research investigator.
     class_uri: schema:Person
+    aliases:
+      - Investigator
     slots:
       - orcid
     attributes:
@@ -51,3 +53,5 @@ slots:
     range: string
     slot_uri: ex:orcid
     pattern: "^\\d{4}-\\d{4}-\\d{4}-\\d{3}[0-9X]$"
+    aliases:
+      - ORCID iD

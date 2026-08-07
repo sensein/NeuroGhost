@@ -20,10 +20,34 @@ def test_identical_property_from_two_sources_shares_one_hash_id(tmp_path):
     assert len(rows) == 1
 
     sources = conn.execute("""
-        MATCH (:RegistryProperty {name: 'age'})-[:HAS_PROVENANCE_P]->(pe:ProvenanceEntry)
-        RETURN pe.source
+        MATCH (:RegistryProperty {name: 'age'})-[:HAS_PROVENANCE_P]->(:ProvenanceEntry)-[:HAD_PRIMARY_SOURCE]->(ss:SchemaSource)
+        RETURN ss.label
     """).get_all()
     assert {r[0] for r in sources} == {"source_a", "source_b"}
+
+
+def test_aliases_round_trip_through_the_graph(tmp_path):
+    """
+    aliases is a plain multivalued string field (not a hash_id-reference list
+    like properties), so it's written to a native list column
+    (STRING[] — see db.py's _build_registry_ddl()) rather than an edge, and
+    NOT JSON-encoded into a STRING column: a bound string that looks like a
+    Cypher list literal gets silently reparsed and corrupted by the DB
+    engine. Confirm it survives the write/read round trip through the real
+    graph, not just in-memory.
+    """
+    conn = _conn(tmp_path)
+    insert_schema(conn, parse_linkml(FIXTURES / "comprehensive.yml"), "comprehensive", agent="tester")
+
+    prop_rows = conn.execute(
+        "MATCH (p:RegistryProperty {name: 'orcid'}) RETURN p.aliases"
+    ).get_all()
+    assert prop_rows[0][0] == ["ORCID iD"]
+
+    class_rows = conn.execute(
+        "MATCH (c:RegistryClass {name: 'Person'}) RETURN c.aliases"
+    ).get_all()
+    assert class_rows[0][0] == ["Investigator"]
 
 
 def test_reingesting_same_source_is_idempotent(tmp_path):
@@ -81,8 +105,8 @@ def test_required_does_not_affect_property_identity(tmp_path):
     assert len(rows) == 1                         # no duplicate node
 
     sources = conn.execute("""
-        MATCH (:RegistryProperty {name: 'age'})-[:HAS_PROVENANCE_P]->(pe:ProvenanceEntry)
-        RETURN pe.source
+        MATCH (:RegistryProperty {name: 'age'})-[:HAS_PROVENANCE_P]->(:ProvenanceEntry)-[:HAD_PRIMARY_SOURCE]->(ss:SchemaSource)
+        RETURN ss.label
     """).get_all()
     assert {r[0] for r in sources} == {"required_a", "required_b"}
 
