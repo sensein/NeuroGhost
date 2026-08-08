@@ -54,9 +54,10 @@ LinkML YAML
 intermediate dict            {classes: {...}, slots: {...}}
     │  build_registry_entities()  — compute content hashes
     ▼
-RegistryProperty / RegistryClass instances (Pydantic, hash_id already set)
+RegistryProperty / RegistryClass / Rule instances (Pydantic, hash_id already set)
     │  write_registry_entities()  — write-if-new, attach-provenance-if-new
     │  write_structural_edges()   — HAS_PROPERTY, SUBCLASS_OF
+    │  _write_rules()             — APPLIES_TO_P
     ▼
 LadybugDB graph
 ```
@@ -92,8 +93,12 @@ Converts the dict into real, hash-identified objects:
 - **Every entity gets one `ProvenanceEntry`** for this ingestion — `source`,
   `attributed_to` (agent), `generated_at`, `activity`, `registry_version` —
   entirely separate from the hash computation.
+- **A property that declares `required`/`multivalued`/`pattern`/min/max also
+  gets a `Rule`**, `applies_to` = that property's `hash_id`. A plain property
+  with none of these gets no `Rule` at all — see [Rule](#rule-usage-constraints-as-their-own-entity)
+  below.
 
-### 3. `write_registry_entities()` + `write_structural_edges()` (`neuro_ghost/db.py`)
+### 3. `write_registry_entities()` + `write_structural_edges()` + `_write_rules()` (`neuro_ghost/db.py`, `neuro_ghost/ingest_linkml.py`)
 
 For each entity: does a node with this `hash_id` already exist?
 - **No** → create it.
@@ -102,9 +107,11 @@ For each entity: does a node with this `hash_id` already exist?
   the same file from the same source twice adds nothing the second time).
 
 Then `HAS_PROPERTY` and `SUBCLASS_OF` edges get created from the resolved
-hash references. These two functions are shared between `ingest_linkml.py`
-and `seed.py` — schema.org is ingested through the exact same path, just with
-`source="schema.org"`.
+hash references, and `APPLIES_TO_P` from each `Rule` to the property it
+constrains. The first two are shared between `ingest_linkml.py` and
+`seed.py` — schema.org is ingested through the exact same path, just with
+`source="schema.org"` (though `seed.py` never builds any `Rule`s — schema.org's
+base vocabulary doesn't declare `required`/`multivalued`/etc. on its slots).
 
 ## The data model
 
@@ -117,16 +124,64 @@ and `seed.py` — schema.org is ingested through the exact same path, just with
 | `class_uri` / `slot_uri` | `RegistryClass` / `RegistryProperty` | Ontology IRI preserved from the source. **Not** part of the hash — two schemas using different IRIs (or none) for the same content still collapse to one node. |
 | `provenance` | both | List of `ProvenanceEntry`. Accumulates, never affects `hash_id`. |
 | `source`, `attributed_to`, `generated_at`, `activity`, `derived_from`, `registry_version` | `ProvenanceEntry` | PROV-O–grounded (`slot_uri: prov:wasAttributedTo` etc.). `registry_version` lives here, not on the entity — the same entity can be attested by different sources at different times, each under a different registry version, so a single scalar on the entity doesn't fit (same reasoning as dropping `source_label`). |
+| `applies_to`, `required`, `multivalued`, `pattern`, `minimum_value`, `maximum_value`, `function_body` | `Rule` | Identity-defining — see [Rule](#rule-usage-constraints-as-their-own-entity). |
 
 Field names were deliberately aligned with LinkML's own metamodel
 (`description`, `range`, `class_uri`/`slot_uri`, `is_a`, `abstract`) rather
 than inventing parallel terminology — e.g. `parse_linkml()` already produces
 `is_a` straight from `SchemaView`, so there's no translation step.
 
-**Deliberately not modeled yet:** `required`/`multivalued` used to live on
-`RegistryProperty` directly, which meant a property required in one schema's
-usage and optional in another's could never share a hash. They've been
-removed entirely — that's a **`Rule`** concern (still a stub), not identity.
+## Rule: usage constraints as their own entity
+
+`required`/`multivalued` used to live on `RegistryProperty` directly, which
+meant a property required in one schema's usage and optional in another's
+could never share a `hash_id`. They're not modeled on `RegistryProperty` at
+all now — a `Rule` is a separate content-addressed entity that references
+the property it constrains:
+
+```
+RegistryProperty "age"  (hash_id = A)
+        ▲
+        │ APPLIES_TO_P
+        │
+Rule { applies_to: A, required: true }  (hash_id = B)
+        ├── ProvenanceEntry{source: "bids", ...}
+        └── ProvenanceEntry{source: "dandi", ...}
+```
+
+- `applies_to` (the constrained property's `hash_id`) **is** part of the
+  `Rule`'s own hash — identical constraints on two *different* properties
+  are different rules, by design.
+- Same collapsing behavior as everything else: two sources declaring the
+  exact same constraints on the exact same property produce one `Rule` node
+  with two `ProvenanceEntry` records, not two `Rule`s
+  (`test_identical_rule_from_two_sources_shares_one_hash_id`).
+- A property with none of `required`/`multivalued`/`pattern`/min/max gets no
+  `Rule` at all — `build_registry_entities()`'s `_has_constraints()` gate
+  keeps unconstrained properties from accumulating empty, meaningless rules.
+- Scoped to `RegistryProperty` only for now (`applies_to: range: RegistryProperty`
+  in the meta-model) — class-level rules are a possible future extension,
+  not built. (A pre-existing, still-unused `APPLIES_TO` edge from `Rule` to
+  `RegistryClass` predates this and is a leftover placeholder for that.)
+- `required`/`multivalued` default to `false` rather than `null`
+  (`ifabsent: 'false'` in the meta-model) for the same reason `RegistryClass.abstract`
+  does: they're identity-defining, so a `null` would hash differently from an
+  explicit `false` and silently produce a second `Rule` for the same content.
+- Written through the same `entity_exists()`/`create_entity_node()`/
+  `write_provenance()` functions as `RegistryClass`/`RegistryProperty`/`ValueSet`
+  (`_write_rules()` in `ingest_linkml.py`, following the same pattern as
+  `_write_value_sets()`) — no separate code path.
+
+**`function_body`**: for constraints the declarative fields can't express
+(cross-field or business-logic validation), `Rule` also has a `function_body`
+slot holding Python source as plain text — same treatment as `pattern`, not a
+compiled/pickled/imported callable, so `Rule`'s identity stays a plain content
+hash with no dependency on code existing elsewhere. `parse_linkml()`/
+`build_registry_entities()` never sets it (LinkML schemas don't carry
+executable Python) — it's for `Rule`s built some other way, e.g. manually or
+by a future authoring tool (`test_rule_can_hold_a_python_function_body`).
+Nothing in this codebase executes it yet; this only adds the ability to
+save it.
 
 ## Alignment
 
@@ -169,7 +224,12 @@ the other layer does with it.
 takes this one step further, end to end: two schemas declare the exact same
 `age` slot except one marks it `required: true`. Ingesting both must produce
 exactly one `RegistryProperty` node, not two — proving `required` doesn't
-leak into identity, in the real graph, not just in an isolated object.
+leak into identity, in the real graph, not just in an isolated object. The
+same test also confirms where `required: true` *does* end up: one `Rule`,
+`APPLIES_TO_P` the "age" property.
+`test_identical_rule_from_two_sources_shares_one_hash_id` proves the
+content-addressing guarantee applies to `Rule` itself, the same way it does
+to `RegistryProperty`/`RegistryClass`.
 
 ## Open question: when should ProvenanceEntry.registry_version be set?
 
@@ -194,16 +254,17 @@ registry_version` stays `None` for now, pending a decision on the above.
 
 ## Known gaps (as of this writing)
 
-- **`index.html`** (frontend) still expects the pre-rework JSON shape
-  (`source` singular; `multivalued`/`required` on properties). A minimal
-  compat patch was written and then deliberately reverted — not worth fixing
-  until a proper UI pass.
 - **`derived_from`** on `ProvenanceEntry` is never populated — nothing yet
   detects "this hash supersedes that one" (would need an anchor like
   `(name, source)` to correlate an edit against prior content).
-- **`Rule`/`Transform`/`ValueSet`** are stubs (`hash_id`/`name`/`description`
-  only).
+- **`Transform`** is still a stub (`hash_id`/`name`/`description` only) —
+  `Rule` and `ValueSet` are real now (see above).
 - **`SemanticIdentity`/`PRIOR_VERSION*`** tables in `db.py`'s DDL are dead
   (superseded by content-hash identity) but not yet removed.
 - **`pandas`** isn't in `requirements.txt`, so `align.py`'s embedding cache
   silently no-ops (pre-existing gap).
+- **New `Rule`s/`ValueSet`s don't count toward `has_new_content`** in
+  `insert_schema()` — that check only looks at `classes_new`/`properties_new`,
+  so a re-ingestion whose *only* change is a new constraint or a new enum
+  value produces no `SchemaVersionSnapshot` bump. Pre-existing for `ValueSet`;
+  `Rule` inherits the same gap rather than fixing it in passing.

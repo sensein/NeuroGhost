@@ -131,11 +131,10 @@ class RegistryEntity(ConfiguredBaseModel):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
-    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform', 'PermissibleValue']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform']} })
+    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'PermissibleValue']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform']} })
     provenance: list[ProvenanceEntry] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects hash_id.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Relation']} })
     skos_mappings: Optional[list[SkosMapping]] = Field(default=None, description="""Semantic mappings to external vocabulary concepts.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
 
@@ -155,11 +154,10 @@ class RegistryClass(RegistryEntity):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
-    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform', 'PermissibleValue']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform']} })
+    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'PermissibleValue']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform']} })
     provenance: list[ProvenanceEntry] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects hash_id.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Relation']} })
     skos_mappings: Optional[list[SkosMapping]] = Field(default=None, description="""Semantic mappings to external vocabulary concepts.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
 
@@ -176,11 +174,10 @@ class RegistryProperty(RegistryEntity):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
-    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform', 'PermissibleValue']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform']} })
+    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'PermissibleValue']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform']} })
     provenance: list[ProvenanceEntry] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects hash_id.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Relation']} })
     skos_mappings: Optional[list[SkosMapping]] = Field(default=None, description="""Semantic mappings to external vocabulary concepts.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
 
@@ -212,7 +209,6 @@ class SkosMapping(ConfiguredBaseModel):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
     mapping_type: Optional[SkosMappingTypeEnum] = Field(default=None, description="""The kind of SKOS mapping relation this represents.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SkosMapping']} })
@@ -228,7 +224,6 @@ class Relation(ConfiguredBaseModel):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
     subject: str = Field(default=..., description="""hash_id of the entity this relation points from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Relation']} })
@@ -237,20 +232,28 @@ class Relation(ConfiguredBaseModel):
     provenance: list[ProvenanceEntry] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects hash_id.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Relation']} })
 
 
-class Rule(ConfiguredBaseModel):
+class Rule(RegistryEntity):
     """
-    STUB — a validation or business rule applicable to one or more registry entities (e.g. min/max value, pattern, required, multivalued constraints on a RegistryProperty). Slots intentionally minimal; scope TBD.
+    A validation/usage constraint that applies to a specific RegistryProperty (classes are a possible future extension) — required, multivalued, pattern, numeric bounds, or (when those aren't expressive enough) an arbitrary Python function. These don't live on RegistryProperty itself because they vary by usage: the same \"age\" property can be required in one source's schema and optional in another's, without being a different concept. A Rule is content- addressed like any other entity — the same constraints on the same property from two sources collapse to one Rule with two ProvenanceEntry records, exactly like RegistryProperty does.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://example.org/schema-registry-utils/meta-model'})
 
+    applies_to: str = Field(default=..., description="""The RegistryProperty this rule constrains (stored as hash_id FK, same pattern as is_a). Part of the content hash — a rule is defined by both its constraints and which property they apply to, so identical constraints on two different properties are different rules.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Rule']} })
+    required: Optional[bool] = Field(default=False, description="""Whether the property must be present.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Rule'], 'ifabsent': 'false'} })
+    multivalued: Optional[bool] = Field(default=False, description="""Whether the property can hold multiple values.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Rule'], 'ifabsent': 'false'} })
+    pattern: Optional[str] = Field(default=None, description="""Regular expression the property's value must match.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Rule']} })
+    minimum_value: Optional[float] = Field(default=None, description="""Minimum permitted numeric value, if the property is numeric.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Rule']} })
+    maximum_value: Optional[float] = Field(default=None, description="""Maximum permitted numeric value, if the property is numeric.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Rule']} })
+    function_body: Optional[str] = Field(default=None, description="""Python source implementing custom validation logic, for constraints the declarative fields above (required/multivalued/pattern/min/max) can't express. Stored as plain text, like `pattern` — a Rule's identity is still a plain content hash, with no dependency on code existing elsewhere. Not executed by anything in this codebase yet; this only adds the ability to save it.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Rule']} })
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
-    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform', 'PermissibleValue']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform']} })
+    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'PermissibleValue']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform']} })
+    provenance: list[ProvenanceEntry] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects hash_id.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Relation']} })
+    skos_mappings: Optional[list[SkosMapping]] = Field(default=None, description="""Semantic mappings to external vocabulary concepts.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
 
 
 class Transform(ConfiguredBaseModel):
@@ -262,11 +265,10 @@ class Transform(ConfiguredBaseModel):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
-    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform', 'PermissibleValue']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform']} })
+    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'PermissibleValue']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform']} })
 
 
 class PermissibleValue(ConfiguredBaseModel):
@@ -278,10 +280,9 @@ class PermissibleValue(ConfiguredBaseModel):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
-    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform', 'PermissibleValue']} })
+    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'PermissibleValue']} })
     meaning: Optional[str] = Field(default=None, description="""Ontology IRI this permissible value maps to (e.g. skos:exactMatch for the EXACT_MATCH value in SkosMappingTypeEnum).""", json_schema_extra = { "linkml_meta": {'domain_of': ['PermissibleValue']} })
 
 
@@ -295,11 +296,10 @@ class ValueSet(RegistryEntity):
     hash_id: str = Field(default=..., description="""Content-hash-derived identifier (format sha256:<hex>). A change in any identity-defining field produces a new hash_id; lineage is preserved via derived_from.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'SkosMapping',
                        'Relation',
-                       'Rule',
                        'Transform',
                        'PermissibleValue']} })
-    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform', 'PermissibleValue']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Rule', 'Transform']} })
+    name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'PermissibleValue']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform']} })
     provenance: list[ProvenanceEntry] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects hash_id.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Relation']} })
     skos_mappings: Optional[list[SkosMapping]] = Field(default=None, description="""Semantic mappings to external vocabulary concepts.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
 

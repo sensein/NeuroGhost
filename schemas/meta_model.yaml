@@ -26,8 +26,9 @@ imports:
 # ProvenanceEntry is a standalone node (one per source attestation) — an
 # entity accumulates a ProvenanceEntry per source rather than being tied to
 # a single source, which is how identity stays separate from provenance.
-# Rule, Transform, and ValueSet are stubs: present so the model shape is
-# visible, slots intentionally left minimal until that work is scoped.
+# Rule and ValueSet are scoped and real. Transform is still a stub: present
+# so the model shape is visible, slots intentionally left minimal until
+# that work is scoped.
 
 classes:
 
@@ -114,14 +115,26 @@ classes:
       - provenance
 
   Rule:
+    is_a: RegistryEntity
     description: >-
-      STUB — a validation or business rule applicable to one or more registry
-      entities (e.g. min/max value, pattern, required, multivalued constraints
-      on a RegistryProperty). Slots intentionally minimal; scope TBD.
+      A validation/usage constraint that applies to a specific
+      RegistryProperty (classes are a possible future extension) —
+      required, multivalued, pattern, numeric bounds, or (when those aren't
+      expressive enough) an arbitrary Python function. These don't live on
+      RegistryProperty itself because they vary by usage: the same "age"
+      property can be required in one source's schema and optional in
+      another's, without being a different concept. A Rule is content-
+      addressed like any other entity — the same constraints on the same
+      property from two sources collapse to one Rule with two
+      ProvenanceEntry records, exactly like RegistryProperty does.
     slots:
-      - hash_id
-      - name
-      - description
+      - applies_to
+      - required
+      - multivalued
+      - pattern
+      - minimum_value
+      - maximum_value
+      - function_body
 
   Transform:
     description: >-
@@ -429,6 +442,52 @@ slots:
     description: >-
       The set of permissible values for this ValueSet. Stored as hash_id
       references; HAS_PERMISSIBLE_VALUE edges are the graph traversal.
+
+  # --- Rule slots ------------------------------------------------------------
+
+  applies_to:
+    range: RegistryProperty
+    required: true
+    description: >-
+      The RegistryProperty this rule constrains (stored as hash_id FK, same
+      pattern as is_a). Part of the content hash — a rule is defined by both
+      its constraints and which property they apply to, so identical
+      constraints on two different properties are different rules.
+
+  required:
+    range: boolean
+    # See `abstract`'s comment: identity-defining booleans need an explicit
+    # default so a null (from an omitted field) never hashes differently
+    # from an explicit false.
+    ifabsent: 'false'
+    description: Whether the property must be present.
+
+  multivalued:
+    range: boolean
+    ifabsent: 'false'
+    description: Whether the property can hold multiple values.
+
+  pattern:
+    range: string
+    description: Regular expression the property's value must match.
+
+  minimum_value:
+    range: float
+    description: Minimum permitted numeric value, if the property is numeric.
+
+  maximum_value:
+    range: float
+    description: Maximum permitted numeric value, if the property is numeric.
+
+  function_body:
+    range: string
+    description: >-
+      Python source implementing custom validation logic, for constraints
+      the declarative fields above (required/multivalued/pattern/min/max)
+      can't express. Stored as plain text, like `pattern` — a Rule's
+      identity is still a plain content hash, with no dependency on code
+      existing elsewhere. Not executed by anything in this codebase yet;
+      this only adds the ability to save it.
 
 # ---------------------------------------------------------------------------
 # Enums
