@@ -1,0 +1,1056 @@
+id: https://w3id.org/proteus/meta-model
+name: proteus_meta_model
+version: 4.0.0
+title: PROTEUS Meta-Model (v4)
+description: >-
+  Meta-model for PROTEUS (Provenance-Rich Ontology-agnostic Typed Entity
+  Unification System): a federated schema registry and mapping commons.
+
+  LINEAGE
+    v1  initial colleague draft
+    v2  PROTEUS redesign (content-addressing, SSSOM mappings, source
+        anchoring, SlotAssignment, structured units)
+    v3  Dorota's NeuroGhost revision (HashSubset mechanism, PROV-O-aligned
+        provenance, QUDT quantity-kind unit modeling, hash-stability
+        engineering; but merge-by-hash unification, non-SSSOM mappings,
+        no version anchoring)
+    v4  this file: v2 architecture + v3 mechanisms. Identity stays
+        source-anchored; the hash scope is now machine-readable.
+
+  DESIGN PRINCIPLES
+
+  1. Content-addressed, immutable definitional entities. hash_id is
+     derived from the entity's identity slots ONLY. Which slots those are
+     is no longer a prose convention: every identity slot is tagged
+     in_subset: HashSubset (mechanism adopted from v3), and the hashing
+     code derives the field set from that metadata. "Modification" is the
+     creation of a new entity linked via provenance.derived_from. There
+     are therefore no modified_by/modified_at slots.
+
+  2. Identity is SCHEMA-ANCHORED and VERSION-FREE (explicit rejection
+     of v3's merge-by-hash; also a tightening of v2, whose prose hash
+     rule left this ambiguous). defined_in_schema is in HashSubset, so
+     identical definitional content extracted from two DIFFERENT
+     schemas yields two distinct entities: cross-source correspondence
+     — even a byte-identical one — is NEVER expressed as node identity;
+     it is always an auditable Mapping record with justification,
+     confidence, and review status. Nothing ever silently disappears
+     from the alignment problem. The schema VERSION is deliberately NOT
+     in the hash: an element unchanged between two versions of the same
+     schema keeps its hash_id, so accepted mappings persist across
+     re-registration and only changed elements re-enter the matching
+     queue — the monotone-growth property the pipeline's Stage 6
+     idempotence depends on. Version membership is recorded on
+     SourceSchemaVersion.entities (the version manifest), not on the
+     entity.
+
+  3. Strict separation of DEFINITIONAL content (inside the hash) from
+     EPISTEMIC annotations (Mapping records, review status) and from
+     EDITORIAL annotations (comments), which live outside the hash.
+     Adding or retracting a mapping never changes any entity's identity.
+
+  4. Mappings are SSSOM-conformant. Slot names and URIs follow the SSSOM
+     specification; records exported from this model are valid SSSOM and
+     round-trip through sssom-py. Mappings are standalone records (never
+     embedded in entities), carry an explicit subject_id, use the semapv
+     justification vocabulary, and are grouped into MappingSets so that
+     one matcher run or curation campaign has set-level provenance and
+     can be superseded wholesale. The registry adds one local extension
+     (review_status) for the curation lifecycle.
+
+  5. Source schemas are first-class AND versioned. Every registered
+     entity is anchored to its SourceSchema by identity
+     (defined_in_schema, hashed) and to each SourceSchemaVersion that
+     contains it via the version's entity manifest
+     (SourceSchemaVersion.entities) — the named-graph partition and the
+     unit of cross-version diffing (diff = manifest set-difference).
+     This replaces v3's SchemaSource-only anchoring and the write-only
+     SchemaVersionSnapshot. The hub/bridge vocabulary is
+     itself just a registered schema, so schema->hub and schema->schema
+     mappings are structurally identical.
+
+  6. Hash stability is an engineering concern, not an afterthought
+     (adopted from v3): boolean identity slots declare ifabsent so null
+     and false cannot hash differently; multivalued identity slots must
+     be passed explicitly to the hash function, which enforces this;
+     entity references inside the hash are by hash_id, so hashes compose
+     Merkle-style (editing a property yields a new property hash and, in
+     turn, new hashes for classes that assign it — that cascade IS the
+     versioning mechanism, recorded via derived_from).
+
+#------License-------
+# We can also choose MIT License (TBD)
+license: https://creativecommons.org/publicdomain/zero/1.0/
+
+#-----Prefixes-------
+prefixes:
+  linkml: https://w3id.org/linkml/
+  skos: http://www.w3.org/2004/02/skos/core#
+  prov: http://www.w3.org/ns/prov#
+  dcterms: http://purl.org/dc/terms/
+  pav: http://purl.org/pav/
+  sssom: https://w3id.org/sssom/
+  semapv: https://w3id.org/semapv/vocab/
+  qudt: http://qudt.org/schema/qudt/
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  owl: http://www.w3.org/2002/07/owl#
+  proteus: https://w3id.org/proteus/meta-model/
+
+default_prefix: proteus
+default_range: string
+
+imports:
+  - linkml:types
+
+# ===========================================================================
+# SUBSETS
+# ===========================================================================
+
+subsets:
+
+  HashSubset:
+    description: >-
+      Slots that are part of a RegistryEntity subclass's content hash
+      (hash_id). The hashing implementation derives each class's identity
+      field set from in_subset metadata rather than from a hardcoded list
+      or a prose convention. Mechanism adopted from v3.
+
+      v4 scope decision (differs from v3, and tightens v2's prose
+      rule): defined_in_schema, source_native_id, aliases, and
+      declared_uri are IN the hash — they are part of what the source
+      says, and keeping the SCHEMA in scope is what makes identity
+      source-anchored (no cross-source merge-by-hash). The schema
+      VERSION is OUT: unchanged content across versions of one schema
+      keeps its hash_id (monotone growth). comments (editorial notes)
+      and provenance are OUT. Mappings are not slots on entities at
+      all, so they cannot enter the hash.
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+
+classes:
+
+  # -------------------------------------------------------------------------
+  # Registry backbone: the schemas being registered
+  # -------------------------------------------------------------------------
+
+  SourceSchema:
+    class_uri: proteus:SourceSchema
+    description: >-
+      A schema as a social/publishing artifact, independent of version:
+      who maintains it, where it lives. Mutable administrative record,
+      identified by id (not content-addressed). The hub/bridge vocabulary
+      is registered as a SourceSchema like any other, distinguished only
+      by is_hub = true.
+    slots:
+      - id
+      - label
+      - title
+      - publisher
+      - contact
+      - homepage
+      - is_hub
+
+  SourceSchemaVersion:
+    class_uri: proteus:SourceSchemaVersion
+    description: >-
+      An immutable, registered version of a SourceSchema. Each version is
+      the anchor (and natural named-graph partition) for the registry
+      entities extracted from it, and the unit of cross-version diffing.
+
+      v4 note: this class deliberately replaces both of v3's version
+      mechanisms — SchemaSource.source_version (frozen at first
+      ingestion, per v3's own note) and SchemaVersionSnapshot (write-only,
+      self-invented semver, flagged questionable in v3 itself). Version
+      identity here comes from the source artifact: version_label is the
+      source's own declared version, artifact_hash is the checksum of the
+      ingested file, and version_iri may incorporate it.
+    slots:
+      - version_iri
+      - of_schema
+      - version_label
+      - source_format
+      - mime_type
+      - namespace
+      - issued
+      - prior_version
+      - artifact_hash
+      - entities
+
+  # -------------------------------------------------------------------------
+  # Definitional entities (content-addressed, immutable, source-anchored)
+  # -------------------------------------------------------------------------
+
+  RegistryEntity:
+    abstract: true
+    class_uri: proteus:RegistryEntity
+    description: >-
+      Common base for content-addressed, immutable, provenance-tracked
+      definitional objects. hash_id is computed over a canonical
+      serialization of the slots tagged in_subset: HashSubset, which
+      includes defined_in_schema — so the same content in two DIFFERENT
+      schemas is two entities, related by Mappings, never by shared
+      identity — and excludes the schema version, so the same content
+      across versions of ONE schema is one persistent entity. Which
+      versions contain it is recorded on SourceSchemaVersion.entities;
+      which version's ingestion first produced it is recorded in
+      provenance.had_primary_source. Epistemic annotations (Mapping
+      records) are standalone and reference entities by hash_id;
+      annotating an entity never changes its identity.
+    slots:
+      - hash_id
+      - name
+      - source_native_id
+      - aliases
+      - definition
+      - comments
+      - declared_uri
+      - defined_in_schema
+      - provenance
+
+  RegistryClass:
+    is_a: RegistryEntity
+    class_uri: proteus:RegistryClass
+    description: >-
+      A registered class (object type / concept), e.g.
+      "SpectroscopicObservation". Which properties it carries, and with
+      what class-local constraints, is expressed via slot_assignments (an
+      association object), so the same RegistryProperty can be reused
+      across classes with different cardinality or requiredness. Because
+      entities are per-source, these constraints are definitional: what
+      one schema requires and another leaves optional are simply facts
+      about two different entities, connected by a Mapping. (This is why
+      v4 does not need v3's Rule stub.)
+    slots:
+      - slot_assignments
+      - parent_class
+      - mixins
+      - relations
+      - abstract
+
+  RegistryProperty:
+    is_a: RegistryEntity
+    class_uri: proteus:RegistryProperty
+    description: >-
+      A registered property (data element / attribute), e.g. "z_spec".
+      Typing is structured: value_type is an XSD datatype CURIE or the
+      hash_id of a ValueSet; unit is a structured UnitOfMeasure
+      resolvable to QUDT/UCUM. Both are load-bearing for alignment
+      (datatype compatibility signal; unit compatibility HARD VETO —
+      never a score).
+    slots:
+      - value_type
+      - unit
+
+  ValueSet:
+    is_a: RegistryEntity
+    class_uri: proteus:ValueSet
+    description: >-
+      A controlled set of permissible values, usable as a
+      RegistryProperty value_type (referenced by hash_id). Permissible
+      values are inlined and participate in the ValueSet's hash: a
+      changed value set is a new ValueSet (v4 keeps v2's inlining rather
+      than v3's content-addressed PermissibleValue nodes, whose sharing
+      semantics only paid off under merge-by-hash — and whose inherited
+      required description blocked ingestion of the many real-world enums
+      that lack per-value definitions).
+    slots:
+      - permissible_values
+
+  PermissibleValue:
+    class_uri: proteus:PermissibleValue
+    description: >-
+      One allowed value within a ValueSet. Plain inlined object, not a
+      RegistryEntity; text is required, definition is not (see ValueSet).
+    slots:
+      - text
+      - value_meaning
+      - value_definition
+
+  SlotAssignment:
+    class_uri: proteus:SlotAssignment
+    description: >-
+      Association object attaching a RegistryProperty to a RegistryClass
+      with class-local constraints. Part of the class's definitional
+      content: changing an assignment legitimately produces a new class
+      hash_id. Constraint compatibility (requiredness, cardinality) is an
+      alignment signal for class matching.
+    slots:
+      - property
+      - required
+      - multivalued
+      - minimum_cardinality
+      - maximum_cardinality
+      - constraint_expression
+
+  UnitOfMeasure:
+    class_uri: qudt:Unit
+    description: >-
+      Structured unit of measure for a RegistryProperty, inlined into the
+      property (and into its hash) rather than content-addressed on its
+      own. Field set merges v2 and v3: qudt_unit (the unit IRI itself,
+      e.g. unit:DEG — the direct key into QUDT dimension vectors) plus
+      v3's ucum_code and has_quantity_kind. has_quantity_kind lets
+      incommensurable units be vetoed outright on quantity kind,
+      independent of whether a conversion factor is known; qudt_unit and
+      ucum_code drive convertibility checks. At least one of qudt_unit or
+      ucum_code should be provided; the remaining fields are display.
+    slots:
+      - unit_label
+      - qudt_unit
+      - ucum_code
+      - has_quantity_kind
+      - symbol
+      - abbreviation
+
+  Relation:
+    class_uri: proteus:Relation
+    description: >-
+      A DEFINITIONAL directed relationship asserted by the source schema
+      itself (e.g. Detector isPartOf Instrument). Part of what the source
+      says, so it is embedded in the subject class and participates in
+      its hash. Restored from v2 (v3 removed it): definitional relations
+      are structural-channel evidence — they populate the neighborhood
+      graph that similarity flooding / personalized PageRank propagates
+      over. Cross-schema similarity claims do NOT belong here — those are
+      epistemic and go in Mapping.
+    slots:
+      - relation_predicate
+      - object_entity
+      - relation_provenance
+
+  # -------------------------------------------------------------------------
+  # Epistemic annotations: the mapping layer (SSSOM-conformant)
+  # -------------------------------------------------------------------------
+
+  Mapping:
+    class_uri: proteus:Mapping
+    description: >-
+      A single semantic mapping between two entities, SSSOM-conformant.
+      Subject and object are explicit CURIEs/IRIs: registry hash_ids for
+      schema<->schema and schema<->hub mappings, or external vocabulary
+      IRIs for outward mappings — one uniform record type for all three
+      cases. Standalone by design: never embedded in an entity (v4
+      rejects v3's skos_mappings-on-the-entity pattern, which had no
+      subject_id and could not round-trip through sssom-py), so
+      proposing, accepting, or retracting mappings never perturbs
+      content-addressed identity.
+
+      Source-declared external correspondences (e.g. LinkML
+      exact_mappings in the ingested schema) are ALSO materialized as
+      Mapping records at ingestion time (justification
+      MANUAL_MAPPING_CURATION, author = the source schema's agent), so
+      there is exactly one place to query correspondences. The entity's
+      own declared_uri is the only semantic identity claim that lives on
+      the entity itself.
+    slots:
+      - mapping_id
+      - subject_id
+      - subject_label
+      - predicate_id
+      - object_id
+      - object_label
+      - mapping_justification
+      - confidence
+      - mapping_tool
+      - match_string
+      - author_id
+      - reviewer_id
+      - mapping_date
+      - review_status
+      - mapping_comment
+
+  MappingSet:
+    class_uri: proteus:MappingSet
+    description: >-
+      A named collection of Mapping records sharing provenance — e.g. one
+      run of proteus-align over a schema-version pair, or one curation
+      campaign. Maps onto an SSSOM mapping set (one TSV, one named graph
+      in the store) and is the unit of wholesale supersession when a
+      schema version is re-registered and re-aligned. Restored from v2
+      (absent in v3, which had nowhere to receive a pipeline run).
+    slots:
+      - mapping_set_id
+      - mapping_set_description
+      - mappings
+      - mapping_provider
+      - mapping_set_license
+
+  # -------------------------------------------------------------------------
+  # Provenance
+  # -------------------------------------------------------------------------
+
+  ProvenanceInfo:
+    class_uri: proteus:ProvenanceInfo
+    description: >-
+      Creation and derivation provenance for an immutable entity, using
+      W3C PROV-O terms throughout (naming adopted from v3; v2's pav:
+      slots retired). No modification slots by design: a "modified"
+      entity is a new entity whose derived_from points at its
+      predecessor(s). Exactly one ProvenanceInfo per entity — v3's
+      accumulate-one-ProvenanceEntry-per-source pattern exists to serve
+      merged entities, which v4 does not have; an entity's schema is
+      fixed by defined_in_schema, and had_primary_source (adopted from
+      v3) records the exact SourceSchemaVersion whose ingestion first
+      produced it.
+    slots:
+      - was_attributed_to
+      - generated_at_time
+      - was_generated_by
+      - had_primary_source
+      - derived_from
+
+# ===========================================================================
+# SLOTS
+# ===========================================================================
+
+slots:
+
+  # --- identifiers ---------------------------------------------------------
+
+  id:
+    identifier: true
+    range: uriorcurie
+    description: >-
+      Stable identifier for a SourceSchema (mutable administrative
+      record; not content-addressed).
+
+  version_iri:
+    identifier: true
+    range: uriorcurie
+    description: >-
+      Immutable IRI for this exact schema version (minted per
+      registration; may incorporate artifact_hash).
+
+  hash_id:
+    identifier: true
+    required: true
+    range: uriorcurie
+    description: >-
+      Content-hash-derived CURIE for this entity, computed over a
+      canonical serialization of the slots tagged in_subset: HashSubset.
+      Recommended form: proteus:sha256-<hex>. Because defined_in_schema
+      is in scope and the version is not, hash_ids are unique per
+      (content, schema) and stable across versions of that schema.
+
+  mapping_id:
+    identifier: true
+    required: true
+    range: uriorcurie
+    description: Identifier for this mapping record.
+
+  mapping_set_id:
+    identifier: true
+    required: true
+    range: uriorcurie
+    description: Identifier for this mapping set.
+
+  # --- SourceSchema / SourceSchemaVersion ---------------------------------
+
+  label:
+    description: >-
+      Short identifier label for this schema (e.g. "sdss", "desi",
+      "bids"), convenient for filenames, prefixes, and CLI arguments.
+      Adopted from v3. Distinct from title.
+
+  title:
+    required: true
+    description: Human-readable title of the schema.
+
+  publisher:
+    description: Organization or group that maintains the schema.
+
+  contact:
+    description: Contact point for the schema (person, list, or URL).
+
+  homepage:
+    range: uri
+    description: Documentation or landing page for the schema.
+
+  is_hub:
+    range: boolean
+    ifabsent: 'false'
+    description: >-
+      True if this schema is (part of) the registry's core/bridge
+      vocabulary that other schemas anchor to. Not auto-derived — set
+      deliberately; which schema serves as hub is a curatorial decision.
+
+  of_schema:
+    required: true
+    range: SourceSchema
+    inlined: false
+    description: The SourceSchema this version belongs to.
+
+  version_label:
+    description: >-
+      The source's OWN declared version designation (e.g. "2.1",
+      "2026-07"), preserved verbatim. Never invented or bumped by the
+      registry (v3's _bump_semver problem).
+
+  source_format:
+    range: SourceFormatEnum
+    description: The native format the schema was authored/ingested in.
+
+  mime_type:
+    description: >-
+      MIME type of the ingested schema artifact (e.g.
+      "application/yaml"). Adopted from v3.
+
+  namespace:
+    range: uri
+    description: Base namespace/prefix expansion used by this schema version.
+
+  issued:
+    range: datetime
+    slot_uri: dcterms:issued
+    description: When this version was released or registered.
+
+  prior_version:
+    range: SourceSchemaVersion
+    inlined: false
+    slot_uri: pav:previousVersion
+    description: The immediately preceding registered version, if any.
+
+  artifact_hash:
+    description: >-
+      Checksum of the ingested source artifact (e.g. sha256 of the
+      file), for integrity, deduplication, and idempotent re-ingestion
+      ("unchanged, skip" is decided here — no snapshot history needed).
+
+  # --- RegistryEntity core -------------------------------------------------
+
+  name:
+    required: true
+    slot_uri: skos:prefLabel
+    in_subset:
+      - HashSubset
+    description: Preferred human-readable label for this entity.
+
+  source_native_id:
+    in_subset:
+      - HashSubset
+    description: >-
+      The verbatim identifier of this element in its source schema (e.g.
+      the raw column/field name "z_spec"). Preserve exactly; lexical
+      blocking and matching depend on it. Restored from v2 — v3 had no
+      home for it. In the hash: it is part of what the source says.
+
+  aliases:
+    multivalued: true
+    slot_uri: skos:altLabel
+    in_subset:
+      - HashSubset
+    description: >-
+      Alternative labels, synonyms, abbreviations, preserved from the
+      source schema. Lexical-channel evidence (alias overlap signal).
+      In the hash in v4: v3 excluded aliases from identity solely so
+      cross-source entities could collapse to one node; with
+      source-anchored identity that motivation is gone, and
+      source-supplied synonyms are definitional content. NOTE for the
+      hashing implementation: multivalued identity slots must be passed
+      explicitly (no null default) and canonically ordered.
+
+  definition:
+    required: true
+    slot_uri: skos:definition
+    in_subset:
+      - HashSubset
+    description: >-
+      Human-readable definition. Required, and worth enforcing
+      seriously: definitions are primary evidence for embedding-based
+      alignment.
+
+  comments:
+    multivalued: true
+    slot_uri: skos:note
+    description: >-
+      Additional notes, scope statements, editorial remarks. NOT in the
+      hash: editorial annotation, not definitional content.
+
+  declared_uri:
+    range: uriorcurie
+    in_subset:
+      - HashSubset
+    description: >-
+      The ontology IRI the source schema itself declares for this
+      element (LinkML class_uri/slot_uri, JSON-LD @id, etc.), preserved
+      verbatim. Primary input to the declared-semantics scoring signal.
+      Adopted from v3's class_uri/slot_uri, with two changes: one slot
+      for all entity kinds, and IN the hash — under source-anchored
+      identity there is no merge for it to obstruct, and a source
+      changing its declared semantics has, definitionally, changed the
+      element. (This also removes v3's overwrite hazard, where merging
+      entities with different declared URIs silently dropped one.)
+
+  defined_in_schema:
+    required: true
+    range: SourceSchema
+    inlined: false
+    in_subset:
+      - HashSubset
+    description: >-
+      The SourceSchema this entity belongs to. IN the hash — this single
+      line is the anti-merge decision: identical content in two
+      different schemas is two entities, and their correspondence is a
+      Mapping. Deliberately the SCHEMA, not the version: version
+      membership lives on SourceSchemaVersion.entities so that
+      unchanged elements persist across re-registration.
+
+  entities:
+    multivalued: true
+    range: uriorcurie
+    description: >-
+      The version manifest: hash_ids of every RegistryEntity extracted
+      from this schema version. Populates the version's named graph;
+      cross-version diff is the set-difference of two manifests, and
+      only hash_ids new in the manifest enter the matching queue on
+      re-registration. Membership lives here, not on the entity, so
+      re-registration never touches (or re-hashes) unchanged entities.
+
+  provenance:
+    required: true
+    range: ProvenanceInfo
+    inlined: true
+    description: >-
+      Creation/derivation provenance for this entity. Never in the hash.
+
+  # --- RegistryClass structure --------------------------------------------
+
+  slot_assignments:
+    multivalued: true
+    range: SlotAssignment
+    inlined: true
+    inlined_as_list: true
+    in_subset:
+      - HashSubset
+    description: >-
+      Properties attached to this class, with class-local constraints.
+      Properties are referenced by hash_id inside each assignment, so
+      class hashes compose Merkle-style over property hashes.
+
+  parent_class:
+    range: RegistryClass
+    inlined: false
+    slot_uri: linkml:is_a
+    in_subset:
+      - HashSubset
+    description: >-
+      The class this class specializes (single inheritance; stored as
+      hash_id reference).
+
+  mixins:
+    multivalued: true
+    range: RegistryClass
+    inlined: false
+    slot_uri: linkml:mixins
+    in_subset:
+      - HashSubset
+    description: Additional classes mixed into this class.
+
+  relations:
+    multivalued: true
+    range: Relation
+    inlined: true
+    inlined_as_list: true
+    in_subset:
+      - HashSubset
+    description: Definitional relations from this class to other entities.
+
+  abstract:
+    range: boolean
+    slot_uri: linkml:abstract
+    ifabsent: 'false'
+    in_subset:
+      - HashSubset
+    description: >-
+      Whether this registered class is itself declared abstract by its
+      source. Adopted from v3, including the hash-stability rationale:
+      identity-defining booleans declare ifabsent so a null can never
+      hash differently from an explicit false.
+
+  # --- SlotAssignment ------------------------------------------------------
+
+  property:
+    required: true
+    range: RegistryProperty
+    inlined: false
+    description: The property being attached to the class (hash_id reference).
+
+  required:
+    range: boolean
+    ifabsent: 'false'
+    description: Whether the property is mandatory on this class.
+
+  multivalued:
+    range: boolean
+    ifabsent: 'false'
+    description: Whether the property may have multiple values on this class.
+
+  minimum_cardinality:
+    range: integer
+    description: Minimum number of values, if constrained.
+
+  maximum_cardinality:
+    range: integer
+    description: Maximum number of values, if constrained.
+
+  constraint_expression:
+    description: >-
+      Optional machine-evaluable constraint (e.g. a pattern or numeric
+      range expression) applying to this property on this class.
+
+  # --- RegistryProperty typing --------------------------------------------
+
+  value_type:
+    required: true
+    range: uriorcurie
+    in_subset:
+      - HashSubset
+    description: >-
+      An XSD datatype CURIE (e.g. xsd:float, xsd:string) or the hash_id
+      of a ValueSet for enumerated values. Typed as uriorcurie on
+      purpose (v3's plain-string range reintroduced "float" vs
+      "xsd:float" vs "double" ambiguity): datatype compatibility is an
+      alignment signal and incompatibility a veto, so the value space
+      must be canonical. Ingestion normalizes source-native type names
+      to XSD CURIEs.
+
+  unit:
+    range: UnitOfMeasure
+    inlined: true
+    slot_uri: qudt:unit
+    in_subset:
+      - HashSubset
+    description: >-
+      Structured unit of measure, if applicable. Drives the unit veto —
+      a HARD FILTER, never a score.
+
+  unit_label:
+    description: Display label for the unit (e.g. "deg", "km/s/Mpc").
+
+  qudt_unit:
+    range: uriorcurie
+    description: >-
+      QUDT unit IRI (e.g. unit:DEG) — the direct key into QUDT dimension
+      vectors and conversion factors.
+
+  ucum_code:
+    slot_uri: qudt:ucumCode
+    description: >-
+      UCUM code for the unit (e.g. "deg", "km.s-1.Mpc-1"). Compact and
+      machine-parseable; resolvable to QUDT when qudt_unit is absent.
+
+  has_quantity_kind:
+    range: uriorcurie
+    slot_uri: qudt:hasQuantityKind
+    description: >-
+      IRI naming the dimension/kind of quantity measured (e.g. QUDT
+      quantity-kind IRI for "PlaneAngle" or "Velocity"). Adopted from
+      v3: lets incommensurable units be vetoed outright on quantity
+      kind, independent of whether a conversion factor is known.
+
+  symbol:
+    slot_uri: qudt:symbol
+    description: Unit symbol (e.g. "Ω", "°"). Adopted from v3.
+
+  abbreviation:
+    slot_uri: qudt:abbreviation
+    description: >-
+      Short ASCII abbreviation for the unit, for contexts where
+      non-ASCII symbols are problematic. Adopted from v3.
+
+  # --- ValueSet ------------------------------------------------------------
+
+  permissible_values:
+    multivalued: true
+    range: PermissibleValue
+    inlined: true
+    inlined_as_list: true
+    in_subset:
+      - HashSubset
+    description: The allowed values in this value set (inlined; in the hash).
+
+  text:
+    required: true
+    description: The literal value as it appears in data.
+
+  value_meaning:
+    range: uriorcurie
+    description: External concept this value denotes, if known.
+
+  value_definition:
+    description: >-
+      Human-readable definition of this value. Deliberately optional:
+      real-world enums frequently lack per-value definitions and must
+      still ingest.
+
+  # --- Relation ------------------------------------------------------------
+
+  relation_predicate:
+    required: true
+    range: uriorcurie
+    description: >-
+      Relation type as a CURIE (e.g. a hub-vocabulary or external
+      predicate). CURIE rather than free text so relations are
+      queryable. (Named relation_predicate rather than predicate to
+      avoid any collision with SSSOM's predicate_id.)
+
+  object_entity:
+    required: true
+    range: RegistryEntity
+    inlined: false
+    description: The entity the relation points to (hash_id reference).
+
+  relation_provenance:
+    range: ProvenanceInfo
+    inlined: true
+    description: Provenance of this relation assertion.
+
+  # --- Mapping (SSSOM-conformant) -----------------------------------------
+
+  subject_id:
+    required: true
+    range: uriorcurie
+    slot_uri: sssom:subject_id
+    description: >-
+      CURIE of the mapping subject (registry hash_id or external IRI).
+      Explicit and required: a mapping is a standalone record, never
+      implied by an owning entity (v3's structural gap).
+
+  subject_label:
+    slot_uri: sssom:subject_label
+    description: Label of the subject at mapping time (denormalized for review).
+
+  predicate_id:
+    required: true
+    range: MappingPredicateEnum
+    slot_uri: sssom:predicate_id
+    description: The mapping relation.
+
+  object_id:
+    required: true
+    range: uriorcurie
+    slot_uri: sssom:object_id
+    description: CURIE of the mapping object (registry hash_id or external IRI).
+
+  object_label:
+    slot_uri: sssom:object_label
+    description: Label of the object at mapping time (denormalized for review).
+
+  mapping_justification:
+    required: true
+    range: MappingJustificationEnum
+    slot_uri: sssom:mapping_justification
+    description: >-
+      The semapv process that produced this mapping. A controlled
+      vocabulary, not a free string (v4 rejects v3's plain-string
+      justification): the pipeline's separation of statistical vs.
+      declared-semantics vs. curated provenance, the review queue, and
+      predicate assignment all key off these terms, and SSSOM requires
+      them.
+
+  confidence:
+    range: float
+    minimum_value: 0.0
+    maximum_value: 1.0
+    slot_uri: sssom:confidence
+    description: >-
+      Score in [0,1] assigned by the producing process. Deliberately
+      optional: a manually-declared mapping may carry no numeric score,
+      and a missing confidence is MISSING, not zero.
+
+  mapping_tool:
+    slot_uri: sssom:mapping_tool
+    description: Name/version of the matcher that proposed this mapping.
+
+  match_string:
+    multivalued: true
+    slot_uri: sssom:match_string
+    description: The strings/evidence on which the match was made.
+
+  author_id:
+    range: uriorcurie
+    slot_uri: sssom:author_id
+    description: Agent responsible for creating the mapping.
+
+  reviewer_id:
+    range: uriorcurie
+    slot_uri: sssom:reviewer_id
+    description: >-
+      Agent who reviewed the mapping, once curated. Required in practice
+      for any transition to ACCEPTED/REJECTED: an acceptance with no
+      accountable reviewer is not a curation event.
+
+  mapping_date:
+    range: date
+    slot_uri: sssom:mapping_date
+    description: Date the mapping was asserted.
+
+  review_status:
+    range: ReviewStatusEnum
+    description: >-
+      REGISTRY EXTENSION (proteus, not sssom): lifecycle state of this
+      mapping in the curation workflow. The pipeline only ever emits
+      PROPOSED; queries choose their rigor by filtering on this together
+      with predicate_id and confidence.
+
+  mapping_comment:
+    slot_uri: sssom:comment
+    description: Free-text note on this mapping.
+
+  # --- MappingSet ----------------------------------------------------------
+
+  mapping_set_description:
+    slot_uri: dcterms:description
+    description: What this mapping set contains and why it exists.
+
+  mappings:
+    multivalued: true
+    range: Mapping
+    inlined: true
+    inlined_as_list: true
+    description: The mapping records in this set.
+
+  mapping_provider:
+    range: uri
+    slot_uri: sssom:mapping_provider
+    description: URL of the party or pipeline providing this set.
+
+  mapping_set_license:
+    range: uri
+    slot_uri: dcterms:license
+    description: License under which this mapping set is distributed.
+
+  # --- ProvenanceInfo (W3C PROV-O terms; naming adopted from v3) -----------
+
+  was_attributed_to:
+    required: true
+    slot_uri: prov:wasAttributedTo
+    description: Agent (person or pipeline) that created this entity.
+
+  generated_at_time:
+    required: true
+    range: datetime
+    slot_uri: prov:generatedAtTime
+    description: ISO-8601 creation timestamp.
+
+  was_generated_by:
+    slot_uri: prov:wasGeneratedBy
+    description: >-
+      The activity that produced this entity, e.g. "ingestion",
+      "manual", "alignment".
+
+  had_primary_source:
+    range: SourceSchemaVersion
+    inlined: false
+    slot_uri: prov:hadPrimarySource
+    description: >-
+      The SourceSchemaVersion whose ingestion first produced this
+      entity — a real entity-to-entity PROV-O link, adopted from v3.
+      NOT in the hash (it is provenance): the entity persists unchanged
+      into later versions via the manifest, without re-hashing.
+
+  derived_from:
+    multivalued: true
+    range: uriorcurie
+    slot_uri: prov:wasDerivedFrom
+    description: >-
+      hash_ids of predecessor entities. This is the versioning
+      mechanism: an edited entity is a new hash_id derived_from the old
+      one; a re-registered schema version yields new entities
+      derived_from their predecessors in the prior version.
+
+# ===========================================================================
+# ENUMS
+# ===========================================================================
+
+enums:
+
+  MappingPredicateEnum:
+    description: >-
+      Allowed mapping relations. SKOS graded vocabulary plus
+      owl:equivalentClass for the strict-logical case (restored from v2;
+      absent in v3, leaving the reasoner's logical-repair pass with no
+      strict-equivalence predicate to consume). Direction convention
+      follows SKOS: subject broadMatch object means the OBJECT is the
+      broader concept.
+    permissible_values:
+      EXACT_MATCH:
+        meaning: skos:exactMatch
+        description: Subject and object are interchangeable across applications.
+      CLOSE_MATCH:
+        meaning: skos:closeMatch
+        description: Similar enough to interchange in some applications; NOT transitive.
+      BROAD_MATCH:
+        meaning: skos:broadMatch
+        description: The object is broader than the subject.
+      NARROW_MATCH:
+        meaning: skos:narrowMatch
+        description: The object is narrower than the subject.
+      RELATED_MATCH:
+        meaning: skos:relatedMatch
+        description: Associatively related, neither equivalence nor hierarchy.
+      EQUIVALENT_CLASS:
+        meaning: owl:equivalentClass
+        description: >-
+          Strict logical equivalence; use sparingly and only for
+          human-validated mappings intended to license reasoning.
+
+  MappingJustificationEnum:
+    description: >-
+      How a mapping was produced, drawn from the semapv vocabulary (as
+      required by SSSOM).
+    permissible_values:
+      MANUAL_MAPPING_CURATION:
+        meaning: semapv:ManualMappingCuration
+        description: >-
+          Asserted or confirmed by a human curator — including
+          source-declared mappings materialized at ingestion (author =
+          the source schema's agent).
+      LEXICAL_MATCHING:
+        meaning: semapv:LexicalMatching
+        description: String similarity over labels/synonyms/native ids.
+      SEMANTIC_SIMILARITY_THRESHOLD_MATCHING:
+        meaning: semapv:SemanticSimilarityThresholdMatching
+        description: Embedding similarity above a threshold.
+      STRUCTURAL_MATCHING:
+        meaning: semapv:StructuralMatching
+        description: Graph-structure evidence (e.g. similarity flooding).
+      LOGICAL_REASONING:
+        meaning: semapv:LogicalReasoning
+        description: Entailed or repaired via logical reasoning.
+      COMPOSITE_MATCHING:
+        meaning: semapv:CompositeMatching
+        description: Ensemble of multiple matching processes.
+      UNSPECIFIED_MATCHING:
+        meaning: semapv:UnspecifiedMatching
+        description: Process unknown (e.g. legacy import).
+
+  ReviewStatusEnum:
+    description: Curation lifecycle of a mapping (registry extension).
+    permissible_values:
+      PROPOSED:
+        description: Machine- or human-proposed; not yet reviewed.
+      ACCEPTED:
+        description: Validated by a reviewer; safe for high-rigor queries.
+      REJECTED:
+        description: Reviewed and refuted; retained as negative evidence.
+      SUPERSEDED:
+        description: >-
+          Replaced by a newer mapping or mapping set (e.g. after schema
+          re-registration and re-alignment).
+
+  SourceFormatEnum:
+    description: Native authoring format of an ingested schema.
+    permissible_values:
+      LINKML:
+      JSON_SCHEMA:
+      OWL:
+      RDFS:
+      SHACL:
+      CSV_DATA_DICTIONARY:
+      FITS_CONVENTION:
+      VOTABLE:
+      SQL_DDL:
+      OTHER:
