@@ -1,0 +1,15 @@
+id: https://example.org/required-c
+name: required_c
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+default_range: string
+classes:
+  Enrollee:
+    description: A person enrolled in the study
+    attributes:
+      age:
+        description: Age of the subject
+        range: integer
+        required: true

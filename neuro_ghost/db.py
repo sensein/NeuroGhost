@@ -89,6 +89,7 @@ HAS_PROVENANCE_REL = {
     "RegistryClass":    "HAS_PROVENANCE",
     "RegistryProperty": "HAS_PROVENANCE_P",
     "ValueSet":         "HAS_PROVENANCE_VS",
+    "Rule":             "HAS_PROVENANCE_RULE",
 }
 
 
@@ -467,6 +468,13 @@ _REL_DDL: list[str] = [
     # --- ValueSet / PermissibleValue ---
     "CREATE REL TABLE IF NOT EXISTS HAS_PERMISSIBLE_VALUE (FROM ValueSet TO PermissibleValue)",
     "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_VS     (FROM ValueSet TO ProvenanceEntry)",
+
+    # --- Rule ---
+    # APPLIES_TO_P is the edge write_rule_edges() actually uses today — Rule
+    # is scoped to RegistryProperty only. APPLIES_TO (Rule -> RegistryClass,
+    # just below) predates this and is a possible future extension, unused.
+    "CREATE REL TABLE IF NOT EXISTS APPLIES_TO_P       (FROM Rule             TO RegistryProperty)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_RULE (FROM Rule            TO ProvenanceEntry)",
 
     # --- Infrastructure edges ---
     "CREATE REL TABLE IF NOT EXISTS APPLIES_TO         (FROM Rule             TO RegistryClass)",

@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 
 from ingest_linkml import parse_linkml, build_registry_entities
-from schema_registry_utils import RegistryProperty, RegistryClass, ValueSet
+from schema_registry_utils import (
+    RegistryProperty, RegistryClass, ValueSet, Rule, ProvenanceEntry, compute_hash_id_for,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -103,6 +105,8 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
                 "multivalued": False,
                 "required": False,
                 "pattern": "",
+                "minimum_value": None,
+                "maximum_value": None,
             },
             "name": {
                 "iri": "https://schema.org/name",
@@ -112,6 +116,8 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
                 "multivalued": False,
                 "required": False,
                 "pattern": "",
+                "minimum_value": None,
+                "maximum_value": None,
             },
             "orcid": {
                 "iri": "https://example.org/schema#orcid",
@@ -121,6 +127,8 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
                 "multivalued": False,
                 "required": False,
                 "pattern": r"^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$",
+                "minimum_value": None,
+                "maximum_value": None,
             },
             "role": {
                 "iri": "",
@@ -130,6 +138,8 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
                 "multivalued": True,
                 "required": True,
                 "pattern": "^[A-Za-z ]+$",
+                "minimum_value": None,
+                "maximum_value": None,
             },
         },
         "enums": {},
@@ -138,37 +148,47 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
 
 def test_registry_property_does_not_retain_usage_constraints():
     """
-    parse_linkml()'s dict has multivalued/required/pattern (see above) — but
-    RegistryProperty deliberately doesn't model them at all (deferred to a
-    future Rule, since the same property can be required in one source's
-    usage and optional in another's without being a different concept).
-    Assert this at the model level, not just "the dict I built doesn't have
-    it" — if someone re-adds these fields to RegistryProperty, this fails.
+    parse_linkml()'s dict has multivalued/required/pattern/min/max (see
+    above) — but RegistryProperty deliberately doesn't model them at all
+    (they live on Rule instead, since the same property can be required in
+    one source's usage and optional in another's without being a different
+    concept). Assert this at the model level, not just "the dict I built
+    doesn't have it" — if someone re-adds these fields to RegistryProperty,
+    this fails. Also confirm they didn't just vanish — they moved to Rule.
     """
-    for field in ("required", "multivalued", "pattern"):
+    for field in ("required", "multivalued", "pattern", "minimum_value", "maximum_value"):
         assert field not in RegistryProperty.model_fields
+        assert field in Rule.model_fields
 
 
 def test_build_registry_entities_produces_exactly_the_expected_objects():
     """
     Exact-equality check of build_registry_entities()'s output — the step
     that turns parse_linkml()'s dict into content-hashed RegistryProperty/
-    RegistryClass instances. hash_id is a pure content hash (no randomness),
-    so these values are reproducible; if the hash computation, the set of
-    fields carried into the model, or the is_a/properties resolution ever
-    changes, this fails.
+    RegistryClass/Rule instances. hash_id is a pure content hash (no
+    randomness), so these values are reproducible; if the hash computation,
+    the set of fields carried into the model, or the is_a/properties/
+    applies_to resolution ever changes, this fails.
+
+    Only "orcid" (pattern) and "role" (required, multivalued, pattern) carry
+    a constraint in this fixture — "name" and "created_at" have none, so they
+    get no Rule at all (see test_ingest_registry.py for the "no rule created
+    for an unconstrained property" case, checked directly against the graph).
 
     provenance is checked separately (excluded from the equality dump) since
     ProvenanceEntry.uid/generated_at are non-deterministic per run.
     """
     parsed = parse_linkml(FIXTURES / "comprehensive.yml")
-    properties, registry_classes, value_sets = build_registry_entities(parsed, "comprehensive", "tester")
+    properties, registry_classes, value_sets, rules = build_registry_entities(
+        parsed, "comprehensive", "tester",
+    )
     assert value_sets == {}  # comprehensive.yml has no enums
 
     assert set(properties) == {"name", "orcid", "role", "created_at"}
     assert set(registry_classes) == {"Timestamped", "Entity", "Person"}
+    assert set(rules) == {"orcid", "role"}
 
-    for entity in (*properties.values(), *registry_classes.values()):
+    for entity in (*properties.values(), *registry_classes.values(), *rules.values()):
         assert len(entity.provenance) == 1
         prov = entity.provenance[0]
         assert prov.source == "comprehensive"
@@ -265,6 +285,38 @@ def test_build_registry_entities_produces_exactly_the_expected_objects():
         },
     }
 
+    assert {
+        name: r.model_dump(exclude={"provenance"})
+        for name, r in rules.items()
+    } == {
+        "orcid": {
+            "hash_id": "sha256:c12afad4e5f916fabc06ce875d750e7380d4da2b9445c4acfba74067a473a115",
+            "name": "orcid_rule",
+            "description": r"pattern: ^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$",
+            "skos_mappings": [],
+            "applies_to": "sha256:8bddfe8f326dab2077cd95446fa63eb7708cab8c096adc2ad53979d91b73862d",
+            "required": False,
+            "multivalued": False,
+            "pattern": r"^\d{4}-\d{4}-\d{4}-\d{3}[0-9X]$",
+            "minimum_value": None,
+            "maximum_value": None,
+            "function_body": None,
+        },
+        "role": {
+            "hash_id": "sha256:d619f74da158822c5ea345eb87b3d693e0f1efe774212f27af07d298a2762035",
+            "name": "role_rule",
+            "description": "required; multivalued; pattern: ^[A-Za-z ]+$",
+            "skos_mappings": [],
+            "applies_to": "sha256:b401d00ccb63e9accb3a1e2360a2f5d6997c21ae205324cf58ddd72712ce1538",
+            "required": True,
+            "multivalued": True,
+            "pattern": "^[A-Za-z ]+$",
+            "minimum_value": None,
+            "maximum_value": None,
+            "function_body": None,
+        },
+    }
+
 
 def test_parse_linkml_extracts_enums():
     """parse_linkml() returns an 'enums' dict with parsed enum definitions."""
@@ -285,7 +337,7 @@ def test_parse_linkml_extracts_enums():
 def test_build_registry_entities_produces_value_sets():
     """build_registry_entities() third return value is a dict of ValueSet objects."""
     parsed = parse_linkml(FIXTURES / "schema_with_enums.yml")
-    properties, registry_classes, value_sets = build_registry_entities(
+    properties, registry_classes, value_sets, rules = build_registry_entities(
         parsed, "enum_test", "tester"
     )
 
@@ -301,3 +353,40 @@ def test_build_registry_entities_produces_value_sets():
     # Provenance from the ingestion
     assert len(vs.provenance) == 1
     assert vs.provenance[0].source == "enum_test"
+
+
+def test_rule_can_hold_a_python_function_body():
+    """
+    Some constraints aren't expressible as required/multivalued/pattern/
+    min/max (e.g. cross-field or business-logic validation) — Rule.function_body
+    stores that as plain Python source text, not compiled/pickled/imported.
+    Not built by parse_linkml()/build_registry_entities() (LinkML schemas
+    don't carry executable Python) — this is for Rules constructed some
+    other way, e.g. manually or by a future authoring tool.
+    """
+    fields = dict(
+        name="custom_age_rule",
+        description="Age must be a non-negative integer under 130",
+        applies_to="sha256:deadbeef",
+        required=True,
+        multivalued=False,
+        pattern=None,
+        minimum_value=None,
+        maximum_value=None,
+        function_body="def validate(value):\n    return isinstance(value, int) and 0 <= value < 130\n",
+        skos_mappings=[],
+    )
+    rule = Rule(
+        hash_id=compute_hash_id_for(Rule, fields),
+        provenance=[ProvenanceEntry(
+            uid="u1", source="manual",
+            generated_at="2026-01-01T00:00:00", attributed_to="tester",
+        )],
+        **fields,
+    )
+    assert "def validate(value):" in rule.function_body
+
+    # function_body is identity-defining, like every other constraint field —
+    # two Rules differing only in function_body must not collapse to one hash.
+    other = compute_hash_id_for(Rule, dict(fields, function_body=None))
+    assert other != rule.hash_id
