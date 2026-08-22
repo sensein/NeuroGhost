@@ -157,9 +157,11 @@ def collect_classes(g: rdflib.Graph) -> dict[str, dict]:
 # Insert into LadybugDB
 # ---------------------------------------------------------------------------
 
-def _provenance(schema_source_id: str, agent: str = "system", registry_version: str = "") -> ProvenanceEntry:
+def _provenance(schema_source_id: str, attests_to: str, agent: str = "system",
+                registry_version: str = "") -> ProvenanceEntry:
     return ProvenanceEntry(
-        id=make_id(), had_primary_source=schema_source_id, registry_version=registry_version or None,
+        id=make_id(), attests_to=attests_to,
+        had_primary_source=schema_source_id, registry_version=registry_version or None,
         generated_at_time=now_iso(), was_attributed_to=agent, was_generated_by="seeding",
         was_derived_from=[],
     )
@@ -196,9 +198,10 @@ def build_registry_entities(
                 slot_uri=prop["iri"] or None,
                 skos_mappings=[],
             )
+            p_hash_id = compute_hash_id_for(RegistryProperty, fields)
             p = RegistryProperty(
-                hash_id=compute_hash_id_for(RegistryProperty, fields),
-                provenance=[_provenance(schema_source_id, registry_version=registry_version)],
+                hash_id=p_hash_id,
+                provenance=[_provenance(schema_source_id, p_hash_id, registry_version=registry_version)],
                 **fields,
             )
             properties[prop["iri"]] = p
@@ -230,9 +233,10 @@ def build_registry_entities(
             mixins=[],
             skos_mappings=[],
         )
+        rc_hash_id = compute_hash_id_for(RegistryClass, fields)
         rc = RegistryClass(
-            hash_id=compute_hash_id_for(RegistryClass, fields),
-            provenance=[_provenance(schema_source_id, registry_version=registry_version)],
+            hash_id=rc_hash_id,
+            provenance=[_provenance(schema_source_id, rc_hash_id, registry_version=registry_version)],
             **fields,
         )
         registry_classes[name] = rc

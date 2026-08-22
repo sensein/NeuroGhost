@@ -328,12 +328,14 @@ def parse_linkml(path: Path) -> dict[str, Any]:
 # Parsed dict → content-hashed RegistryClass / RegistryProperty
 # ---------------------------------------------------------------------------
 
-def _make_provenance(schema_source_id: str, agent: str, issue: str = "",
-                     registry_version: str = "", source_version: str = "",
+def _make_provenance(schema_source_id: str, attests_to: str, agent: str,
+                     issue: str = "", registry_version: str = "",
+                     source_version: str = "",
                      activity: str = "ingestion") -> ProvenanceEntry:
     attributed_to = f"{agent} (issue #{issue})" if issue else agent
     return ProvenanceEntry(
         id=make_id(),
+        attests_to=attests_to,
         had_primary_source=schema_source_id,
         source_version=source_version or None,
         registry_version=registry_version or None,
@@ -375,9 +377,10 @@ def build_registry_entities(
     for cls in classes.values():
         used_slots.update(cls["slots"])
 
-    def make_prov() -> ProvenanceEntry:
+    def make_prov(attests_to: str) -> ProvenanceEntry:
         return _make_provenance(
-            schema_source_id, agent, issue, registry_version, source_version,
+            schema_source_id, attests_to, agent, issue,
+            registry_version, source_version,
         )
 
     properties: dict[str, RegistryProperty] = {}
@@ -398,9 +401,10 @@ def build_registry_entities(
             skos_mappings=[],
             aliases=slot.get("aliases") or [],
         )
+        prop_hash_id = compute_hash_id_for(RegistryProperty, fields)
         prop = RegistryProperty(
-            hash_id=compute_hash_id_for(RegistryProperty, fields),
-            provenance=[make_prov()],
+            hash_id=prop_hash_id,
+            provenance=[make_prov(prop_hash_id)],
             **fields,
         )
         properties[slot_name] = prop
@@ -433,9 +437,10 @@ def build_registry_entities(
             skos_mappings=[],
             aliases=cls.get("aliases") or [],
         )
+        rc_hash_id = compute_hash_id_for(RegistryClass, fields)
         rc = RegistryClass(
-            hash_id=compute_hash_id_for(RegistryClass, fields),
-            provenance=[make_prov()],
+            hash_id=rc_hash_id,
+            provenance=[make_prov(rc_hash_id)],
             **fields,
         )
         registry_classes[cls_name] = rc
@@ -467,7 +472,7 @@ def build_registry_entities(
             if pv_hash_id not in permissible_values:
                 permissible_values[pv_hash_id] = PermissibleValue(
                     hash_id=pv_hash_id,
-                    provenance=[prov_factory()],
+                    provenance=[prov_factory(pv_hash_id)],
                     **pv_fields,
                 )
             pv_hash_ids.append(pv_hash_id)
@@ -478,9 +483,10 @@ def build_registry_entities(
             permissible_values=sorted(pv_hash_ids),
             skos_mappings=[],
         )
+        vs_hash_id = compute_hash_id_for(ValueSet, vs_fields)
         vs = ValueSet(
-            hash_id=compute_hash_id_for(ValueSet, vs_fields),
-            provenance=[prov_factory()],
+            hash_id=vs_hash_id,
+            provenance=[prov_factory(vs_hash_id)],
             **vs_fields,
         )
         value_sets[enum_name] = vs

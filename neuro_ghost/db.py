@@ -4,14 +4,12 @@ db.py — Shared DB setup for the SenseIn Schema Registry
 Single source of truth for:
   - LadybugDB connection
   - DDL:
-      Registry entity node tables → generated from schemas/meta_model.yaml.
-        Edit that file and rebuild the DB to change node structure.
-      Infrastructure node tables (SchemaSource, SchemaVersionSnapshot,
-        SchemaActivity, SemanticIdentity) → defined here; rarely change.
-        SemanticIdentity + HAS_IDENTITY/HAS_IDENTITY_P + PRIOR_VERSION* are
-        unused now (superseded by content-hash identity + ProvenanceEntry)
-        but not yet removed — a separate cleanup pass, not touched here.
-      Relationship tables → defined here.
+      Registry entity node tables → generated from schemas/meta_model.yaml
+        (via _build_registry_ddl). Edit that file and rebuild the DB to
+        change node structure. SchemaSource and SchemaVersionSnapshot are
+        first-class meta-model classes and come through the same path.
+      Relationship tables → defined here (multivalued meta-model edges +
+        alignment infrastructure).
   - Identity helpers (make_id, make_iri, now_iso)
   - Graph writers for content-addressed entities (scalar_fields,
     entity_exists, create_entity_node, write_provenance)
@@ -88,6 +86,7 @@ LIST_FIELDS = {"provenance", "skos_mappings", "properties", "class_mixins", "per
 HAS_PROVENANCE_REL = {
     "RegistryClass":    "HAS_PROVENANCE",
     "RegistryProperty": "HAS_PROVENANCE_P",
+    "Rule":             "HAS_PROVENANCE_R",
     "ValueSet":         "HAS_PROVENANCE_VS",
     "PermissibleValue": "HAS_PROVENANCE_PV",
 }
@@ -441,38 +440,10 @@ def _build_registry_ddl(yaml_path: str | Path = SCHEMA_YAML) -> list[str]:
 _REGISTRY_NODE_DDL: list[str] = _build_registry_ddl()
 
 # Infrastructure node tables — not part of the meta-model; defined here.
-# SchemaSource / SchemaVersionSnapshot used to be hand-written here too, but
-# are now first-class meta-model classes (_REGISTRY_NODE_DDL, generated from
-# schemas/meta_model.yaml) — that duplicate definition (with the pre-rework
-# field names: iri/uri/version/rule_count) was dead code (IF NOT EXISTS made
-# it a silent no-op, since _REGISTRY_NODE_DDL always runs first) and has been
-# removed.
-_INFRASTRUCTURE_NODE_DDL: list[str] = [
-    # SchemaActivity — PROV-O activity log (defined but not yet written by any script)
-    """CREATE NODE TABLE IF NOT EXISTS SchemaActivity (
-        uid              STRING PRIMARY KEY,
-        iri              STRING,
-        uri              STRING,
-        version          STRING,
-        created_at       STRING,
-        activity         STRING,
-        agent            STRING,
-        started_at       STRING,
-        issue_number     STRING,
-        registry_version STRING
-    )""",
-
-    # SemanticIdentity — canonical node per unique content hash for cross-source dedup
-    """CREATE NODE TABLE IF NOT EXISTS SemanticIdentity (
-        uid           STRING PRIMARY KEY,
-        content_id    STRING,
-        canonical_uri STRING,
-        datatype      STRING,
-        units         STRING,
-        iri           STRING,
-        created_at    STRING
-    )""",
-]
+# All node tables are generated from meta_model.yaml by _build_registry_ddl().
+# SchemaActivity + SemanticIdentity used to live here as hand-written
+# infrastructure tables; both were superseded by content-hash identity +
+# ProvenanceEntry (no code ever wrote to either) and have been removed.
 
 # Relationship tables — multivalued meta-model edges + alignment infrastructure.
 _REL_DDL: list[str] = [
@@ -523,15 +494,19 @@ _REL_DDL: list[str] = [
     "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_PV     (FROM PermissibleValue TO ProvenanceEntry)",
     "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING_PV   (FROM PermissibleValue TO Mapping)",
 
-    # --- Infrastructure edges ---
+    # --- Rule ---
+    # Rule.applies_to has range RegistryEntity, so ingestion may target either
+    # a class (a class-scoped or cross-field rule) or a property (a plain
+    # property-level constraint). Two REL tables so a query can filter by
+    # target kind without matching both.
+    # Rule inherits provenance and skos_mappings from RegistryEntity — the
+    # HAS_PROVENANCE_R / HAS_SKOS_MAPPING_R edges are the same pattern as the
+    # RegistryClass / RegistryProperty / ValueSet / PermissibleValue variants.
     "CREATE REL TABLE IF NOT EXISTS APPLIES_TO         (FROM Rule             TO RegistryClass)",
-    "CREATE REL TABLE IF NOT EXISTS PROV_GENERATED     (FROM RegistryClass    TO SchemaActivity)",
-    "CREATE REL TABLE IF NOT EXISTS PROV_GENERATED_P   (FROM RegistryProperty TO SchemaActivity)",
-    "CREATE REL TABLE IF NOT EXISTS PROV_GENERATED_R   (FROM Rule             TO SchemaActivity)",
-    "CREATE REL TABLE IF NOT EXISTS FROM_SOURCE        (FROM RegistryClass    TO SchemaSource)",
-    "CREATE REL TABLE IF NOT EXISTS FROM_SOURCE_P      (FROM RegistryProperty TO SchemaSource)",
-    "CREATE REL TABLE IF NOT EXISTS HAS_IDENTITY       (FROM RegistryClass    TO SemanticIdentity)",
-    "CREATE REL TABLE IF NOT EXISTS HAS_IDENTITY_P     (FROM RegistryProperty TO SemanticIdentity)",
+    "CREATE REL TABLE IF NOT EXISTS APPLIES_TO_P       (FROM Rule             TO RegistryProperty)",
+    "CREATE REL TABLE IF NOT EXISTS DEFINED_IN_CLASS   (FROM Rule             TO RegistryClass)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROVENANCE_R   (FROM Rule             TO ProvenanceEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_SKOS_MAPPING_R (FROM Rule             TO Mapping)",
 
     # --- Alignment ---
     """CREATE REL TABLE IF NOT EXISTS ALIGNED_TO (
@@ -547,7 +522,7 @@ _REL_DDL: list[str] = [
     )""",
 ]
 
-DDL = _REGISTRY_NODE_DDL + _INFRASTRUCTURE_NODE_DDL + _REL_DDL
+DDL = _REGISTRY_NODE_DDL + _REL_DDL
 
 
 # ---------------------------------------------------------------------------
