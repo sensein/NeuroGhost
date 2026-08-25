@@ -59,7 +59,7 @@ def dimension_of(unit: str) -> DimensionVector | None:
 def veto(subject: MatchingProfile, object: MatchingProfile) -> VetoRecord | None:
     """Return a VetoRecord if the pair is dimensionally incommensurable,
     else None. Only fires when BOTH sides have known dimensions."""
-    ds, do = subject.dimension, object.dimension
+    ds, do = subject.unit.dimension, object.unit.dimension
     if ds is None or do is None:
         return None
     if ds.compatible(do):
@@ -68,8 +68,8 @@ def veto(subject: MatchingProfile, object: MatchingProfile) -> VetoRecord | None
     return VetoRecord(
         subject=subject.ref,
         object=object.ref,
-        subject_unit=subject.unit,
-        object_unit=object.unit,
+        subject_unit=subject.unit.ucum_code,
+        object_unit=object.unit.ucum_code,
         shared_anchor=next(iter(sorted(shared)), None),
     )
 
@@ -78,6 +78,6 @@ def unit_compatibility(subject: MatchingProfile, object: MatchingProfile) -> boo
     """Soft residual feature for Stage 2: True if compatible, None if unknown
     on either side (missing, not zero — invariant 4). Never False here: the
     False case was already vetoed in Stage 1."""
-    if subject.dimension is None or object.dimension is None:
+    if subject.unit.dimension is None or object.unit.dimension is None:
         return None
-    return subject.dimension.compatible(object.dimension)
+    return subject.unit.dimension.compatible(object.unit.dimension)

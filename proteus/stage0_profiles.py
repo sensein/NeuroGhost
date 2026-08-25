@@ -11,7 +11,7 @@ from dataclasses import replace
 from typing import Iterable, Sequence
 
 from .interfaces import RegistryAdapter, ReasonerBackend
-from .models import MatchingProfile
+from .models import MatchingProfile, UnitOfMeasure
 from .units import dimension_of
 
 
@@ -22,8 +22,13 @@ def build_profiles(
 ) -> Sequence[MatchingProfile]:
     profiles = []
     for p in registry.elements(schema_id):
-        if p.dimension is None and p.unit:
-            p = replace(p, dimension=dimension_of(p.unit))
+        # v4: canonicalize unit — fill in dimension from ucum_code if not already set
+        if p.unit.dimension is None and p.unit.ucum_code:
+            resolved = replace(
+                p.unit,
+                dimension=dimension_of(p.unit.ucum_code),
+            )
+            p = replace(p, unit=resolved)
         profiles.append(p)
     if reasoner is not None:
         _enrich_anchors(profiles, reasoner)

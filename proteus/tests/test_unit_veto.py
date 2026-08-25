@@ -1,11 +1,12 @@
-from proteus.models import DimensionVector, ElementRef, MatchingProfile
+from proteus.models import DimensionVector, ElementRef, MatchingProfile, UnitOfMeasure
 from proteus.units import dimension_of, unit_compatibility, veto
 
 
-def _prof(eid, unit, anchors=()):
+def _prof(eid, unit_str, anchors=()):
     return MatchingProfile(
         ref=ElementRef(schema_id="s", element_id=eid, kind="property"),
-        name=eid, unit=unit, dimension=dimension_of(unit),
+        name=eid,
+        unit=UnitOfMeasure(ucum_code=unit_str, dimension=dimension_of(unit_str)),
         exact_anchors=tuple(anchors),
     )
 

@@ -20,7 +20,7 @@ from typing import Iterable, Sequence
 
 import yaml
 
-from ..models import ElementRef, MatchingProfile
+from ..models import ElementRef, MatchingProfile, UnitOfMeasure
 
 
 class YamlRegistry:
@@ -40,7 +40,7 @@ class YamlRegistry:
             definition=e.get("definition", ""),
             parent_name=e.get("parent", ""),
             value_type=e.get("value_type", ""),
-            unit=e.get("unit", ""),
+            unit=UnitOfMeasure(ucum_code=e.get("unit", "")),
             permissible_values=tuple(e.get("permissible_values", [])),
             exact_anchors=tuple(e.get("exact_anchors", [])),
             close_anchors=tuple(e.get("close_anchors", [])),
