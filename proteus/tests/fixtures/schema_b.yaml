@@ -1,0 +1,35 @@
+# Toy schema B: an independent imaging+redshift catalog
+schema_id: lsst_like
+elements:
+  - id: redshift_spectroscopic
+    name: redshiftSpectroscopic
+    definition: Redshift measured from spectroscopy.
+    unit: ""
+    exact_anchors: ["ivoa:src.redshift"]
+  - id: right_ascension
+    name: rightAscension
+    aliases: [alpha]
+    definition: Right ascension of the source (ICRS).
+    unit: deg
+    exact_anchors: ["ivoa:pos.eq.ra"]
+  - id: declination
+    name: declination
+    aliases: [delta]
+    definition: Declination of the source (ICRS).
+    unit: deg
+    exact_anchors: ["ivoa:pos.eq.dec"]
+  - id: wavelength
+    name: wavelength
+    # Deliberate annotation bug for the HIGH-priority veto test: shares the
+    # redshift anchor but carries a length unit.
+    definition: Wavelength of peak flux.
+    unit: nm
+    exact_anchors: ["ivoa:src.redshift"]
+  - id: exp_time
+    name: expTime
+    definition: Exposure duration.
+    unit: s
+  - id: magnitude_r
+    name: magnitudeR
+    definition: r-band magnitude.
+    unit: mag
