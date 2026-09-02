@@ -444,6 +444,86 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .tf-target-hint{font-size:11.5px;color:var(--muted);padding:8px 12px;background:var(--surface);
   border:1px solid var(--border);border-radius:6px;font-family:var(--mono);}
 
+/* ══ QUERY ═════════════════════════════════════════════════════════════ */
+#view-query{overflow:hidden;flex-direction:column;}
+.q-head{padding:16px 20px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.q-search-wrap{display:flex;align-items:center;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;padding:0 12px;
+  transition:border-color .15s,box-shadow .15s;}
+.q-search-wrap:focus-within{border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
+.q-search-wrap svg{width:15px;height:15px;color:var(--muted);flex-shrink:0;}
+#q-input{background:none;border:none;outline:none;color:var(--text);
+  font-family:var(--sans);font-size:14px;padding:11px 8px;flex:1;}
+#q-input::placeholder{color:var(--muted);}
+.q-clear{background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:15px;padding:4px 6px;line-height:1;display:none;}
+.q-clear:hover{color:var(--text-dim);}
+.q-search-wrap.has-value .q-clear{display:block;}
+.q-summary{font-size:11.5px;color:var(--muted);margin-top:8px;font-family:var(--mono);}
+.q-summary b{color:var(--text-dim);}
+
+.q-facets{padding:10px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+  background:var(--bg-elev);display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+.q-chip-row{display:flex;gap:6px;}
+.q-chip{background:var(--surface);border:1px solid var(--border);border-radius:99px;
+  padding:5px 12px;font-size:11.5px;color:var(--text-dim);cursor:pointer;font-family:var(--sans);
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s;}
+.q-chip:hover{color:var(--text);}
+.q-chip.active{background:var(--teal-soft);border-color:var(--teal-line);color:var(--teal);}
+.q-chip-cnt{font-family:var(--mono);font-size:10.5px;opacity:.7;}
+.q-src-facets{display:flex;gap:4px;flex-wrap:wrap;flex:1;}
+.q-src-facet{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-family:var(--mono);
+  color:var(--text-dim);padding:3px 8px;border-radius:5px;cursor:pointer;user-select:none;
+  border:1px solid transparent;}
+.q-src-facet.off{opacity:.4;text-decoration:line-through;}
+.q-src-facet:hover{background:var(--surface);}
+
+.q-body{display:grid;grid-template-columns:1fr 360px;flex:1;min-height:0;overflow:hidden;}
+.q-results{overflow-y:auto;}
+.q-detail{border-left:1px solid var(--border);background:var(--bg-elev);overflow-y:auto;}
+.q-empty{padding:40px 24px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7;}
+.q-hit{padding:12px 20px;border-bottom:1px solid var(--border);cursor:pointer;
+  display:flex;gap:12px;align-items:flex-start;transition:background .12s;}
+.q-hit:hover{background:var(--surface);}
+.q-hit.selected{background:var(--teal-soft);border-left:2px solid var(--teal);padding-left:18px;}
+.q-hit-kind{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;
+  padding:3px 6px;border-radius:4px;flex-shrink:0;margin-top:1px;min-width:52px;text-align:center;}
+.q-hit-kind.class{background:var(--teal-soft);color:var(--teal);}
+.q-hit-kind.prop{background:var(--purple-soft);color:var(--purple);}
+.q-hit-kind.iri{background:rgba(251,191,36,.12);color:var(--yellow);}
+.q-hit-main{flex:1;min-width:0;}
+.q-hit-name{font-family:var(--mono);font-size:12.5px;color:var(--text);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.q-hit-name mark{background:var(--teal-soft);color:var(--teal);padding:0 2px;border-radius:2px;}
+.q-hit.iri .q-hit-name{word-break:break-all;white-space:normal;font-weight:500;font-size:11.5px;}
+.q-hit-sub{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.55;
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.q-hit-side{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;font-size:10px;font-family:var(--mono);}
+.q-hit-src{color:var(--muted);text-transform:lowercase;}
+.q-hit-onclass{color:var(--text-dim);}
+.q-more{padding:14px;text-align:center;color:var(--muted);font-size:11.5px;font-family:var(--mono);}
+
+.q-detail-placeholder{padding:36px 24px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7;}
+.q-d-inner{padding:20px 20px;}
+.q-d-name{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--teal);margin-bottom:4px;word-break:break-word;}
+.q-d-name.abstract{color:var(--purple);}
+.q-d-iri{font-family:var(--mono);font-size:10.5px;color:var(--muted);word-break:break-all;margin-bottom:12px;}
+.q-d-iri a{color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--border);}
+.q-d-iri a:hover{color:var(--teal);}
+.q-d-def{font-size:12px;color:var(--text-dim);line-height:1.7;margin-bottom:14px;}
+.q-d-section{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:600;margin:12px 0 6px;}
+.q-d-list{display:flex;flex-direction:column;gap:5px;}
+.q-d-slot-chip{display:inline-block;font-family:var(--mono);font-size:10.5px;
+  padding:2px 8px;border-radius:4px;color:var(--text-dim);background:var(--surface);
+  border:1px solid var(--border);}
+.q-d-slot-chip.matched{background:var(--teal-soft);border-color:var(--teal-line);color:var(--teal);}
+.q-d-cls-link{padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surface);cursor:pointer;font-family:var(--mono);font-size:11.5px;color:var(--text);
+  display:flex;justify-content:space-between;gap:8px;transition:border-color .12s;}
+.q-d-cls-link:hover{border-color:var(--teal-line);}
+.q-d-cls-link .c-src-tag{font-size:9.5px;}
+
 /* ══ INGEST ══════════════════════════════════════════════════════════════ */
 #view-ingest{overflow:hidden;}
 .ingest-inner{display:flex;width:100%;height:100%;}
@@ -565,6 +645,12 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
         <path d="M14 12H5l2 2 M3 12l2 -2"/>
       </svg>
       Transform
+    </button>
+    <button class="tab" data-view="query">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/>
+      </svg>
+      Query
     </button>
     <button class="tab" data-view="ingest">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -752,6 +838,37 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   </div>
 </div>
 
+<!-- ── Query ───────────────────────────────────────────── -->
+<div id="view-query" class="view">
+  <div class="q-head">
+    <div class="q-search-wrap" id="q-search-wrap">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+        <circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/>
+      </svg>
+      <input id="q-input" type="text" placeholder="Search classes, slots, IRIs, definitions…" autocomplete="off" spellcheck="false"/>
+      <button class="q-clear" id="q-clear" aria-label="Clear">✕</button>
+    </div>
+    <div class="q-summary" id="q-summary">Loading registry…</div>
+  </div>
+  <div class="q-facets">
+    <div class="q-chip-row">
+      <button class="q-chip active" data-kind="all">All <span class="q-chip-cnt" id="q-cnt-all">0</span></button>
+      <button class="q-chip" data-kind="class">Classes <span class="q-chip-cnt" id="q-cnt-class">0</span></button>
+      <button class="q-chip" data-kind="prop">Properties <span class="q-chip-cnt" id="q-cnt-prop">0</span></button>
+      <button class="q-chip" data-kind="iri">IRIs <span class="q-chip-cnt" id="q-cnt-iri">0</span></button>
+    </div>
+    <div class="q-src-facets" id="q-src-facets"></div>
+  </div>
+  <div class="q-body">
+    <div class="q-results" id="q-results">
+      <div class="q-empty">Type in the search box above to explore the registry.</div>
+    </div>
+    <div class="q-detail" id="q-detail">
+      <div class="q-detail-placeholder">Click a result to see the class it belongs to.</div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Ingest ──────────────────────────────────────────── -->
 <div id="view-ingest" class="view">
   <div class="ingest-inner">
@@ -813,6 +930,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     else if (target === 'diff') initDiff();
     else if (target === 'graph') initGraphSchema();
     else if (target === 'transform') initTransform();
+    else if (target === 'query') initQuery();
   });
 });
 
@@ -2470,6 +2588,295 @@ function renderTransform() {
     </table>
     ${unusedHtml}
   `;
+}
+
+// ────────────────────────────────────────────────────────
+// Query — cross-registry free-text search
+// ────────────────────────────────────────────────────────
+const QUERY = {
+  initted: false,
+  registry: null,
+  sources:  [],
+  enabled:  null,       // Set of enabled source labels
+  kind:     'all',      // 'all' | 'class' | 'prop' | 'iri'
+  q:        '',
+  results:  [],         // last-computed hits (all kinds, then chip filters at render)
+  selected: null,       // hit key -> {kind, ...}
+};
+
+async function initQuery() {
+  if (QUERY.initted) return;
+  QUERY.initted = true;
+
+  const d = await registryPromise;
+  if (!d) {
+    document.getElementById('q-results').innerHTML =
+      `<div class="q-empty">Could not load <code>data/registry.json</code>.</div>`;
+    return;
+  }
+  QUERY.registry = d;
+
+  const counts = {};
+  d.classes.forEach(c => (c.sources || []).forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
+  QUERY.sources = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  QUERY.enabled = new Set(QUERY.sources);
+
+  let nProps = 0;
+  d.classes.forEach(c => nProps += (c.properties || []).length);
+  document.getElementById('q-summary').innerHTML =
+    `Type to search <b>${d.classes.length}</b> classes · <b>${nProps}</b> properties across <b>${QUERY.sources.length}</b> schemas.`;
+
+  const facetsEl = document.getElementById('q-src-facets');
+  facetsEl.innerHTML = QUERY.sources.map(s =>
+    `<span class="q-src-facet" data-src="${esc(s)}">${esc(s)} · ${counts[s]}</span>`
+  ).join('');
+  facetsEl.querySelectorAll('.q-src-facet').forEach(f => {
+    f.addEventListener('click', () => {
+      const s = f.dataset.src;
+      if (QUERY.enabled.has(s)) QUERY.enabled.delete(s); else QUERY.enabled.add(s);
+      f.classList.toggle('off', !QUERY.enabled.has(s));
+      runQuery();
+    });
+  });
+
+  document.querySelectorAll('#view-query .q-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      QUERY.kind = chip.dataset.kind;
+      document.querySelectorAll('#view-query .q-chip').forEach(c => c.classList.toggle('active', c === chip));
+      renderQueryResults();
+    });
+  });
+
+  const input = document.getElementById('q-input');
+  const wrap  = document.getElementById('q-search-wrap');
+  input.addEventListener('input', () => {
+    QUERY.q = input.value.trim().toLowerCase();
+    wrap.classList.toggle('has-value', input.value.length > 0);
+    runQuery();
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && input.value) { input.value = ''; QUERY.q = ''; wrap.classList.remove('has-value'); runQuery(); }
+  });
+  document.getElementById('q-clear').addEventListener('click', () => {
+    input.value = ''; QUERY.q = ''; wrap.classList.remove('has-value'); runQuery(); input.focus();
+  });
+
+  // Focus input on first open
+  setTimeout(() => input.focus(), 0);
+}
+
+function qMatchScore(text, q) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (t === q) return { score: 0, hitIdx: 0 };
+  if (t.startsWith(q)) return { score: 1, hitIdx: 0 };
+  const idx = t.indexOf(q);
+  if (idx >= 0) return { score: 2, hitIdx: idx };
+  return null;
+}
+
+function qHighlight(text, q) {
+  if (!q || !text) return esc(text);
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx < 0) return esc(text);
+  return esc(text.slice(0, idx)) + '<mark>' + esc(text.slice(idx, idx + q.length)) + '</mark>' + esc(text.slice(idx + q.length));
+}
+
+function runQuery() {
+  const q = QUERY.q;
+  if (!q) {
+    QUERY.results = [];
+    ['all','class','prop','iri'].forEach(k => document.getElementById('q-cnt-' + k).textContent = '0');
+    document.getElementById('q-results').innerHTML =
+      `<div class="q-empty">Type in the search box above to explore the registry.</div>`;
+    return;
+  }
+
+  const hits = [];
+  const iriGroups = new Map();   // iri → { classes: [], primarySrc }
+
+  QUERY.registry.classes.forEach(cls => {
+    const srcs = cls.sources || [];
+    if (!srcs.some(s => QUERY.enabled.has(s))) return;
+    const primarySrc = srcs.find(s => QUERY.enabled.has(s)) || srcs[0];
+
+    // Class name/definition
+    const nameHit = qMatchScore(cls.name, q);
+    const defHit  = !nameHit && (cls.definition || '').toLowerCase().includes(q)
+      ? { score: 3.2, hitIdx: (cls.definition || '').toLowerCase().indexOf(q) } : null;
+    if (nameHit || defHit) {
+      hits.push({
+        kind: 'class', score: (nameHit || defHit).score,
+        cls, source: primarySrc,
+      });
+    }
+
+    // Properties
+    (cls.properties || []).forEach(p => {
+      const pn = qMatchScore(p.name, q);
+      const pd = !pn && (p.definition || '').toLowerCase().includes(q)
+        ? { score: 3.5, hitIdx: (p.definition || '').toLowerCase().indexOf(q) } : null;
+      if (pn || pd) {
+        hits.push({
+          kind: 'prop', score: (pn || pd).score + 0.3,   // classes rank slightly above equal-score properties
+          cls, prop: p, source: primarySrc,
+        });
+      }
+    });
+
+    // IRI aggregation — group classes that share this IRI
+    if (cls.iri && cls.iri.toLowerCase().includes(q)) {
+      const g = iriGroups.get(cls.iri) || { classes: [], sources: new Set() };
+      g.classes.push(cls);
+      srcs.forEach(s => g.sources.add(s));
+      iriGroups.set(cls.iri, g);
+    }
+  });
+
+  iriGroups.forEach((g, iri) => {
+    hits.push({
+      kind: 'iri', score: 2.5,
+      iri, classes: g.classes, sources: [...g.sources],
+    });
+  });
+
+  hits.sort((a, b) => a.score - b.score);
+  QUERY.results = hits;
+
+  // Kind counts
+  const counts = { all: hits.length, class: 0, prop: 0, iri: 0 };
+  hits.forEach(h => counts[h.kind]++);
+  ['all','class','prop','iri'].forEach(k =>
+    document.getElementById('q-cnt-' + k).textContent = counts[k]);
+
+  renderQueryResults();
+}
+
+function hitKey(h) {
+  if (h.kind === 'class') return 'c:' + h.cls.hash_id;
+  if (h.kind === 'prop')  return 'p:' + h.cls.hash_id + '::' + h.prop.name;
+  if (h.kind === 'iri')   return 'i:' + h.iri;
+  return '?';
+}
+
+function renderQueryResults() {
+  const el = document.getElementById('q-results');
+  const filtered = QUERY.kind === 'all'
+    ? QUERY.results
+    : QUERY.results.filter(h => h.kind === QUERY.kind);
+
+  if (!QUERY.q) return;                          // handled by runQuery
+  if (!filtered.length) {
+    el.innerHTML = `<div class="q-empty">No hits for <b>${esc(QUERY.q)}</b> under the current filters.</div>`;
+    return;
+  }
+
+  const shown = filtered.slice(0, 300);
+  el.innerHTML = shown.map(h => {
+    const key = hitKey(h);
+    const selected = QUERY.selected === key ? ' selected' : '';
+
+    if (h.kind === 'class') {
+      return `
+        <div class="q-hit${selected}" data-key="${esc(key)}">
+          <span class="q-hit-kind class">CLASS</span>
+          <div class="q-hit-main">
+            <div class="q-hit-name">${qHighlight(h.cls.name, QUERY.q)}</div>
+            ${h.cls.definition ? `<div class="q-hit-sub">${qHighlight(h.cls.definition, QUERY.q)}</div>` : ''}
+          </div>
+          <div class="q-hit-side">
+            <span class="q-hit-src">${esc(h.source || '')}</span>
+          </div>
+        </div>`;
+    }
+    if (h.kind === 'prop') {
+      return `
+        <div class="q-hit${selected}" data-key="${esc(key)}">
+          <span class="q-hit-kind prop">SLOT</span>
+          <div class="q-hit-main">
+            <div class="q-hit-name">${qHighlight(h.prop.name, QUERY.q)}</div>
+            ${h.prop.definition ? `<div class="q-hit-sub">${qHighlight(h.prop.definition, QUERY.q)}</div>` : ''}
+          </div>
+          <div class="q-hit-side">
+            <span class="q-hit-src">${esc(h.source || '')}</span>
+            <span class="q-hit-onclass">on ${esc(h.cls.name)}</span>
+          </div>
+        </div>`;
+    }
+    // iri
+    return `
+      <div class="q-hit iri${selected}" data-key="${esc(key)}">
+        <span class="q-hit-kind iri">IRI</span>
+        <div class="q-hit-main">
+          <div class="q-hit-name">${qHighlight(h.iri, QUERY.q)}</div>
+          <div class="q-hit-sub">Anchored by ${h.classes.length} class${h.classes.length !== 1 ? 'es' : ''} across ${h.sources.length} source${h.sources.length !== 1 ? 's' : ''}.</div>
+        </div>
+        <div class="q-hit-side">
+          <span class="q-hit-src">${esc(h.sources.slice(0, 2).join(' · '))}</span>
+        </div>
+      </div>`;
+  }).join('') + (filtered.length > shown.length
+    ? `<div class="q-more">${filtered.length - shown.length} more — refine to see them.</div>` : '');
+
+  el.querySelectorAll('.q-hit').forEach(row => {
+    row.addEventListener('click', () => {
+      const key = row.dataset.key;
+      const hit = filtered.find(h => hitKey(h) === key);
+      if (!hit) return;
+      QUERY.selected = key;
+      el.querySelectorAll('.q-hit').forEach(r => r.classList.toggle('selected', r === row));
+      renderQueryDetail(hit);
+    });
+  });
+}
+
+function renderQueryDetail(hit) {
+  const el = document.getElementById('q-detail');
+  el.className = 'q-detail';
+
+  if (hit.kind === 'iri') {
+    el.innerHTML = `
+      <div class="q-d-inner">
+        <div class="q-d-name" style="color:var(--yellow)">${esc(hit.iri)}</div>
+        <div class="q-d-def">Anchored by ${hit.classes.length} class${hit.classes.length !== 1 ? 'es' : ''}.</div>
+        <div class="q-d-section">Classes with this IRI</div>
+        <div class="q-d-list">
+          ${hit.classes.map(c => `
+            <div class="q-d-cls-link" data-hash="${esc(c.hash_id)}">
+              <span>${esc(c.name)}</span>
+              <span class="c-src-tag">${esc((c.sources || [])[0] || '')}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    el.querySelectorAll('.q-d-cls-link').forEach(a => {
+      a.addEventListener('click', () => {
+        const cls = QUERY.registry.classes.find(c => c.hash_id === a.dataset.hash);
+        if (cls) renderQueryDetail({ kind: 'class', cls, source: (cls.sources || [])[0] });
+      });
+    });
+    return;
+  }
+
+  const cls = hit.cls;
+  const highlightSlot = hit.kind === 'prop' ? hit.prop.name : null;
+  const iriHtml = cls.iri
+    ? `<div class="q-d-iri"><a href="${esc(cls.iri)}" target="_blank" rel="noopener">${esc(cls.iri)}</a></div>` : '';
+  const srcHtml = (cls.sources || []).map(s =>
+    `<span class="c-src-tag">${esc(s)}</span>`).join(' ');
+  const props = cls.properties || [];
+  const slotsHtml = props.length
+    ? `<div>${props.map(p => `<span class="q-d-slot-chip${p.name === highlightSlot ? ' matched' : ''}">${esc(p.name)}</span>`).join(' ')}</div>`
+    : '<div class="c-none">No own properties.</div>';
+
+  el.innerHTML = `
+    <div class="q-d-inner">
+      <div class="q-d-name${cls.is_abstract ? ' abstract' : ''}">${esc(cls.name)}</div>
+      ${iriHtml}
+      <div class="c-src-row">${srcHtml}</div>
+      <div class="q-d-def">${esc(cls.definition || '—')}</div>
+      <div class="q-d-section">Properties (${props.length})${highlightSlot ? ` — matched <span style="color:var(--teal);font-family:var(--mono);text-transform:none">${esc(highlightSlot)}</span>` : ''}</div>
+      ${slotsHtml}
+    </div>`;
 }
 
 // ────────────────────────────────────────────────────────
