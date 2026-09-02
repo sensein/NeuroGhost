@@ -24,7 +24,7 @@ land (see NOTES / upstream-PR tracking):
     facet) as a length `pattern`, unless the field has a real pattern.
   * `_patch_anyof_ranges` — fills a slot's LinkML `any_of` from an `anyOf`
     union of $refs/scalars (importer can't translate it), landing on
-    RegistryProperty.range_any_of.
+    one RANGE_ANY_OF RegistryRule per union member.
   * `_patch_enum_definitions` — a top-level definition that IS an enum (the
     reusable `$ref`-ed idiom, e.g. dandi's RoleType) is turned into an empty
     class by the importer; re-emitted as a real LinkML enum.
@@ -131,7 +131,8 @@ _FORMAT_TO_LINKML_TYPE = {
 def _patch_format_ranges(sd, data: dict) -> None:
     """GAP: the importer drops JSON Schema string `format` entirely, so a
     `{type: string, format: uri}` becomes a plain string, losing the datatype
-    distinction align.py's compatibility check reads off property_range.
+    distinction align.py's compatibility check reads off the property's RANGE
+    rule.
 
     Where a LinkML type means the same thing (uri/date-time/date/time), set
     the slot's range to it — the idiomatic LinkML encoding, cleaner than a
@@ -223,9 +224,9 @@ def _patch_anyof_ranges(engine, sd, data: dict) -> None:
     polymorphic property like `contributor: Person|Organization|Software`
     (dandi writes these as `{type: array, items: {anyOf: [$ref, ...]}}`) comes
     out with no range at all. Fill the slot's LinkML `any_of` from the union
-    members so a multi-target range survives into parse_linkml ->
-    RegistryProperty.range_any_of. `range` (single) is left unset, mirroring
-    LinkML: a union lives in `any_of`, not `range`.
+    members so a multi-target range survives into parse_linkml -> one
+    RANGE_ANY_OF RegistryRule per member. `range` (single) is left unset,
+    mirroring LinkML: a union lives in `any_of`, not `range`.
 
     REMOVE once schema-automator translates anyOf unions upstream."""
     for block in _properties_blocks(data):

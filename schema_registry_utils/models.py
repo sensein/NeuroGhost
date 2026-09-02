@@ -215,11 +215,19 @@ class RegistryRuleTypeEnum(str, Enum):
     """
     RANGE = "RANGE"
     """
-    Property's value type is refined to a specific range in the enclosing class scope. `rule_value` is an XSD CURIE (e.g. "xsd:integer") or a RegistryValueSet id, same shape as RegistryProperty.property_range. Distinct from that slot: property_range is the property's default type, a RANGE RegistryRule with `used_in_class` set is a per-class narrowing (LinkML `slot_usage` range refinement, JSON Schema `if/then` type switches).
+    The property's value type in a given usage. `rule_value` is an XSD CURIE (e.g. "xsd:integer") for a primitive, or a RegistryClass / RegistryValueSet id for an entity/enum reference. This is where a property's range lives — the type is NOT part of RegistryProperty identity (a "pure concept"), so the same property collapses across schemas even when one types it integer and another string, and each source's choice is recorded as its own RANGE RegistryRule. A rule with `used_in_class` unset is the schema-level range; with `used_in_class` set it is a per-class narrowing (LinkML `slot_usage` range refinement, JSON Schema `if/then` type switches).
+    """
+    RANGE_ANY_OF = "RANGE_ANY_OF"
+    """
+    One permitted alternative range of a union / polymorphic property (JSON Schema `anyOf` of $refs, LinkML `any_of`). `rule_value` has the same shape as RANGE (XSD CURIE / RegistryClass id / RegistryValueSet id). A union of N alternatives ingests as N RANGE_ANY_OF RegistryRules — one atomic assertion per member, so each member collapses across schemas independently, exactly as MIN_VALUE and MAX_VALUE are separate rules. Distinct from RANGE, which names a single exact type: the two never both apply to the same property usage.
+    """
+    UNIT = "UNIT"
+    """
+    The unit of measure for the property's values in a given usage. `rule_value` is the UCUM code (e.g. "a" for years, "mo" for months, "mV", "Hz"). Like RANGE, unit is a realization detail, not part of RegistryProperty identity — so "age in full years" and "age in full months" are the same concept, and each source's unit is its own UNIT RegistryRule. This is what lets alignment's unit veto compare units per-source without the property splitting on unit.
     """
     ENUM_MEMBERSHIP = "ENUM_MEMBERSHIP"
     """
-    Value must be drawn from a RegistryValueSet. `rule_value` is the RegistryValueSet's id. Distinct from setting property_range to a RegistryValueSet — that is a type declaration; this is the enforceable check.
+    Value must be drawn from a RegistryValueSet. `rule_value` is the RegistryValueSet's id. Distinct from a RANGE rule that names a RegistryValueSet — that is a type declaration; this is the enforceable check.
     """
     DEFAULT = "DEFAULT"
     """
@@ -280,9 +288,9 @@ class RegistryEntity(ConfiguredBaseModel):
     Identity vs. content-address are two separate concerns here:
     * `id` is a UUID (uuid4) minted on first ingest — the registry's stable
       graph handle. Cross-references (class properties, parent_class,
-      class_mixins, property_range, ProvenanceEntry.attests_to) all use
-      UUIDs, so every FK is uniform regardless of the referent's type or
-      whether it is content-addressed.
+      class_mixins, RegistryRule.applies_to / rule_value range targets,
+      ProvenanceEntry.attests_to) all use UUIDs, so every FK is uniform
+      regardless of the referent's type or whether it is content-addressed.
 
     * `sha256_hash` is a content fingerprint derived from the fields marked
       `in_subset: HashSubset` in this schema. It is not the identifier;
@@ -358,16 +366,10 @@ A change in any HashSubset field produces a different sha256_hash (a different e
 
 class RegistryProperty(RegistryEntity):
     """
-    A registered property (data element) representing a characteristic or attribute that can be attached to a RegistryClass, e.g. \"age\". Usage constraints (required, multivalued, min/max, pattern) are deliberately not here — they belong on RegistryRule, since the same property can be required in one source's usage and optional in another's without being a different concept.
+    A registered property (data element) representing a characteristic or attribute that can be attached to a RegistryClass, e.g. \"age\". A RegistryProperty is a *pure concept*: its identity is its name and description, nothing about how a particular schema realizes it. Usage constraints (required, multivalued, min/max, pattern) AND the value type/range are deliberately not here — they belong on RegistryRule (rule_type RANGE / RANGE_ANY_OF for the type), because the same concept can be required in one source and optional in another, or typed as an integer here and a string there, without being a different concept. This is what lets \"age\" from two schemas collapse to one entry even when one records it in full years and the other in full months — the type/unit differences live on per-source rules, not on the property.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://example.org/schema-registry-utils/meta-model'})
 
-    property_range: Optional[str] = Field(default=None, description="""The data type or value range for this property: a canonical XSD CURIE for primitives (e.g. \"xsd:string\", \"xsd:integer\"), or the id of a RegistryClass or RegistryValueSet for entity/enum references. Bare primitive names (\"string\", \"float\") are deprecated: datatype compatibility is an alignment signal and an incompatibility veto, so \"float\", \"xsd:float\" and \"double\" must not read as three unrelated types. Ingestion normalizes source-native type names to XSD CURIEs.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryProperty'], 'slot_uri': 'linkml:range'} })
-    range_any_of: Optional[list[str]] = Field(default=None, description="""The set of alternative ranges for a union / polymorphic property that accepts more than one type — e.g. a `contributor` that may be a Person, an Organization, or Software (JSON Schema `anyOf` of $refs, LinkML `any_of`). Each entry is an XSD CURIE, a RegistryClass id, or a RegistryValueSet id, resolved the same way as property_range. Empty for the common single-range case, where property_range carries the one type instead.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryProperty'], 'slot_uri': 'linkml:any_of'} })
-    unit: Optional[UnitOfMeasure] = Field(default=None, description="""Structured unit of measure for this property's values, if applicable. ucum_code is the primary field for programmatic unit-compatibility checks (align.py's unit veto); the others are supplementary.
-Deliberately inlined: UnitOfMeasure is a value type (no `id` slot, no independent identity — two properties measured in \"mV\" don't need to share a graph node), so referencing by id doesn't apply here the way it does for provenance/skos_mappings. UnitOfMeasure also carries `annotations.db_inline: true` so its fields flatten into the parent's LadybugDB row instead of forming a separate table.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryProperty'],
-         'in_subset': ['HashSubset'],
-         'slot_uri': 'qudt:unit'} })
     id: str = Field(default=..., description="""UUID (uuid4) primary key for every registered object, minted at first ingest and stable across content changes. Used uniformly by RegistryEntity subclasses and by non-content-addressed classes (ProvenanceEntry, SchemaSource, SchemaVersionSnapshot, Mapping), so cross-references are the same shape regardless of the referent's family. For RegistryEntity subclasses the `sha256_hash` fingerprint is what enables cross-source dedup — see RegistryEntity's own description.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
                        'ProvenanceEntry',
                        'Mapping',
@@ -582,21 +584,6 @@ A change in any HashSubset field produces a different sha256_hash (a different e
     concept_uri: Optional[str] = Field(default=None, description="""Ontology IRI for this entity (class or property), preserved from the source schema on ingestion. Not part of the content hash; used for alignment and cross-source lookup.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
 
 
-class UnitOfMeasure(ConfiguredBaseModel):
-    """
-    A structured unit of measure for a RegistryProperty, inlined (not its own content-addressed entity). Field names/slot_uri follow LinkML's own linkml:units module — defined locally rather than imported, since db.py's DDL generator reads meta_model.yaml's own classes directly and doesn't resolve LinkML imports (see git history for the import-vs- repeat discussion). LinkML's own alignment for units *is* QUDT/rdfs — there's no separate \"linkml:\" URI for these concepts to also target.
-    """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'annotations': {'db_inline': {'tag': 'db_inline', 'value': True}},
-         'class_uri': 'qudt:Unit',
-         'from_schema': 'https://example.org/schema-registry-utils/meta-model'})
-
-    ucum_code: Optional[str] = Field(default=None, description="""UCUM (Unified Code for Units of Measure) code, e.g. \"mV\", \"deg\", \"Hz\". Compact and machine-parseable — the primary field for programmatic unit-compatibility checks (align.py's unit veto).""", json_schema_extra = { "linkml_meta": {'domain_of': ['UnitOfMeasure'], 'slot_uri': 'qudt:ucumCode'} })
-    has_quantity_kind: Optional[str] = Field(default=None, description="""IRI naming the dimension/kind of quantity being measured, e.g. a QUDT quantity-kind IRI for \"ElectricPotential\" or \"PlaneAngle\". Lets incommensurable units (different quantity kinds) be vetoed outright, independent of whether a conversion factor is known.""", json_schema_extra = { "linkml_meta": {'domain_of': ['UnitOfMeasure'], 'slot_uri': 'qudt:hasQuantityKind'} })
-    symbol: Optional[str] = Field(default=None, description="""Name of the unit encoded as a symbol (e.g. \"Ω\", \"°\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['UnitOfMeasure'], 'slot_uri': 'qudt:symbol'} })
-    abbreviation: Optional[str] = Field(default=None, description="""Short ASCII abbreviation for the unit, for contexts where non-ASCII symbols would be problematic.""", json_schema_extra = { "linkml_meta": {'domain_of': ['UnitOfMeasure'], 'slot_uri': 'qudt:abbreviation'} })
-    descriptive_name: Optional[str] = Field(default=None, description="""The spelled-out name of the unit, e.g. \"millivolt\".""", json_schema_extra = { "linkml_meta": {'domain_of': ['UnitOfMeasure'], 'slot_uri': 'rdfs:label'} })
-
-
 class SchemaSource(ConfiguredBaseModel):
     """
     Registry record for a schema source (one node per ingested schema label). A stable label used to attribute registry entities to where they came from — nothing more. Every attestation about a registry entity that names this schema as its primary source is surfaced on `attestations`, the inverse of ProvenanceEntry.had_primary_source, so a schema-regen query can walk forward from a SchemaSource to every entity it defined in one hop.
@@ -672,7 +659,7 @@ class RegistrySchema(ConfiguredBaseModel):
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     namespace_iri: str = Field(default=..., description="""Base namespace for this schema — becomes its own `id:` when exported to LinkML (or the equivalent namespace declaration in another output format).""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistrySchema']} })
-    default_range: Optional[str] = Field(default=None, description="""Default range for slots that don't declare one explicitly, carried into the exported schema's `default_range:`. Optional — a composed schema may leave every RegistryProperty's own property_range explicit and not need a default.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistrySchema']} })
+    default_range: Optional[str] = Field(default=None, description="""Default range for slots that don't declare one explicitly, carried into the exported schema's `default_range:`. Optional — a composed schema may give every property an explicit RANGE rule and not need a default.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistrySchema']} })
     imports: Optional[list[str]] = Field(default=None, description="""Import statements to carry into the exported schema verbatim (e.g. \"linkml:types\"). Not resolved or validated by the registry — passed through as-is.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistrySchema']} })
     registry_classes: Optional[list[str]] = Field(default=None, description="""The RegistryClass entities (by id) included in this schema.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistrySchema']} })
     registry_properties: Optional[list[str]] = Field(default=None, description="""The RegistryProperty entities (by id) included in this schema. Not implied by registry_classes' own `properties` — a composed schema may include a standalone property not attached to any included class, or omit one of an included class's properties.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistrySchema']} })
@@ -694,7 +681,6 @@ RegistryRule.model_rebuild()
 Transform.model_rebuild()
 PermissibleValue.model_rebuild()
 RegistryValueSet.model_rebuild()
-UnitOfMeasure.model_rebuild()
 SchemaSource.model_rebuild()
 SchemaVersionSnapshot.model_rebuild()
 RegistrySchema.model_rebuild()

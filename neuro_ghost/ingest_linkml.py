@@ -43,8 +43,10 @@ For every (entity, source) attestation → one ProvenanceEntry node,
 CONTENT-ADDRESSED IDENTITY
 ---------------------------
 A RegistryClass/RegistryProperty's sha256_hash is computed from its own semantic
-content (name, description, range/units for properties; name, description,
-properties/is_a/mixins for classes) — see schema_registry_utils.hashing.
+content (name, description for properties — a property is a pure concept, so
+its value type and unit live on RegistryRules, not in its identity; name,
+description, properties/is_a/mixins for classes) — see
+schema_registry_utils.hashing.
 Two properties from different schemas with identical content get the SAME
 sha256_hash automatically; there is no separate content_id/SemanticIdentity
 lookup layer anymore.
@@ -484,16 +486,15 @@ def build_registry_entities(
         slot = slots.get(slot_name)
         if not slot:
             continue
-        unit_text = slot.get("units") or None
+        # A RegistryProperty is a pure concept: identity is name + description
+        # only. The value type (property_range / range_any_of) and unit are
+        # NOT stored here — they are realization details recorded as RANGE /
+        # RANGE_ANY_OF / UNIT RegistryRules below, so the same concept
+        # collapses across schemas even when they type or measure it
+        # differently. (See the rules section for where each is emitted.)
         fields = dict(
             name=slot_name,
             description=slot["definition"] or "",
-            property_range=slot["value_range"],
-            range_any_of=slot.get("value_range_any_of") or [],
-            # ucum_code, not descriptive_name: this free-text extraction
-            # ("FTE", "mV") is exactly the short-code shape align.py's
-            # _DIMS dimension lookup already expects.
-            unit={"ucum_code": unit_text} if unit_text else None,
             concept_uri=slot["iri"] or None,
             skos_mappings=[],
             aliases=slot.get("aliases") or [],
@@ -507,60 +508,6 @@ def build_registry_entities(
             **fields,
         )
         properties[slot_name] = prop
-
-    # RegistryRule: one per declarative facet a slot states, atomic per
-    # rule_type (see RegistryRuleTypeEnum) — only REQUIRED, PATTERN,
-    # MIN_VALUE, and MAX_VALUE are built today, the facets parse_linkml()
-    # already extracts; the remaining rule_types (MAX_LENGTH,
-    # ENUM_MEMBERSHIP, ...) aren't wired up yet and need their own
-    # parse_linkml() extraction first.
-    _RULE_TYPE_DESCRIPTIONS = {
-        "REQUIRED": "Property must be present.",
-        "PATTERN": "Value must match a regex.",
-        "MIN_VALUE": "Numeric value must satisfy a lower bound (inclusive).",
-        "MAX_VALUE": "Numeric value must satisfy an upper bound (inclusive).",
-    }
-
-    rules: dict[str, RegistryRule] = {}
-
-    def make_rule(slot_name: str, rule_type: str, rule_value: str, error_message: str) -> None:
-        fields = dict(
-            name=rule_type,
-            description=_RULE_TYPE_DESCRIPTIONS[rule_type],
-            skos_mappings=[],
-            aliases=[],
-            concept_uri=None,
-            rule_type=rule_type,
-            rule_value=rule_value,
-            applies_to=[properties[slot_name].id],
-            used_in_class=None,
-            severity="ERROR",
-            error_message=error_message,
-            referenced_entities=[],
-        )
-        sha = compute_content_hash_for(RegistryRule, fields)
-        rid = dedup_id("RegistryRule", sha)
-        rule = RegistryRule(
-            id=rid,
-            sha256_hash=sha,
-            provenance=[make_prov(rid)],
-            **fields,
-        )
-        rules[f"{slot_name}:{rule_type}"] = rule
-
-    for slot_name, prop in properties.items():
-        slot = slots[slot_name]
-        if slot.get("required"):
-            make_rule(slot_name, "REQUIRED", "true", f"{slot_name} is required.")
-        if slot.get("pattern"):
-            make_rule(slot_name, "PATTERN", slot["pattern"],
-                      f"{slot_name} must match pattern {slot['pattern']!r}.")
-        if slot.get("minimum_value") is not None:
-            make_rule(slot_name, "MIN_VALUE", slot["minimum_value"],
-                      f"{slot_name} must be >= {slot['minimum_value']}.")
-        if slot.get("maximum_value") is not None:
-            make_rule(slot_name, "MAX_VALUE", slot["maximum_value"],
-                      f"{slot_name} must be <= {slot['maximum_value']}.")
 
     registry_classes: dict[str, RegistryClass] = {}
 
@@ -652,18 +599,19 @@ def build_registry_entities(
         )
         value_sets[enum_name] = vs
 
-    # Second pass: resolve property_range name-IRIs to real UUIDs.
+    # RegistryRules — built LAST, after properties, classes, and enums all
+    # have ids, so a rule that references another entity (a RANGE rule whose
+    # value is a class/enum) can carry that entity's real id directly. This
+    # ordering is what makes range/unit-on-rules cycle-free: property and
+    # class hashes settle first (their identity no longer depends on range or
+    # unit), then rules point at the settled ids. No second pass, no SELF
+    # sentinel — a self-referential range (ProvEntity.was_derived_from ->
+    # ProvEntity) is just a RANGE rule whose rule_value is ProvEntity's id,
+    # and the class hash never depended on that rule.
     #
-    # For a class/enum-typed range, _slot_to_dict() stores make_iri(name)
-    # (e.g. https://registry.sensein.io/obj/ProvEntity) — a synthetic
-    # label, not a graph reference. Rewrite each property's property_range
-    # in place so ranges point at real objects by id.
-    #
-    # Safe against self-references and cross-class cycles because
-    # property_range is deliberately not in HashSubset (see meta_model.yaml):
-    # property sha256_hashes settle without knowing class ids, class
-    # sha256_hashes settle from the property ids, and this rewrite touches
-    # a field that no fingerprint depends on. No re-hash needed.
+    # A class/enum-typed range arrives from _slot_to_dict() as make_iri(name)
+    # (a synthetic label, not a graph reference); resolve it to the real id
+    # here. An XSD CURIE or an already-resolved external IRI passes through.
     name_iri_to_id: dict[str, str] = {
         make_iri(cls_name): rc.id
         for cls_name, rc in registry_classes.items()
@@ -672,11 +620,94 @@ def build_registry_entities(
         make_iri(enum_name): vs.id
         for enum_name, vs in value_sets.items()
     })
-    for prop in properties.values():
-        if prop.property_range in name_iri_to_id:
-            prop.property_range = name_iri_to_id[prop.property_range]
-        if prop.range_any_of:
-            prop.range_any_of = [name_iri_to_id.get(r, r) for r in prop.range_any_of]
+
+    def resolve_range(value: str) -> str:
+        """XSD CURIE / external IRI pass through; a make_iri(name) placeholder
+        for an in-schema class or enum resolves to that entity's real id."""
+        return name_iri_to_id.get(value, value)
+
+    # One RegistryRule per declarative facet a slot states, atomic per
+    # rule_type (see RegistryRuleTypeEnum). REQUIRED/PATTERN/MIN_VALUE/
+    # MAX_VALUE come from the facets parse_linkml() extracts; RANGE / UNIT
+    # carry the value type and unit that used to live on RegistryProperty;
+    # RANGE_ANY_OF carries each member of a union range. The remaining
+    # rule_types (MAX_LENGTH, ENUM_MEMBERSHIP, ...) aren't wired up yet and
+    # need their own parse_linkml() extraction first.
+    _RULE_TYPE_DESCRIPTIONS = {
+        "REQUIRED": "Property must be present.",
+        "PATTERN": "Value must match a regex.",
+        "MIN_VALUE": "Numeric value must satisfy a lower bound (inclusive).",
+        "MAX_VALUE": "Numeric value must satisfy an upper bound (inclusive).",
+        "RANGE": "Property's value type in this usage.",
+        "RANGE_ANY_OF": "One permitted alternative range of a union property.",
+        "UNIT": "Unit of measure for the property's values in this usage.",
+    }
+
+    rules: dict[str, RegistryRule] = {}
+
+    def make_rule(slot_name: str, rule_type: str, rule_value: str, error_message: str) -> None:
+        fields = dict(
+            name=rule_type,
+            description=_RULE_TYPE_DESCRIPTIONS[rule_type],
+            skos_mappings=[],
+            aliases=[],
+            concept_uri=None,
+            rule_type=rule_type,
+            rule_value=rule_value,
+            applies_to=[properties[slot_name].id],
+            used_in_class=None,
+            severity="ERROR",
+            error_message=error_message,
+            referenced_entities=[],
+        )
+        sha = compute_content_hash_for(RegistryRule, fields)
+        rid = dedup_id("RegistryRule", sha)
+        rule = RegistryRule(
+            id=rid,
+            sha256_hash=sha,
+            provenance=[make_prov(rid)],
+            **fields,
+        )
+        # Key by rule_value too where a slot can state several rules of the
+        # same type (RANGE_ANY_OF members), so members don't overwrite each
+        # other; single-instance types keep the plain "slot:TYPE" key.
+        key = f"{slot_name}:{rule_type}"
+        if key in rules:
+            key = f"{slot_name}:{rule_type}:{rule_value}"
+        rules[key] = rule
+
+    for slot_name, prop in properties.items():
+        slot = slots[slot_name]
+        if slot.get("required"):
+            make_rule(slot_name, "REQUIRED", "true", f"{slot_name} is required.")
+        if slot.get("pattern"):
+            make_rule(slot_name, "PATTERN", slot["pattern"],
+                      f"{slot_name} must match pattern {slot['pattern']!r}.")
+        if slot.get("minimum_value") is not None:
+            make_rule(slot_name, "MIN_VALUE", slot["minimum_value"],
+                      f"{slot_name} must be >= {slot['minimum_value']}.")
+        if slot.get("maximum_value") is not None:
+            make_rule(slot_name, "MAX_VALUE", slot["maximum_value"],
+                      f"{slot_name} must be <= {slot['maximum_value']}.")
+
+        # Value type: a single range -> one RANGE rule; a union -> one
+        # RANGE_ANY_OF rule per member. Exactly one form is populated, mirroring
+        # LinkML's `range` vs `any_of`.
+        members = slot.get("value_range_any_of") or []
+        if members:
+            for member in members:
+                rv = resolve_range(member)
+                make_rule(slot_name, "RANGE_ANY_OF", rv,
+                          f"{slot_name} range may be {rv}.")
+        elif slot.get("value_range"):
+            rv = resolve_range(slot["value_range"])
+            make_rule(slot_name, "RANGE", rv, f"{slot_name} has range {rv}.")
+
+        # Unit: rule_value is the UCUM short code parse_linkml() extracted
+        # ("FTE", "mV", "Hz") — the shape align.py's unit veto expects.
+        unit_text = slot.get("units") or None
+        if unit_text:
+            make_rule(slot_name, "UNIT", unit_text, f"{slot_name} is measured in {unit_text}.")
 
     return properties, registry_classes, value_sets, permissible_values, rules, provenance_entries
 
@@ -880,8 +911,9 @@ def _print_entities(properties: dict, registry_classes: dict,
     visual inspection.
 
     By default prints exactly what is stored — id-reference fields
-    (properties, parent_class, range_any_of, applies_to, attests_to, ...)
-    show the raw UUIDs. With readable=True those references are resolved to
+    (properties, parent_class, applies_to, rule_value range targets,
+    attests_to, ...) show the raw UUIDs. With readable=True those references
+    are resolved to
     the referent's name instead, for eyeballing.
     """
     name_by_id = {p.id: name for name, p in properties.items()}
@@ -918,9 +950,6 @@ def _print_entities(properties: dict, registry_classes: dict,
             click.echo(f"      sha256_hash:   {p.sha256_hash}")
             click.echo(f"      description:   {p.description}")
             click.echo(f"      concept_uri:   {p.concept_uri}")
-            click.echo(f"      property_range:{ref(p.property_range)}")
-            click.echo(f"      range_any_of:  {refs(p.range_any_of)}")
-            click.echo(f"      unit:          {p.unit}")
             click.echo(f"      aliases:       {p.aliases}")
 
     if value_sets:

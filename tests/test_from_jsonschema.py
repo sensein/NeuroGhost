@@ -34,6 +34,19 @@ def _convert_and_build(data, name: str, tmp_path):
     return linkml_dict, build_registry_entities(parsed, name, "tester")
 
 
+# A property's value type now lives on its RANGE rule (single) or RANGE_ANY_OF
+# rules (union), not on the property node — read it back through the rules.
+def _range_of(rules, prop):
+    vals = [r.rule_value for r in rules.values()
+            if r.rule_type == "RANGE" and r.applies_to == [prop.id]]
+    return vals[0] if vals else None
+
+
+def _any_of(rules, prop):
+    return {r.rule_value for r in rules.values()
+            if r.rule_type == "RANGE_ANY_OF" and r.applies_to == [prop.id]}
+
+
 def test_person_json_schema_maps_to_classes_properties_and_rules(tmp_path):
     """
     person.schema.json exercises the pieces that matter for the registry:
@@ -62,14 +75,14 @@ def test_person_json_schema_maps_to_classes_properties_and_rules(tmp_path):
         for pv_id in value_sets["RoleType"].permissible_values
     }
     assert role_values == {"author", "editor", "reviewer"}
-    # The referencing property points at that value set, not a class.
-    assert properties["roles"].property_range == value_sets["RoleType"].id
+    # The referencing property's RANGE rule points at that value set, not a class.
+    assert _range_of(rules, properties["roles"]) == value_sets["RoleType"].id
 
-    # $ref property -> class-typed range (resolved to Address's real id).
-    assert properties["address"].property_range == registry_classes["Address"].id
+    # $ref property -> class-typed RANGE rule (resolved to Address's real id).
+    assert _range_of(rules, properties["address"]) == registry_classes["Address"].id
 
     # age is a real integer with numeric bounds; name has a pattern.
-    assert properties["age"].property_range == "xsd:integer"
+    assert _range_of(rules, properties["age"]) == "xsd:integer"
 
     # The four constraint facets each became a RegistryRule, applied to the
     # right property. pattern + min/max are the ones schema-automator's
@@ -85,11 +98,13 @@ def test_person_json_schema_maps_to_classes_properties_and_rules(tmp_path):
     assert rule("MIN_VALUE", "age").rule_value == "0"
     assert rule("MAX_VALUE", "age").rule_value == "120"
 
-    # Exactly those four — no phantom rules from unconstrained properties.
-    assert {r.rule_type for r in rules.values()} == {
-        "PATTERN", "REQUIRED", "MIN_VALUE", "MAX_VALUE"
-    }
-    assert len(rules) == 4
+    # Exactly those four CONSTRAINT facets — no phantom rules from
+    # unconstrained properties. (RANGE rules are separate; every typed
+    # property gets one now, so they're excluded from this facet check.)
+    constraint_types = {"PATTERN", "REQUIRED", "MIN_VALUE", "MAX_VALUE"}
+    constraint_rules = [r for r in rules.values() if r.rule_type in constraint_types]
+    assert {r.rule_type for r in constraint_rules} == constraint_types
+    assert len(constraint_rules) == 4
 
 
 def test_string_length_becomes_a_length_pattern(tmp_path):
@@ -123,9 +138,9 @@ def test_string_length_becomes_a_length_pattern(tmp_path):
 
 def test_anyof_union_becomes_range_any_of(tmp_path):
     """An `anyOf` of $refs (dandi's polymorphic idiom, written as an array of
-    `anyOf`ed refs) becomes a LinkML union via any_of, and lands on
-    RegistryProperty.range_any_of resolved to the real target class ids —
-    with property_range left empty (a union has no single range)."""
+    `anyOf`ed refs) becomes a LinkML union via any_of, and lands on one
+    RANGE_ANY_OF rule per member, resolved to the real target class ids —
+    with no single RANGE rule (a union has no single range)."""
     js = {
         "title": "Doc", "type": "object",
         "properties": {
@@ -143,14 +158,15 @@ def test_anyof_union_becomes_range_any_of(tmp_path):
     properties, registry_classes, value_sets, permissible_values, rules, prov = built
 
     contributor = properties["contributor"]
-    # union: no single range, alternatives resolved to the real class ids.
-    assert not contributor.property_range
-    assert set(contributor.range_any_of) == {
+    # union: no single RANGE rule, alternatives on RANGE_ANY_OF rules
+    # resolved to the real class ids.
+    assert _range_of(rules, contributor) is None
+    assert _any_of(rules, contributor) == {
         registry_classes["Person"].id, registry_classes["Organization"].id,
     }
-    # a non-union property keeps a single range and an empty union list.
-    assert properties["name"].property_range == "xsd:string"
-    assert properties["name"].range_any_of == []
+    # a non-union property keeps a single RANGE rule and no RANGE_ANY_OF rules.
+    assert _range_of(rules, properties["name"]) == "xsd:string"
+    assert _any_of(rules, properties["name"]) == set()
 
 
 def test_convert_output_is_valid_linkml_shape(tmp_path):
@@ -182,9 +198,10 @@ def test_format_maps_to_linkml_type_or_warns(tmp_path, capsys):
     _, built = _convert_and_build(js, "fmt", tmp_path)
     properties = built[0]
 
-    assert properties["homepage"].property_range == "xsd:anyURI"
-    assert properties["created"].property_range == "xsd:dateTime"
-    assert properties["born"].property_range == "xsd:date"
+    rules = built[4]
+    assert _range_of(rules, properties["homepage"]) == "xsd:anyURI"
+    assert _range_of(rules, properties["created"]) == "xsd:dateTime"
+    assert _range_of(rules, properties["born"]) == "xsd:date"
     # unmappable format falls back to string, with a warning naming it.
-    assert properties["contact"].property_range == "xsd:string"
+    assert _range_of(rules, properties["contact"]) == "xsd:string"
     assert "email" in capsys.readouterr().err

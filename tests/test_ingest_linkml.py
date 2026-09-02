@@ -158,8 +158,8 @@ def test_aliases_do_not_affect_identity():
     collapse to the same sha256_hash (and therefore share an id via dedup).
     """
     base = dict(
-        name="orcid", description="ORCID identifier.", property_range="xsd:string",
-        unit=None, concept_uri="https://example.org/schema#orcid",
+        name="orcid", description="ORCID identifier.",
+        concept_uri="https://example.org/schema#orcid",
         skos_mappings=[],
     )
     with_alias = compute_content_hash_for(RegistryProperty, dict(base, aliases=["ORCID iD"]))
@@ -167,27 +167,52 @@ def test_aliases_do_not_affect_identity():
     assert with_alias == without_alias
 
 
-def test_property_range_does_not_affect_identity():
+def test_range_and_unit_live_on_rules_not_property_identity(tmp_path):
     """
-    property_range isn't in HashSubset — it's a graph reference (a class id,
-    an enum id, or an XSD CURIE), resolved by build_registry_entities()'s
-    post-hash pass, and per-usage range refinements live on RegistryRule
-    (rule_type=RANGE). Making it identity-defining would force a mutual
-    dependency between class hashes and property hashes that self-referential
-    slots can't satisfy.
+    A RegistryProperty is a pure concept: its value type and unit are not part
+    of its identity — they aren't even fields on the model. They live on RANGE
+    / UNIT RegistryRules instead. So two schemas that type the same slot
+    differently produce the SAME property (identical sha256_hash, so "age"
+    collapses across schemas) while each source's type is preserved as its own
+    RANGE rule. This is also what makes a self-referential range cycle-free:
+    the class hash never depends on the range, so the range rule can point at
+    the class id with no ordering problem (see the bican_prov test).
+    """
+    # Range and unit aren't fields on RegistryProperty at all.
+    for field in ("property_range", "range_any_of", "unit"):
+        assert field not in RegistryProperty.model_fields
 
-    Two properties differing only by property_range must therefore
-    collapse to the same sha256_hash.
-    """
-    base = dict(
-        name="target", description="An arbitrary reference.",
-        unit=None, concept_uri=None, skos_mappings=[], aliases=[],
-    )
-    as_string = compute_content_hash_for(RegistryProperty, dict(base, property_range="xsd:string"))
-    as_class_ref = compute_content_hash_for(
-        RegistryProperty, dict(base, property_range="606a7c1d-0f96-4599-8070-aad647f433f8"),
-    )
-    assert as_string == as_class_ref
+    def build(range_type):
+        yml = tmp_path / f"s_{range_type}.yml"
+        yml.write_text(
+            "id: https://example.org/s\n"
+            "name: s\n"
+            "prefixes:\n"
+            "  linkml: https://w3id.org/linkml/\n"
+            "default_range: string\n"
+            "imports:\n"
+            "  - linkml:types\n"
+            "classes:\n"
+            "  Person:\n"
+            "    attributes:\n"
+            "      age:\n"
+            f"        range: {range_type}\n"
+        )
+        return build_registry_entities(parse_linkml(yml), "s", "tester")
+
+    props_i, _, _, _, rules_i, _ = build("integer")
+    props_s, _, _, _, rules_s, _ = build("string")
+
+    # Same concept -> identical property identity (collapses across schemas).
+    assert props_i["age"].sha256_hash == props_s["age"].sha256_hash
+
+    def range_val(rules, prop):
+        return next(r.rule_value for r in rules.values()
+                    if r.rule_type == "RANGE" and r.applies_to == [prop.id])
+
+    # ...but each source's type is preserved on its own RANGE rule.
+    assert range_val(rules_i, props_i["age"]) == "xsd:integer"
+    assert range_val(rules_s, props_s["age"]) == "xsd:string"
 
 
 # Deterministic sha256 fingerprints for the entities that come out of
@@ -197,10 +222,10 @@ def test_property_range_does_not_affect_identity():
 # `id` field is asserted structurally, and cross-refs are checked by matching
 # them against the target entity's own id — see the test body.
 EXPECTED_PROP_SHAS = {
-    "name":       "sha256:049ca9da4b9dc3a3c7510ddb041f1e67af456b2f545c7c5cb3eec102c1ce4e7f",
-    "orcid":      "sha256:9b314737103a14dd66fca3b5d52dd6ae956d86307976a3e5e1d68f728c81ee1b",
-    "role":       "sha256:f8c9caa50578d700e2985a2c1c39701619722cc6477bca780b574780b031279c",
-    "created_at": "sha256:f5035dbf9b5ee2cdecb9ed9427df4deee27fcd8aad716d3e7fd6ec7e14a32f26",
+    "name":       "sha256:6adbf60646df63f0b93a58a23e65fcbec14e2c1bd5ff0a2c2bff0a3b57824a5f",
+    "orcid":      "sha256:83dffd6b0c49dc06459fc9d2e085ad772c2b8f12aa31ff4ba44986558482114c",
+    "role":       "sha256:6b7c09ed421df77f2ae43dd36bebf20160c558ab7637667f66c31ae14b8ee389",
+    "created_at": "sha256:29ba3a8a1b635cb529acfb42282e4f28b6fc069eecc7aa3564b8ddf7164e0061",
 }
 # Class sha256_hashes are deliberately NOT asserted with exact values: a
 # class's content includes its properties' UUID ids (see meta_model's
@@ -260,15 +285,15 @@ def test_build_registry_entities_produces_exactly_the_expected_objects():
         name: p.model_dump(exclude={"provenance", "id", "sha256_hash"})
         for name, p in properties.items()
     }
+    # A property is a pure concept now: name + description + concept_uri +
+    # aliases + skos_mappings. Value type and unit are NOT fields here — they
+    # live on RANGE / UNIT rules (asserted below).
     assert non_identity_dump == {
         "name": {
             "name": "name",
             "description": "Full name.",
             "skos_mappings": [],
             "concept_uri": "https://schema.org/name",
-            "property_range": "xsd:string",
-            "range_any_of": [],
-            "unit": None,
             "aliases": [],
         },
         "orcid": {
@@ -276,9 +301,6 @@ def test_build_registry_entities_produces_exactly_the_expected_objects():
             "description": "ORCID identifier.",
             "skos_mappings": [],
             "concept_uri": "https://example.org/schema#orcid",
-            "property_range": "xsd:string",
-            "range_any_of": [],
-            "unit": None,
             "aliases": ["ORCID iD"],
         },
         "role": {
@@ -286,15 +308,6 @@ def test_build_registry_entities_produces_exactly_the_expected_objects():
             "description": "Role on the study (units: FTE)",
             "skos_mappings": [],
             "concept_uri": None,
-            "property_range": "xsd:string",
-            "range_any_of": [],
-            "unit": {
-                "ucum_code": "FTE",
-                "has_quantity_kind": None,
-                "symbol": None,
-                "abbreviation": None,
-                "descriptive_name": None,
-            },
             "aliases": [],
         },
         "created_at": {
@@ -302,12 +315,26 @@ def test_build_registry_entities_produces_exactly_the_expected_objects():
             "description": "",
             "skos_mappings": [],
             "concept_uri": None,
-            "property_range": "xsd:dateTime",
-            "range_any_of": [],
-            "unit": None,
             "aliases": [],
         },
     }
+
+    # Value type + unit moved to rules: each property has a RANGE rule with
+    # the right type, and `role` (units: FTE) additionally has a UNIT rule.
+    def range_val(pname):
+        vs = [r.rule_value for r in rules.values()
+              if r.rule_type == "RANGE" and r.applies_to == [properties[pname].id]]
+        return vs[0] if vs else None
+
+    assert range_val("name") == "xsd:string"
+    assert range_val("orcid") == "xsd:string"
+    assert range_val("role") == "xsd:string"
+    assert range_val("created_at") == "xsd:dateTime"
+
+    unit_rules = [r for r in rules.values() if r.rule_type == "UNIT"]
+    assert len(unit_rules) == 1
+    assert unit_rules[0].rule_value == "FTE"
+    assert unit_rules[0].applies_to == [properties["role"].id]
 
     # 2a. Every class carries a sha256_hash of the right shape and a valid
     #     UUID id. Exact class sha256 values aren't asserted — see the
@@ -377,9 +404,9 @@ def test_build_registry_entities_produces_exactly_the_expected_objects():
 # See the comment on EXPECTED_PROP_SHAS above re: why property sha256_hashes
 # are asserted exactly but class ones aren't.
 EXPECTED_BICAN_PROP_SHAS = {
-    "used":             "sha256:1a7929fb43d1f9ab937f2f353ce3087a5152bd04bcd1489d7a06eebc29b8ba03",
-    "was_derived_from": "sha256:161c74e7f1e64c198bc04a08549a4e1b2465ce7b97c91def323d05048ff9303e",
-    "was_generated_by": "sha256:162b6a1e584c5b70d29396f9d4c94c8414b1e2893a7a736ac865ec2dad4cc017",
+    "used":             "sha256:9f719f19b5b32ee5f8ce091ba22c4b0ef9bd414d1b2505861c8fe19538d61c29",
+    "was_derived_from": "sha256:a756197b0fcf326f2fba79f9a14bb89ed365f9f2148233004d4b707ee1689a82",
+    "was_generated_by": "sha256:27c82a095779eb2fb162c499d190a113e5b2b3f7c7593babc9edb9daf41447b5",
 }
 
 
@@ -392,11 +419,13 @@ def test_build_registry_entities_maps_bican_prov_onto_the_meta_model():
     RegistryClass/RegistryProperty instances here.
 
     The interesting case this fixture exercises that comprehensive.yml
-    doesn't: `used`'s range is `ProvEntity`, a class in the same schema.
-    property_range must come out as ProvEntity's real id — proof that the
-    "second pass" rewrite in build_registry_entities() (synthetic
-    make_iri() placeholder -> real class id) already ran by the time this
-    function returns, not just later at DB-write time.
+    doesn't: `used`'s range is `ProvEntity`, a class in the same schema, and
+    `was_derived_from` on ProvEntity ranges over ProvEntity itself (a
+    self-reference). Each range comes out as the target class's real id on a
+    RANGE rule — proof that ranges resolve to real ids by the time this
+    function returns. The self-reference is cycle-free precisely because range
+    lives on a rule, not in the property/class hash: class hashes settle
+    first, then the range rule points at the settled id.
     """
     parsed = parse_linkml(FIXTURES / "bican_prov.yaml")
     properties, registry_classes, value_sets, permissible_values, rules, provenance_entries = build_registry_entities(
@@ -427,11 +456,16 @@ def test_build_registry_entities_maps_bican_prov_onto_the_meta_model():
         assert rc.is_mixin is True, name
         assert rc.is_abstract is False, name
 
-    # property_range must be the real class id, not the synthetic
-    # make_iri("ProvEntity")-style placeholder parse_linkml() starts with.
-    assert properties["used"].property_range == registry_classes["ProvEntity"].id
-    assert properties["was_derived_from"].property_range == registry_classes["ProvEntity"].id
-    assert properties["was_generated_by"].property_range == registry_classes["ProvActivity"].id
+    # Each property's RANGE rule value must be the real class id, not the
+    # synthetic make_iri("ProvEntity")-style placeholder parse_linkml() starts
+    # with. was_derived_from -> ProvEntity is the self-reference.
+    def range_val(pname):
+        return next(r.rule_value for r in rules.values()
+                    if r.rule_type == "RANGE" and r.applies_to == [properties[pname].id])
+
+    assert range_val("used") == registry_classes["ProvEntity"].id
+    assert range_val("was_derived_from") == registry_classes["ProvEntity"].id
+    assert range_val("was_generated_by") == registry_classes["ProvActivity"].id
 
     # Cross-reference wiring: each class's properties list matches the
     # target property's own id.
@@ -543,9 +577,9 @@ def test_build_registry_entities_produces_value_sets():
 
 
 EXPECTED_PERSON_PROP_SHAS = {
-    "name":      "sha256:0510770b2a85321802bb3d7d6616893c81d94dc69e4b78149565a93a762ab893",
-    "last_name": "sha256:09f88d7393e0659562062b8750fdc683d5f4cdbd92e9de669e8d624062585bd4",
-    "age":       "sha256:fedfc9376e594cee36240dac2ac47b723356c77888e14f64562de01e4ae0df7f",
+    "name":      "sha256:2c2e4f7e8f5a3c9544f13c767b5a97276ae42a07824facbf3c2243dbd260ca3a",
+    "last_name": "sha256:b95bff4df00b30ea6ff596642c9d141aa6808dffff8acf4676cd2b327a98c895",
+    "age":       "sha256:0bbe5ed5f5411f76cb97eda270069c1d5bea14f9ec767748e0a40730f6995011",
 }
 
 
@@ -581,15 +615,14 @@ def test_build_registry_entities_maps_person_classes_properties_and_rules():
     for name, prop in properties.items():
         assert prop.sha256_hash == EXPECTED_PERSON_PROP_SHAS[name], name
         assert is_uuid(prop.id), f"{name}.id not a UUID: {prop.id}"
-    assert properties["name"].property_range == "xsd:string"
-    assert properties["last_name"].property_range == "xsd:string"
-    assert properties["age"].property_range == "xsd:integer"
     assert person.properties == sorted([
         properties["name"].id, properties["last_name"].id, properties["age"].id,
     ])
 
-    # Rules — the actual point of this test. `name` (pattern), `last_name`
-    # (required), and `age` (min + max value) each produce RegistryRule(s).
+    # Rules — the actual point of this test. Every property gets a RANGE rule
+    # carrying its value type (that's where the type lives now, not on the
+    # property); plus the declared constraints: `name` (pattern), `last_name`
+    # (required), and `age` (min + max value).
     #
     # sha256_hash isn't asserted with an exact value (same reasoning as
     # class sha256_hashes above): `applies_to` is in HashSubset and holds
@@ -597,8 +630,16 @@ def test_build_registry_entities_maps_person_classes_properties_and_rules():
     # against here, so it isn't deterministic across runs. Checked
     # structurally instead.
     assert set(rules) == {
+        "name:RANGE", "last_name:RANGE", "age:RANGE",
         "name:PATTERN", "last_name:REQUIRED", "age:MIN_VALUE", "age:MAX_VALUE",
     }
+
+    # RANGE rules carry the value type that used to live on property_range.
+    assert rules["name:RANGE"].rule_value == "xsd:string"
+    assert rules["name:RANGE"].applies_to == [properties["name"].id]
+    assert rules["last_name:RANGE"].rule_value == "xsd:string"
+    assert rules["age:RANGE"].rule_value == "xsd:integer"
+    assert rules["age:RANGE"].applies_to == [properties["age"].id]
     for key, rule in rules.items():
         assert isinstance(rule, RegistryRule)
         assert rule.sha256_hash.startswith("sha256:"), key

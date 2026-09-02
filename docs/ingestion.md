@@ -29,8 +29,8 @@ Every registered object carries two identity-related fields:
   (`ProvenanceEntry`, `SchemaSource`, `SchemaVersionSnapshot`, `Mapping`,
   `RegistrySchema`, ...), so cross-references are the same shape regardless
   of the referent's family — `RegistryClass.properties`, `parent_class`,
-  `class_mixins`, `RegistryProperty.property_range`, and
-  `ProvenanceEntry.attests_to` are all UUIDs.
+  `class_mixins`, `RegistryRule.applies_to` (and a RANGE rule's class/enum
+  `rule_value`), and `ProvenanceEntry.attests_to` are all UUIDs.
 - **`sha256_hash`** — a content fingerprint on `RegistryEntity` subclasses,
   computed from the fields marked `in_subset: HashSubset` in
   `meta_model.yaml`. Not the identifier — but the mechanism by
@@ -126,9 +126,10 @@ fingerprints and provenance references:
 
 - **Properties are built first.** For each one:
   1. Compute `sha256_hash` from the `HashSubset` fields —
-     `name`/`description`/`property_range`/`unit`/`concept_uri` — via
-     `compute_content_hash_for()`. `aliases` and `property_range` are
-     deliberately excluded from the hash (see the "Data model" table below).
+     `name`/`description`/`concept_uri` — via `compute_content_hash_for()`.
+     A property is a *pure concept*: its value type and unit are **not** part
+     of its identity (they're not fields on it at all — they live on rules,
+     see below), and `aliases` is excluded too (see the "Data model" table).
   2. Look up any existing entity in the graph with that `sha256_hash`
      (`find_id_by_sha256(conn, "RegistryProperty", sha)`). If found, reuse
      that row's `id`; otherwise mint a fresh `uuid4`.
@@ -155,8 +156,18 @@ fingerprints and provenance references:
   directly (`prov:hadPrimarySource`, `prov:wasAttributedTo`,
   `prov:generatedAtTime`, `prov:wasGeneratedBy`).
 
-Return signature is a 5-tuple: `(properties, registry_classes, value_sets,
-permissible_values, provenance_entries)`. The caller — `insert_schema` —
+- **Rules are built last**, after properties, classes, and enums all have
+  ids. Each declarative facet a slot states becomes one atomic `RegistryRule`
+  (`applies_to` the property): `REQUIRED`/`PATTERN`/`MIN_VALUE`/`MAX_VALUE`
+  from the constraints, a `RANGE` rule carrying the value type (or one
+  `RANGE_ANY_OF` rule per member of a union), and a `UNIT` rule for the unit.
+  Because ranges live on rules built *after* the classes/enums they point at,
+  a `RANGE` rule's `rule_value` is the target's real id directly — no second
+  pass — and a self-referential range (e.g. `ProvEntity.was_derived_from ->
+  ProvEntity`) is cycle-free, since the class hash never depended on the range.
+
+Return signature is a 6-tuple: `(properties, registry_classes, value_sets,
+permissible_values, rules, provenance_entries)`. The caller — `insert_schema` —
 threads `provenance_entries` through to the writers.
 
 ### 3. `write_registry_entities()` + `write_structural_edges()` (`neuro_ghost/db.py`)
@@ -237,7 +248,7 @@ in `meta_model.yaml`.
 | `id` | every registered object (`RegistryEntity` subclasses **and** `ProvenanceEntry`/`SchemaSource`/`SchemaVersionSnapshot`/`Mapping`/`RegistrySchema`/`Transform`) | UUID (`uuid4`) minted at first ingest, uniform across all classes. Primary key for every FK. |
 | `sha256_hash` | every `RegistryEntity` (`RegistryClass`/`RegistryProperty`/`RegistryValueSet`/`PermissibleValue`/`RegistryRule`) | Content fingerprint over `HashSubset`-marked fields. Not the identifier — drives cross-source dedup by letting a second ingest of the same content reuse the existing `id` rather than mint a new UUID. |
 | `name`, `description` | `RegistryClass`, `RegistryProperty` (via `RegistryEntity`) | Identity-defining (part of the hash). |
-| `property_range`, `unit` | `RegistryProperty` | `unit` is identity-defining (a structured `UnitOfMeasure` — `ucum_code`, `has_quantity_kind`, `symbol`, `abbreviation`, `descriptive_name` — inlined onto `RegistryProperty`'s own node, since `UnitOfMeasure` is a value type with no `id` of its own). `property_range` is **not** part of the hash — it's a graph reference (class `id`, enum `id`, or XSD CURIE), resolved by `build_registry_entities`' post-hash pass, and per-usage range refinements live on `RegistryRule` (`rule_type=RANGE`) instead. |
+| value type, unit | `RegistryRule` (not `RegistryProperty`) | A property's value type and unit are **not** part of its identity — they aren't fields on `RegistryProperty` at all. A property is a pure concept (name + description), so the same concept collapses across schemas even when one types it `integer` and another `string`, or one measures it in years and another in months. Each realization is recorded as its own `RegistryRule`: `rule_type=RANGE` (`rule_value` = XSD CURIE / class `id` / value-set `id`), `RANGE_ANY_OF` (one per member of a union), or `UNIT` (`rule_value` = UCUM code). Alignment reads datatype/unit compatibility off these rules. |
 | `properties`, `parent_class`, `class_mixins` | `RegistryClass` | `HashSubset`-defining, stored as UUID `id` references (not embedded). Two classes with the same content (same property ids, same parent id) collapse via `sha256_hash` dedup. |
 | `is_abstract`, `is_mixin` | `RegistryClass` | LinkML's `abstract`/`mixin` flags. Both `HashSubset`-defining (they change what a class *is*) — an abstract class and a concrete one with otherwise identical content are different concepts. Default to `false` via `ifabsent`. |
 | `class_uri` / `slot_uri` (`concept_uri`) | `RegistryClass` / `RegistryProperty` | Ontology IRI preserved from the source. Part of `HashSubset` on `RegistryEntity` — sources declaring the same content under the same `concept_uri` collapse cleanly; if they declare it under different IRIs, they land as separate entities (a deliberate conservative choice — treating differing IRIs as accidental collisions would overstate similarity). |
@@ -344,25 +355,24 @@ registry_version` stays `None` for now, pending a decision on the above.
 - **`was_derived_from`** on `ProvenanceEntry` is never populated — nothing yet
   detects "this hash supersedes that one" (would need an anchor like
   `(name, source)` to correlate an edit against prior content).
-- **`RegistryRule` is fully modeled but nothing populates it yet.** The
-  class itself is real (`rule_type`/`rule_value`/`applies_to`/
-  `used_in_class`/`severity`/`error_message`/`referenced_entities`) — but
-  `build_registry_entities()` doesn't construct a single `RegistryRule`
-  instance from any source schema's constraints (`pattern`, `min_length`,
-  `required`, ...) yet. `Transform` is still a genuine stub (`id`/`name`/
-  `description` only).
+- **`RegistryRule` is populated for the common facets.**
+  `build_registry_entities()` constructs rules for `REQUIRED`/`PATTERN`/
+  `MIN_VALUE`/`MAX_VALUE`, plus a `RANGE` rule (or `RANGE_ANY_OF` per union
+  member) carrying each property's value type and a `UNIT` rule for its unit.
+  Not yet wired: the remaining `rule_type`s (`MIN_LENGTH`/`MAX_LENGTH`/
+  `ENUM_MEMBERSHIP`/`FORMAT`/`EXPRESSION_*`) and per-class refinements
+  (`used_in_class` is always unset — every rule is schema-level for now).
+  `Transform` is still a genuine stub (`id`/`name`/`description` only).
 - **`SemanticIdentity`/`PRIOR_VERSION*`** tables in `db.py`'s DDL are dead
   (superseded by content-hash identity) but not yet removed.
 - **`pandas`** isn't in `requirements.txt`, so `align.py`'s embedding cache
   silently no-ops (pre-existing gap).
-- **`aliases` and `unit` aren't populated by any real source schema yet.**
-  `ingest_linkml.py` extracts what it can (regex'd free text into
-  `unit.ucum_code`), but none of the six real ingested schemas
+- **`aliases` and unit aren't populated by any real source schema yet.**
+  `ingest_linkml.py` extracts what it can (regex'd free text into a `UNIT`
+  rule's `rule_value`), but none of the six real ingested schemas
   (aind/bbqs/bids/dandi/nwb/openminds) declare LinkML's own `aliases:`/
-  `unit:` constructs — so both fields stay largely empty until source
-  schemas adopt them, or a text-mining step is built.
-- **`scripts/update_graph.py`'s diagram draws `RegistryProperty --HAS_UNIT-->
-  UnitOfMeasure`** as if it were a separate node/edge — it isn't; `unit` is
-  `db_inline: true` and flattens onto `RegistryProperty`'s own columns (see
-  `_build_registry_ddl()`). The diagram script doesn't special-case
-  `db_inline` the way the real DDL generator does.
+  `unit:` constructs — so aliases stay largely empty and UNIT rules are rare
+  until source schemas adopt them, or a text-mining step is built.
+- **`scripts/update_graph.py`'s diagram may still draw a `UnitOfMeasure`
+  node.** That class was removed when unit moved to a `UNIT` `RegistryRule`;
+  the diagram script should be re-synced so it no longer shows it.

@@ -54,7 +54,7 @@ def test_reingesting_same_source_is_idempotent(conn):
     first = insert_schema(conn, parsed, "source_a", agent="tester")
     assert first["classes_new"] == 1
     assert first["properties_new"] == 1
-    assert first["provenance_added"] == 2  # one class + one property
+    assert first["provenance_added"] == 3  # one class + one property + its RANGE rule
 
     second = insert_schema(conn, parsed, "source_a", agent="tester")
     assert second["classes_new"] == 0
@@ -109,10 +109,10 @@ def test_content_change_produces_different_entity(conn):
     source label ("source_a"), isolating the description edit as the sole
     driver of the hash change.
 
-    A range edit is deliberately NOT tested here — property_range is not
-    in HashSubset (see meta_model.yaml), so a range change is metadata,
-    not identity. Per-usage range refinements land on RegistryRule
-    (rule_type=RANGE), which does carry range in its own HashSubset.
+    A range edit is deliberately NOT tested here — range is not part of
+    RegistryProperty identity at all (it's not a field on the property; it
+    lives on a RANGE RegistryRule, which carries the range in its own
+    HashSubset). So a range change edits the rule, not the property.
     """
     insert_schema(conn, parse_linkml(FIXTURES / "source_a.yml"), "source_a", agent="tester")
 
@@ -137,10 +137,9 @@ def test_bican_prov_ingests_expected_classes_and_properties(conn):
     bican_prov.yaml (github.com/brain-bican/models) is a small, real-world
     schema: two classes, three properties, and — notably — a slot whose
     range is another class in the same schema (used: range ProvEntity).
-    Confirms build_registry_entities()'s "second pass" (see ingest_linkml.py)
-    correctly rewrites that property_range from the synthetic make_iri()
-    placeholder to the real RegistryClass id, not just a string that
-    happens to look right.
+    Confirms each property's range is written as a RANGE RegistryRule whose
+    rule_value is the real RegistryClass id (resolved from the synthetic
+    make_iri() placeholder), reachable in the graph via APPLIES_TO_P.
 
     """
     insert_schema(conn, parse_linkml(FIXTURES / "bican_prov.yaml"), "bican_prov", agent="tester")
@@ -151,13 +150,17 @@ def test_bican_prov_ingests_expected_classes_and_properties(conn):
     }
     assert set(classes) == {"ProvActivity", "ProvEntity"}
 
-    props = conn.execute(
-        "MATCH (p:RegistryProperty) RETURN p.name, p.property_range"
-    ).get_all()
-    range_by_name = {name: rng for name, rng in props}
+    # Range lives on a RANGE rule now: rule -[:APPLIES_TO_P]-> property, with
+    # rule_value the target class id.
+    rng_rows = conn.execute("""
+        MATCH (rr:RegistryRule)-[:APPLIES_TO_P]->(p:RegistryProperty)
+        WHERE rr.rule_type = 'RANGE'
+        RETURN p.name, rr.rule_value
+    """).get_all()
+    range_by_name = {name: rng for name, rng in rng_rows}
     assert set(range_by_name) == {"used", "was_derived_from", "was_generated_by"}
 
-    # property_range must be the real RegistryClass id, not the synthetic
+    # rule_value must be the real RegistryClass id, not the synthetic
     # make_iri("ProvEntity")-style placeholder _slot_to_dict() starts with.
     assert range_by_name["used"] == classes["ProvEntity"]
     assert range_by_name["was_derived_from"] == classes["ProvEntity"]
