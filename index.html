@@ -136,6 +136,122 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   background:var(--purple-soft);border:1px solid var(--purple-line);
   border-radius:5px;padding:3px 9px;margin-bottom:5px;}
 
+/* ══ CONCEPTS ═══════════════════════════════════════════════════════════ */
+#view-concepts{overflow:hidden;}
+.concepts-grid{display:grid;grid-template-columns:220px 1fr 380px;width:100%;height:100%;}
+.c-col{overflow:hidden;display:flex;flex-direction:column;}
+.c-col + .c-col{border-left:1px solid var(--border);}
+.c-col-head{padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px;}
+.c-col-title{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:600;}
+.c-col-count{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+
+/* source filter */
+.c-src-list{overflow-y:auto;padding:8px 10px;}
+.c-src-item{display:flex;align-items:center;gap:10px;padding:7px 10px;
+  border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--text-dim);}
+.c-src-item:hover{background:var(--surface);color:var(--text);}
+.c-src-item.on{background:var(--teal-soft);color:var(--teal);}
+.c-src-tick{width:12px;height:12px;border-radius:3px;border:1.5px solid var(--border);
+  display:grid;place-items:center;flex-shrink:0;}
+.c-src-item.on .c-src-tick{background:var(--teal);border-color:var(--teal);}
+.c-src-item.on .c-src-tick::before{content:'';width:6px;height:6px;background:#0a1017;border-radius:1px;}
+.c-src-name{flex:1;font-family:var(--mono);font-size:11.5px;}
+.c-src-count{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+.c-src-toolbar{display:flex;gap:6px;padding:0 10px 8px;border-bottom:1px solid var(--border);margin-bottom:6px;}
+.c-mini-btn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);
+  padding:3px 8px;font-size:10.5px;font-family:var(--sans);cursor:pointer;flex:1;}
+.c-mini-btn:hover{color:var(--text-dim);border-color:var(--teal-line);}
+
+/* class list */
+.c-search{padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.c-search input{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:7px;padding:8px 12px;color:var(--text);font-family:var(--sans);
+  font-size:12.5px;outline:none;transition:border-color .15s,box-shadow .15s;}
+.c-search input:focus{border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
+.c-search input::placeholder{color:var(--muted);}
+.c-class-list{overflow-y:auto;flex:1;}
+.c-cls-row{padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;
+  display:flex;align-items:center;gap:10px;transition:background .12s;}
+.c-cls-row:hover{background:var(--surface);}
+.c-cls-row.selected{background:var(--teal-soft);border-left:2px solid var(--teal);padding-left:14px;}
+.c-cls-main{flex:1;overflow:hidden;}
+.c-cls-name{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.c-cls-row.selected .c-cls-name{color:var(--teal);}
+.c-cls-row.abstract .c-cls-name{color:var(--purple);}
+.c-cls-def{font-size:11px;color:var(--muted);margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.c-src-tag{display:inline-block;font-family:var(--mono);font-size:9.5px;
+  padding:2px 6px;border-radius:4px;color:var(--text-dim);background:var(--surface-2);
+  border:1px solid var(--border);flex-shrink:0;text-transform:lowercase;}
+.c-align-badge{font-family:var(--mono);font-size:9.5px;color:var(--teal);
+  background:var(--teal-soft);border:1px solid var(--teal-line);
+  border-radius:99px;padding:1px 7px;flex-shrink:0;}
+.c-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
+
+/* detail panel */
+.c-detail{overflow-y:auto;padding:20px 22px;flex:1;}
+.c-detail-placeholder{flex:1;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:12px;text-align:center;padding:24px;}
+.c-dn{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--teal);
+  margin-bottom:4px;word-break:break-word;}
+.c-dn.abstract{color:var(--purple);}
+.c-dn-iri{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  word-break:break-all;margin-bottom:14px;}
+.c-dn-iri a{color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--border);}
+.c-dn-iri a:hover{color:var(--teal);}
+.c-def{font-size:12.5px;color:var(--text-dim);line-height:1.7;margin-bottom:16px;}
+.c-src-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px;}
+.c-src-row .c-src-tag{background:var(--teal-soft);color:var(--teal);border-color:var(--teal-line);}
+.c-section{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:600;margin:14px 0 8px;}
+.c-prop{display:flex;justify-content:space-between;padding:5px 0;
+  border-bottom:1px solid var(--border);font-size:11.5px;gap:10px;}
+.c-prop:last-child{border-bottom:none;}
+.c-prop-name{font-family:var(--mono);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.c-prop-more{font-size:11px;color:var(--muted);padding:6px 0;}
+
+/* weight sliders */
+.c-weights{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;margin:6px 0 12px;}
+.c-w-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.c-w-title-l{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:600;}
+.c-w-reset{background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:10.5px;font-family:var(--sans);padding:2px 6px;border-radius:4px;}
+.c-w-reset:hover{color:var(--teal);}
+.c-w-row{display:grid;grid-template-columns:38px 1fr 32px;gap:9px;align-items:center;
+  margin-bottom:6px;}
+.c-w-row:last-child{margin-bottom:0;}
+.c-w-label{font-family:var(--mono);font-size:11px;color:var(--text-dim);text-transform:uppercase;}
+.c-w-slider{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;
+  background:var(--surface-2);outline:none;cursor:pointer;}
+.c-w-slider::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:var(--teal);cursor:pointer;border:2px solid var(--bg-elev);
+  box-shadow:0 0 0 1px var(--teal-line);}
+.c-w-slider::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--teal);
+  cursor:pointer;border:2px solid var(--bg-elev);box-shadow:0 0 0 1px var(--teal-line);}
+.c-w-val{font-family:var(--mono);font-size:11px;color:var(--teal);text-align:right;}
+
+/* alignments */
+.c-align{border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:8px;
+  background:var(--surface);}
+.c-align-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px;}
+.c-align-name{font-family:var(--mono);font-size:11.5px;color:var(--text);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.c-align-name.clickable{cursor:pointer;}
+.c-align-name.clickable:hover{color:var(--teal);}
+.c-align-dist{font-family:var(--mono);font-size:11px;flex-shrink:0;}
+.c-align-meta{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:var(--muted);}
+.c-align-method{font-family:var(--mono);}
+.c-align-scores{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px;font-size:10px;}
+.c-sc{display:flex;flex-direction:column;gap:2px;}
+.c-sc-l{color:var(--muted);text-transform:uppercase;font-size:9px;letter-spacing:.05em;}
+.c-sc-v{font-family:var(--mono);color:var(--text-dim);}
+.c-none{color:var(--muted);font-size:11.5px;font-style:italic;}
+
 /* ══ INGEST ══════════════════════════════════════════════════════════════ */
 #view-ingest{overflow:hidden;}
 .ingest-inner{display:flex;width:100%;height:100%;}
@@ -222,6 +338,16 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
       </svg>
       Meta-model
     </button>
+    <button class="tab" data-view="concepts">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="4.5" cy="4.5" r="2.5"/>
+        <circle cx="11.5" cy="4.5" r="2.5"/>
+        <circle cx="8" cy="11.5" r="2.5"/>
+        <line x1="6" y1="6" x2="7" y2="9.5"/>
+        <line x1="10" y1="6" x2="9" y2="9.5"/>
+      </svg>
+      Concepts
+    </button>
     <button class="tab" data-view="ingest">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M8 2v9"/><polyline points="5 8 8 11 11 8"/>
@@ -275,6 +401,42 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
       <span class="enum-chip">ReviewStatusEnum</span>
       <span class="enum-chip">RegistryRuleTypeEnum</span>
       <span class="enum-chip">RegistryRuleSeverityEnum</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Concepts ────────────────────────────────────────── -->
+<div id="view-concepts" class="view">
+  <div class="concepts-grid">
+    <div class="c-col">
+      <div class="c-col-head">
+        <span class="c-col-title">Sources</span>
+      </div>
+      <div class="c-src-toolbar">
+        <button class="c-mini-btn" id="c-src-all">All</button>
+        <button class="c-mini-btn" id="c-src-none">None</button>
+      </div>
+      <div class="c-src-list" id="c-src-list"></div>
+    </div>
+    <div class="c-col">
+      <div class="c-col-head">
+        <span class="c-col-title">Classes</span>
+        <span class="c-col-count" id="c-list-count">—</span>
+      </div>
+      <div class="c-search">
+        <input id="c-search-input" type="text" placeholder="Filter classes by name or definition…" spellcheck="false" autocomplete="off"/>
+      </div>
+      <div class="c-class-list" id="c-class-list">
+        <div class="c-empty">Loading registry…</div>
+      </div>
+    </div>
+    <div class="c-col">
+      <div class="c-col-head">
+        <span class="c-col-title">Detail</span>
+      </div>
+      <div id="c-detail" class="c-detail-placeholder">
+        <span>Select a class to see its definition, properties, and alignments.</span>
+      </div>
     </div>
   </div>
 </div>
@@ -336,27 +498,33 @@ document.querySelectorAll('.tab').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('view-' + target).classList.add('active');
     if (target === 'meta') renderGraph();
+    else if (target === 'concepts') initConcepts();
   });
 });
 
 // ────────────────────────────────────────────────────────
-// Status bar — load registry.json
+// Registry loader (shared by status bar + Concepts view)
 // ────────────────────────────────────────────────────────
-(async () => {
+const registryPromise = (async () => {
   try {
     const r = await fetch('./data/registry.json');
     if (!r.ok) throw new Error();
-    const d = await r.json();
-    const ver  = d.registry_version ? 'v' + d.registry_version : '';
-    const cls  = (d.classes||[]).length;
-    const srcs = (d.sources||[]).length;
-    document.getElementById('status-text').textContent =
-      `registry ${ver} · ${cls} classes · ${srcs} schemas`;
-  } catch {
+    return await r.json();
+  } catch { return null; }
+})();
+
+registryPromise.then(d => {
+  if (!d) {
     document.getElementById('status-text').textContent = 'registry offline';
     document.querySelector('.dot').style.background = 'var(--red)';
+    return;
   }
-})();
+  const ver  = d.registry_version ? 'v' + d.registry_version : '';
+  const cls  = (d.classes||[]).length;
+  const srcs = (d.sources||[]).length;
+  document.getElementById('status-text').textContent =
+    `registry ${ver} · ${cls} classes · ${srcs} schemas`;
+});
 
 // ────────────────────────────────────────────────────────
 // Meta-model data
@@ -776,6 +944,257 @@ document.addEventListener('mousedown', e => {
     searchResults.classList.remove('open');
   }
 });
+
+// ────────────────────────────────────────────────────────
+// Concepts view
+// ────────────────────────────────────────────────────────
+const CONCEPT = {
+  registry: null,
+  sources:  null,          // full source list [{label, version, class_count}]
+  enabled:  null,          // Set of enabled source labels
+  query:    '',
+  selected: null,          // hash_id of the currently-open class
+  weights:  { iri: 40, name: 25, desc: 25, slot: 10 },
+  initted:  false,
+};
+const CONCEPT_DEFAULT_WEIGHTS = { ...CONCEPT.weights };
+
+async function initConcepts() {
+  if (CONCEPT.initted) return;
+  CONCEPT.initted = true;
+
+  const listEl = document.getElementById('c-class-list');
+  const d = await registryPromise;
+  if (!d) {
+    listEl.innerHTML = `<div class="c-empty">Could not load <code>data/registry.json</code>.<br/>Run the pipeline or serve the site from a local HTTP server.</div>`;
+    return;
+  }
+  CONCEPT.registry = d;
+
+  // Compute per-source class counts from the actual data (may differ from
+  // sources[].class_count when a class is attributed to multiple sources).
+  const counts = {};
+  d.classes.forEach(c => (c.sources || []).forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
+  const declared = new Set(d.sources.map(s => s.label));
+  const observed = Object.keys(counts).filter(k => !declared.has(k))
+    .map(label => ({ label, version: null, class_count: counts[label] }));
+  CONCEPT.sources = [...d.sources, ...observed]
+    .sort((a, b) => (counts[b.label] || 0) - (counts[a.label] || 0));
+  CONCEPT.enabled = new Set(CONCEPT.sources.map(s => s.label));
+
+  renderSources(counts);
+  renderClassList();
+
+  // wire search + toolbar (only once)
+  document.getElementById('c-search-input').addEventListener('input', e => {
+    CONCEPT.query = e.target.value.trim().toLowerCase();
+    renderClassList();
+  });
+  document.getElementById('c-src-all').addEventListener('click', () => {
+    CONCEPT.enabled = new Set(CONCEPT.sources.map(s => s.label));
+    renderSources(counts); renderClassList();
+  });
+  document.getElementById('c-src-none').addEventListener('click', () => {
+    CONCEPT.enabled = new Set();
+    renderSources(counts); renderClassList();
+  });
+}
+
+function renderSources(counts) {
+  const el = document.getElementById('c-src-list');
+  el.innerHTML = CONCEPT.sources.map(s => {
+    const on = CONCEPT.enabled.has(s.label);
+    return `
+      <div class="c-src-item${on ? ' on' : ''}" data-label="${esc(s.label)}">
+        <span class="c-src-tick"></span>
+        <span class="c-src-name">${esc(s.label)}</span>
+        <span class="c-src-count">${counts[s.label] || 0}</span>
+      </div>`;
+  }).join('');
+  el.querySelectorAll('.c-src-item').forEach(row => {
+    row.addEventListener('click', () => {
+      const label = row.dataset.label;
+      if (CONCEPT.enabled.has(label)) CONCEPT.enabled.delete(label);
+      else CONCEPT.enabled.add(label);
+      renderSources(counts); renderClassList();
+    });
+  });
+}
+
+function classPassesFilter(c) {
+  const srcOk = (c.sources || []).some(s => CONCEPT.enabled.has(s));
+  if (!srcOk) return false;
+  if (!CONCEPT.query) return true;
+  const q = CONCEPT.query;
+  return (c.name || '').toLowerCase().includes(q)
+      || (c.definition || '').toLowerCase().includes(q);
+}
+
+function renderClassList() {
+  const listEl = document.getElementById('c-class-list');
+  const countEl = document.getElementById('c-list-count');
+  const filtered = CONCEPT.registry.classes.filter(classPassesFilter);
+  filtered.sort((a, b) => a.name.localeCompare(b.name));
+  countEl.textContent = `${filtered.length} / ${CONCEPT.registry.classes.length}`;
+
+  if (!filtered.length) {
+    listEl.innerHTML = '<div class="c-empty">No classes match the current filter.</div>';
+    return;
+  }
+  // Cap at 500 to keep DOM light — user can filter further to see the rest.
+  const shown = filtered.slice(0, 500);
+  listEl.innerHTML = shown.map(c => {
+    const nAlign = (c.alignments || []).length;
+    return `
+      <div class="c-cls-row${c.is_abstract ? ' abstract' : ''}${CONCEPT.selected === c.hash_id ? ' selected' : ''}" data-hash="${esc(c.hash_id)}">
+        <div class="c-cls-main">
+          <div class="c-cls-name">${esc(c.name)}</div>
+          <div class="c-cls-def">${esc((c.definition || '').slice(0, 120) || '—')}</div>
+        </div>
+        ${(c.sources || []).slice(0, 1).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}
+        ${nAlign ? `<span class="c-align-badge">${nAlign}↔</span>` : ''}
+      </div>`;
+  }).join('') + (filtered.length > shown.length
+    ? `<div class="c-empty">${filtered.length - shown.length} more — refine the filter to see them.</div>`
+    : '');
+
+  listEl.querySelectorAll('.c-cls-row').forEach(row => {
+    row.addEventListener('click', () => {
+      CONCEPT.selected = row.dataset.hash;
+      renderClassList();       // re-render to update .selected state
+      renderConceptDetail();
+    });
+  });
+}
+
+function conceptWeightedDistance(a) {
+  const w = CONCEPT.weights;
+  const s = a.scores || {};
+  const num = (w.iri  * (s.iri  || 0))
+            + (w.name * (s.name || 0))
+            + (w.desc * (s.desc || 0))
+            + (w.slot * (s.slot || 0));
+  const den = w.iri + w.name + w.desc + w.slot;
+  if (!den) return a.distance ?? 1;
+  return 1 - (num / den);
+}
+
+function renderConceptDetail() {
+  const el = document.getElementById('c-detail');
+  const c  = CONCEPT.registry.classes.find(x => x.hash_id === CONCEPT.selected);
+  if (!c) {
+    el.className = 'c-detail-placeholder';
+    el.innerHTML = '<span>Select a class to see its definition, properties, and alignments.</span>';
+    return;
+  }
+  el.className = 'c-detail';
+
+  const iriHtml = c.iri
+    ? `<div class="c-dn-iri"><a href="${esc(c.iri)}" target="_blank" rel="noopener">${esc(c.iri)}</a></div>`
+    : '';
+
+  const props = c.properties || [];
+  const propsHtml = props.length
+    ? props.slice(0, 20).map(p => `
+        <div class="c-prop">
+          <span class="c-prop-name">${esc(p.name)}</span>
+        </div>`).join('')
+      + (props.length > 20 ? `<div class="c-prop-more">+${props.length - 20} more</div>` : '')
+    : '<div class="c-none">No own properties.</div>';
+
+  const aligns = (c.alignments || []).slice().sort(
+    (a, b) => conceptWeightedDistance(a) - conceptWeightedDistance(b)
+  );
+  const alignHtml = aligns.length
+    ? aligns.map(a => {
+        const dLive = conceptWeightedDistance(a);
+        const stored = (a.distance ?? 0).toFixed(3);
+        const target = CONCEPT.registry.classes.find(x => x.hash_id === a.target_hash_id);
+        const clickable = !!target;
+        return `
+          <div class="c-align">
+            <div class="c-align-head">
+              <span class="c-align-name${clickable ? ' clickable' : ''}" data-hash="${esc(a.target_hash_id || '')}">${esc(a.target_name || a.target_iri || '?')}</span>
+              <span class="c-align-dist" style="color:${distColor(dLive)}">${dLive.toFixed(3)}</span>
+            </div>
+            <div class="c-align-meta">
+              <span class="c-align-method">${esc(a.method || '')}</span>
+              <span>stored ${stored}</span>
+            </div>
+            ${a.scores ? `
+              <div class="c-align-scores">
+                <div class="c-sc"><span class="c-sc-l">iri</span><span class="c-sc-v">${(a.scores.iri || 0).toFixed(2)}</span></div>
+                <div class="c-sc"><span class="c-sc-l">name</span><span class="c-sc-v">${(a.scores.name || 0).toFixed(2)}</span></div>
+                <div class="c-sc"><span class="c-sc-l">desc</span><span class="c-sc-v">${(a.scores.desc || 0).toFixed(2)}</span></div>
+                <div class="c-sc"><span class="c-sc-l">slot</span><span class="c-sc-v">${(a.scores.slot || 0).toFixed(2)}</span></div>
+              </div>` : ''}
+          </div>`;
+      }).join('')
+    : '<div class="c-none">No alignments recorded for this class.</div>';
+
+  const w = CONCEPT.weights;
+  const weightsHtml = `
+    <div class="c-weights">
+      <div class="c-w-title">
+        <span class="c-w-title-l">Distance weights</span>
+        <button class="c-w-reset" id="c-w-reset">reset</button>
+      </div>
+      ${['iri','name','desc','slot'].map(k => `
+        <div class="c-w-row">
+          <span class="c-w-label">${k}</span>
+          <input class="c-w-slider" type="range" min="0" max="100" step="1" value="${w[k]}" data-w="${k}"/>
+          <span class="c-w-val" data-wv="${k}">${w[k]}</span>
+        </div>`).join('')}
+    </div>`;
+
+  el.innerHTML = `
+    <div class="c-dn${c.is_abstract ? ' abstract' : ''}">${esc(c.name)}</div>
+    ${iriHtml}
+    <div class="c-src-row">${(c.sources || []).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}</div>
+    <div class="c-def">${esc(c.definition || '—')}</div>
+
+    <div class="c-section">Properties (${props.length})</div>
+    ${propsHtml}
+
+    <div class="c-section">Alignments (${aligns.length})</div>
+    ${aligns.length ? weightsHtml : ''}
+    ${alignHtml}
+  `;
+
+  // Slider handlers — live re-rank on input
+  el.querySelectorAll('.c-w-slider').forEach(sl => {
+    sl.addEventListener('input', e => {
+      const k = e.target.dataset.w;
+      CONCEPT.weights[k] = +e.target.value;
+      el.querySelector(`[data-wv="${k}"]`).textContent = e.target.value;
+      // Re-rank alignments only (avoid rebuilding the whole detail)
+      renderConceptDetail();
+    });
+  });
+  const resetBtn = el.querySelector('#c-w-reset');
+  if (resetBtn) resetBtn.addEventListener('click', () => {
+    CONCEPT.weights = { ...CONCEPT_DEFAULT_WEIGHTS };
+    renderConceptDetail();
+  });
+
+  // Click alignment target → jump to it
+  el.querySelectorAll('.c-align-name.clickable').forEach(node => {
+    node.addEventListener('click', () => {
+      CONCEPT.selected = node.dataset.hash;
+      renderClassList();
+      renderConceptDetail();
+      const row = document.querySelector('.c-cls-row.selected');
+      if (row) row.scrollIntoView({ block: 'nearest' });
+    });
+  });
+}
+
+function distColor(d) {
+  if (d < 0.15) return 'var(--green)';
+  if (d < 0.35) return 'var(--teal)';
+  if (d < 0.6)  return 'var(--yellow)';
+  return 'var(--red)';
+}
 
 // ────────────────────────────────────────────────────────
 // Ingest — drag-drop + preview + GitHub issue
