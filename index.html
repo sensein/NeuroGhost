@@ -252,6 +252,74 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .c-sc-v{font-family:var(--mono);color:var(--text-dim);}
 .c-none{color:var(--muted);font-size:11.5px;font-style:italic;}
 
+/* ══ DIFF ══════════════════════════════════════════════════════════════ */
+#view-diff{overflow:hidden;flex-direction:column;}
+.diff-head{padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.diff-picker{display:flex;align-items:center;gap:8px;}
+.diff-picker-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;}
+.diff-select{background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 26px 7px 12px;outline:none;
+  cursor:pointer;appearance:none;-webkit-appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;
+  background-size:5px 5px;background-repeat:no-repeat;}
+.diff-select:focus{border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
+.diff-swap{background:none;border:1px solid var(--border);border-radius:7px;
+  color:var(--muted);cursor:pointer;padding:6px 9px;transition:all .15s;font-family:var(--sans);}
+.diff-swap:hover{color:var(--teal);border-color:var(--teal-line);}
+.diff-swap svg{width:14px;height:14px;display:block;}
+
+.diff-chips{padding:10px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+  display:flex;gap:8px;background:var(--bg-elev);}
+.d-chip{background:var(--surface);border:1px solid var(--border);border-radius:99px;
+  padding:6px 14px;font-size:12px;color:var(--text-dim);cursor:pointer;font-family:var(--sans);
+  display:flex;align-items:center;gap:7px;transition:all .15s;}
+.d-chip:hover{color:var(--text);}
+.d-chip.active{background:var(--teal-soft);border-color:var(--teal-line);color:var(--teal);}
+.d-chip-count{font-family:var(--mono);font-size:11px;opacity:.7;}
+
+.diff-body{overflow-y:auto;flex:1;padding:16px 20px;}
+.diff-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7;}
+
+.d-pair,.d-single{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;margin-bottom:8px;}
+.d-pair-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px;}
+.d-pair-names{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;flex:1;overflow:hidden;min-width:0;}
+.d-pair-a,.d-pair-b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:600;flex:1;min-width:0;}
+.d-arrow{color:var(--muted);font-family:var(--mono);flex-shrink:0;}
+.d-via{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:99px;
+  border:1px solid var(--border);color:var(--muted);flex-shrink:0;}
+.d-via.name{color:var(--teal);border-color:var(--teal-line);background:var(--teal-soft);}
+.d-via.alignment{color:var(--purple);border-color:var(--purple-line);background:var(--purple-soft);}
+.d-delta{display:flex;gap:14px;font-size:10.5px;font-family:var(--mono);color:var(--muted);
+  margin-top:8px;flex-wrap:wrap;}
+.d-delta-shared{color:var(--text-dim);}
+.d-delta-add{color:var(--green);}
+.d-delta-rem{color:var(--red);}
+.d-def{font-size:11px;color:var(--muted);line-height:1.55;margin-top:6px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.d-pair.expanded .d-def{-webkit-line-clamp:unset;overflow:visible;}
+
+.d-expand-btn{background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:10.5px;font-family:var(--sans);margin-top:6px;padding:0;text-decoration:underline dotted;}
+.d-expand-btn:hover{color:var(--teal);}
+.d-slot-lists{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:none;
+  grid-template-columns:1fr 1fr;gap:14px;font-size:11px;}
+.d-pair.expanded .d-slot-lists{display:grid;}
+.d-slot-col-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+  font-weight:600;margin-bottom:4px;}
+.d-slot-chip{display:inline-block;font-family:var(--mono);font-size:10px;
+  padding:2px 6px;border-radius:4px;margin:2px 3px 2px 0;}
+.d-slot-chip.add{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.3);}
+.d-slot-chip.rem{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3);}
+.d-slot-chip.shared{background:var(--surface-2);color:var(--text-dim);border:1px solid var(--border);}
+
+.d-single-name{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:600;}
+.d-single.abstract .d-single-name{color:var(--purple);}
+.d-single-meta{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.d-single-nprops{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex-shrink:0;}
+
 /* ══ INGEST ══════════════════════════════════════════════════════════════ */
 #view-ingest{overflow:hidden;}
 .ingest-inner{display:flex;width:100%;height:100%;}
@@ -348,6 +416,14 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
       </svg>
       Concepts
     </button>
+    <button class="tab" data-view="diff">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="3" width="5" height="10" rx="1"/>
+        <rect x="9" y="3" width="5" height="10" rx="1"/>
+        <line x1="7.5" y1="8" x2="8.5" y2="8"/>
+      </svg>
+      Diff
+    </button>
     <button class="tab" data-view="ingest">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M8 2v9"/><polyline points="5 8 8 11 11 8"/>
@@ -441,6 +517,34 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   </div>
 </div>
 
+<!-- ── Diff ────────────────────────────────────────────── -->
+<div id="view-diff" class="view">
+  <div class="diff-head">
+    <div class="diff-picker">
+      <span class="diff-picker-lbl">A</span>
+      <select id="diff-a" class="diff-select"></select>
+    </div>
+    <button id="diff-swap" class="diff-swap" title="Swap A and B">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 5h11M10 2l3 3-3 3"/>
+        <path d="M14 11H3M6 14l-3-3 3-3"/>
+      </svg>
+    </button>
+    <div class="diff-picker">
+      <span class="diff-picker-lbl">B</span>
+      <select id="diff-b" class="diff-select"></select>
+    </div>
+  </div>
+  <div class="diff-chips">
+    <button class="d-chip active" data-mode="matched">Matched <span class="d-chip-count" id="d-cnt-matched">0</span></button>
+    <button class="d-chip" data-mode="onlyA">Only in A <span class="d-chip-count" id="d-cnt-onlyA">0</span></button>
+    <button class="d-chip" data-mode="onlyB">Only in B <span class="d-chip-count" id="d-cnt-onlyB">0</span></button>
+  </div>
+  <div class="diff-body" id="diff-body">
+    <div class="diff-empty">Loading registry…</div>
+  </div>
+</div>
+
 <!-- ── Ingest ──────────────────────────────────────────── -->
 <div id="view-ingest" class="view">
   <div class="ingest-inner">
@@ -499,6 +603,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.getElementById('view-' + target).classList.add('active');
     if (target === 'meta') renderGraph();
     else if (target === 'concepts') initConcepts();
+    else if (target === 'diff') initDiff();
   });
 });
 
@@ -1194,6 +1299,250 @@ function distColor(d) {
   if (d < 0.35) return 'var(--teal)';
   if (d < 0.6)  return 'var(--yellow)';
   return 'var(--red)';
+}
+
+// ────────────────────────────────────────────────────────
+// Diff view — schema-vs-schema comparison
+// ────────────────────────────────────────────────────────
+const DIFF = {
+  initted: false,
+  registry: null,
+  sources: [],           // labels sorted by class_count desc
+  clsById: null,
+  a: null, b: null,
+  mode: 'matched',
+  cache: {},             // key `${a}::${b}` → { matched, onlyA, onlyB }
+  expanded: new Set(),
+};
+
+async function initDiff() {
+  if (DIFF.initted) { renderDiff(); return; }
+  DIFF.initted = true;
+
+  const d = await registryPromise;
+  const body = document.getElementById('diff-body');
+  if (!d) {
+    body.innerHTML = `<div class="diff-empty">Could not load <code>data/registry.json</code>.</div>`;
+    return;
+  }
+  DIFF.registry = d;
+  DIFF.clsById = new Map(d.classes.map(c => [c.hash_id, c]));
+
+  // Collect source labels + counts (declared + observed)
+  const counts = {};
+  d.classes.forEach(c => (c.sources || []).forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
+  DIFF.sources = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+
+  const optHtml = DIFF.sources.map(s => `<option value="${esc(s)}">${esc(s)} · ${counts[s]}</option>`).join('');
+  const selA = document.getElementById('diff-a');
+  const selB = document.getElementById('diff-b');
+  selA.innerHTML = optHtml;
+  selB.innerHTML = optHtml;
+
+  // Sensible defaults: two largest schemas that aren't the same
+  DIFF.a = DIFF.sources[0];
+  DIFF.b = DIFF.sources[1] || DIFF.sources[0];
+  selA.value = DIFF.a;
+  selB.value = DIFF.b;
+
+  selA.addEventListener('change', () => { DIFF.a = selA.value; invalidateDiff(); renderDiff(); });
+  selB.addEventListener('change', () => { DIFF.b = selB.value; invalidateDiff(); renderDiff(); });
+
+  document.getElementById('diff-swap').addEventListener('click', () => {
+    [DIFF.a, DIFF.b] = [DIFF.b, DIFF.a];
+    selA.value = DIFF.a; selB.value = DIFF.b;
+    invalidateDiff(); renderDiff();
+  });
+
+  document.querySelectorAll('.d-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      DIFF.mode = chip.dataset.mode;
+      document.querySelectorAll('.d-chip').forEach(c => c.classList.toggle('active', c === chip));
+      renderDiffBody();
+    });
+  });
+
+  renderDiff();
+}
+
+function invalidateDiff() { DIFF.cache = {}; DIFF.expanded.clear(); }
+
+function computeDiff(srcA, srcB) {
+  const key = `${srcA}::${srcB}`;
+  if (DIFF.cache[key]) return DIFF.cache[key];
+
+  const inA = DIFF.registry.classes.filter(c => (c.sources || []).includes(srcA));
+  const inB = DIFF.registry.classes.filter(c => (c.sources || []).includes(srcB));
+
+  const byNameB = new Map();
+  inB.forEach(c => byNameB.set((c.name || '').toLowerCase(), c));
+
+  const matched = [];
+  const usedB = new Set();
+  const matchedA = new Set();
+
+  // 1. exact-name match
+  inA.forEach(a => {
+    const b = byNameB.get((a.name || '').toLowerCase());
+    if (b && !usedB.has(b.hash_id)) {
+      matched.push({ a, b, via: 'name' });
+      usedB.add(b.hash_id);
+      matchedA.add(a.hash_id);
+    }
+  });
+
+  // 2. alignment-edge match (A → B via its recorded alignments)
+  inA.forEach(a => {
+    if (matchedA.has(a.hash_id)) return;
+    for (const al of (a.alignments || [])) {
+      const target = DIFF.clsById.get(al.target_hash_id);
+      if (target && (target.sources || []).includes(srcB) && !usedB.has(target.hash_id)) {
+        matched.push({ a, b: target, via: 'alignment', distance: al.distance });
+        usedB.add(target.hash_id);
+        matchedA.add(a.hash_id);
+        break;
+      }
+    }
+  });
+
+  // 3. alignment-edge match in the reverse direction (B → A)
+  inB.forEach(b => {
+    if (usedB.has(b.hash_id)) return;
+    for (const al of (b.alignments || [])) {
+      const target = DIFF.clsById.get(al.target_hash_id);
+      if (target && (target.sources || []).includes(srcA) && !matchedA.has(target.hash_id)) {
+        matched.push({ a: target, b, via: 'alignment', distance: al.distance });
+        usedB.add(b.hash_id);
+        matchedA.add(target.hash_id);
+        break;
+      }
+    }
+  });
+
+  const onlyA = inA.filter(a => !matchedA.has(a.hash_id))
+    .sort((x, y) => x.name.localeCompare(y.name));
+  const onlyB = inB.filter(b => !usedB.has(b.hash_id))
+    .sort((x, y) => x.name.localeCompare(y.name));
+  matched.sort((x, y) => x.a.name.localeCompare(y.a.name));
+
+  const out = { matched, onlyA, onlyB, countA: inA.length, countB: inB.length };
+  DIFF.cache[key] = out;
+  return out;
+}
+
+function propDelta(a, b) {
+  const aNames = new Set((a.properties || []).map(p => (p.name || '').toLowerCase()).filter(Boolean));
+  const bNames = new Set((b.properties || []).map(p => (p.name || '').toLowerCase()).filter(Boolean));
+  const shared = [...aNames].filter(n => bNames.has(n)).sort();
+  const removed = [...aNames].filter(n => !bNames.has(n)).sort();  // in A, not in B
+  const added   = [...bNames].filter(n => !aNames.has(n)).sort();  // in B, not in A
+  return { shared, added, removed };
+}
+
+function renderDiff() {
+  if (!DIFF.registry) return;
+  if (DIFF.a === DIFF.b) {
+    document.getElementById('d-cnt-matched').textContent = '—';
+    document.getElementById('d-cnt-onlyA').textContent   = '—';
+    document.getElementById('d-cnt-onlyB').textContent   = '—';
+    document.getElementById('diff-body').innerHTML =
+      `<div class="diff-empty">Pick two <em>different</em> schemas to compare.</div>`;
+    return;
+  }
+  const r = computeDiff(DIFF.a, DIFF.b);
+  document.getElementById('d-cnt-matched').textContent = r.matched.length;
+  document.getElementById('d-cnt-onlyA').textContent   = r.onlyA.length;
+  document.getElementById('d-cnt-onlyB').textContent   = r.onlyB.length;
+  renderDiffBody();
+}
+
+function renderDiffBody() {
+  const body = document.getElementById('diff-body');
+  const r = computeDiff(DIFF.a, DIFF.b);
+
+  if (DIFF.mode === 'matched') {
+    if (!r.matched.length) {
+      body.innerHTML = `<div class="diff-empty">
+        No matched classes between <b>${esc(DIFF.a)}</b> and <b>${esc(DIFF.b)}</b>.<br/>
+        The pipeline hasn't recorded any alignment edges and no class names line up exactly.
+      </div>`;
+      return;
+    }
+    body.innerHTML = r.matched.map((m, i) => {
+      const d = propDelta(m.a, m.b);
+      const key = `${m.a.hash_id}~${m.b.hash_id}`;
+      const expanded = DIFF.expanded.has(key);
+      const distTag = m.via === 'alignment' && m.distance != null
+        ? ` · dist ${m.distance.toFixed(2)}` : '';
+      return `
+        <div class="d-pair${expanded ? ' expanded' : ''}" data-key="${esc(key)}">
+          <div class="d-pair-head">
+            <div class="d-pair-names">
+              <span class="d-pair-a" title="${esc(m.a.name)}">${esc(m.a.name)}</span>
+              <span class="d-arrow">↔</span>
+              <span class="d-pair-b" title="${esc(m.b.name)}">${esc(m.b.name)}</span>
+            </div>
+            <span class="d-via ${m.via}">via ${m.via}${distTag}</span>
+          </div>
+          <div class="d-delta">
+            <span class="d-delta-shared">${d.shared.length} shared</span>
+            <span class="d-delta-add">+${d.added.length} in ${esc(DIFF.b)}</span>
+            <span class="d-delta-rem">−${d.removed.length} in ${esc(DIFF.a)}</span>
+          </div>
+          ${(d.added.length || d.removed.length || d.shared.length)
+            ? `<button class="d-expand-btn" data-toggle="${esc(key)}">${expanded ? 'hide' : 'show'} slot diff</button>` : ''}
+          <div class="d-slot-lists">
+            <div>
+              <div class="d-slot-col-lbl">Only in ${esc(DIFF.a)}</div>
+              ${d.removed.length
+                ? d.removed.map(n => `<span class="d-slot-chip rem">${esc(n)}</span>`).join('')
+                : '<span class="c-none">none</span>'}
+            </div>
+            <div>
+              <div class="d-slot-col-lbl">Only in ${esc(DIFF.b)}</div>
+              ${d.added.length
+                ? d.added.map(n => `<span class="d-slot-chip add">${esc(n)}</span>`).join('')
+                : '<span class="c-none">none</span>'}
+            </div>
+            <div style="grid-column:1/-1">
+              <div class="d-slot-col-lbl">Shared</div>
+              ${d.shared.length
+                ? d.shared.map(n => `<span class="d-slot-chip shared">${esc(n)}</span>`).join('')
+                : '<span class="c-none">none</span>'}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    body.querySelectorAll('.d-expand-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.toggle;
+        if (DIFF.expanded.has(key)) DIFF.expanded.delete(key); else DIFF.expanded.add(key);
+        renderDiffBody();
+      });
+    });
+    return;
+  }
+
+  const list = DIFF.mode === 'onlyA' ? r.onlyA : r.onlyB;
+  const which = DIFF.mode === 'onlyA' ? DIFF.a : DIFF.b;
+  if (!list.length) {
+    body.innerHTML = `<div class="diff-empty">Every class in <b>${esc(which)}</b> matched something in <b>${esc(DIFF.mode === 'onlyA' ? DIFF.b : DIFF.a)}</b>.</div>`;
+    return;
+  }
+  // Cap at 400 rows to keep the DOM light on large schemas
+  const shown = list.slice(0, 400);
+  body.innerHTML = shown.map(c => `
+    <div class="d-single${c.is_abstract ? ' abstract' : ''}">
+      <div class="d-single-meta">
+        <span class="d-single-name">${esc(c.name)}</span>
+        <span class="d-single-nprops">${(c.properties || []).length} props</span>
+      </div>
+      ${c.definition ? `<div class="d-def">${esc(c.definition)}</div>` : ''}
+    </div>`).join('')
+    + (list.length > shown.length
+        ? `<div class="diff-empty">${list.length - shown.length} more not shown.</div>`
+        : '');
 }
 
 // ────────────────────────────────────────────────────────
