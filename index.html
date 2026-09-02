@@ -346,11 +346,22 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   padding:4px 10px;font-size:11px;font-family:var(--sans);cursor:pointer;flex:1;}
 .g-tog:hover{color:var(--text-dim);}
 .g-tog.on{background:var(--teal-soft);border-color:var(--teal-line);color:var(--teal);}
-.g-method-row{display:flex;flex-direction:column;gap:5px;}
-.g-method{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);cursor:pointer;padding:2px 0;}
-.g-method-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
-.g-method-count{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);}
+.g-method-row{display:flex;flex-direction:column;gap:8px;}
+.g-method{display:grid;grid-template-columns:9px 1fr auto;gap:8px;align-items:baseline;
+  font-size:11px;color:var(--text-dim);cursor:pointer;padding:2px 0;}
+.g-method-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;margin-top:3px;align-self:start;}
+.g-method-name{font-family:var(--sans);}
+.g-method-count{font-family:var(--mono);font-size:10px;color:var(--muted);}
+.g-method-desc{grid-column:2 / span 2;font-size:10px;color:var(--muted);line-height:1.45;
+  margin-top:1px;font-family:var(--sans);}
 .g-method.off{opacity:.4;}
+.g-src-row{display:flex;flex-direction:column;gap:3px;max-height:180px;overflow-y:auto;}
+.g-src-item{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;
+  font-size:11px;color:var(--text-dim);cursor:pointer;padding:3px 0;font-family:var(--mono);}
+.g-src-item .g-src-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+.g-src-item .g-src-cnt{font-size:10px;color:var(--muted);}
+.g-src-item.off{opacity:.35;text-decoration:line-through;}
+.g-src-toolbar-inline{display:flex;gap:6px;margin-bottom:6px;}
 
 .g-legend{position:absolute;top:14px;right:14px;z-index:5;
   background:var(--surface);border:1px solid var(--border);border-radius:8px;
@@ -634,6 +645,31 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   border-radius:7px;padding:7px 14px;font-size:12px;font-family:var(--sans);cursor:pointer;width:100%;transition:all .15s;}
 .reset-btn:hover{border-color:var(--teal-line);color:var(--teal);}
 
+/* Paste-as-alternative mode */
+.drop-zone.paste-mode{align-items:flex-start;padding:22px 24px;cursor:default;background:var(--bg-elev);}
+.drop-zone.paste-mode .drop-center{pointer-events:auto;width:100%;align-items:stretch;}
+.paste-wrap{width:100%;display:flex;flex-direction:column;gap:12px;}
+.paste-title{font-size:15px;font-weight:600;color:var(--text);text-align:left;}
+.paste-textarea{width:100%;height:260px;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:11.5px;
+  line-height:1.6;outline:none;resize:vertical;white-space:pre;overflow:auto;
+  transition:border-color .15s,box-shadow .15s;}
+.paste-textarea:focus{border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
+.paste-textarea::placeholder{color:var(--muted);}
+.paste-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.paste-back{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11.5px;
+  font-family:var(--sans);padding:2px 4px;}
+.paste-back:hover{color:var(--teal-line);}
+.paste-load{background:var(--teal);color:#0a1017;border:none;border-radius:7px;padding:8px 16px;
+  font-size:12.5px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:opacity .15s;}
+.paste-load:hover{opacity:.88;}
+.paste-load:disabled{opacity:.4;cursor:not-allowed;}
+.paste-toggle-row{display:flex;justify-content:center;margin-top:10px;pointer-events:auto;}
+.paste-toggle{background:none;border:none;color:var(--teal);cursor:pointer;
+  font-size:11.5px;font-family:var(--sans);text-decoration:underline dotted;padding:3px 6px;
+  pointer-events:auto;}
+.paste-toggle:hover{color:var(--text);}
+
 /* Preview */
 .preview-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-elev);}
 .preview-empty{flex:1;display:flex;align-items:center;justify-content:center;
@@ -875,6 +911,14 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
       <div class="g-panel-block">
         <div class="g-block-title">Alignment method</div>
         <div class="g-method-row" id="g-methods"></div>
+      </div>
+      <div class="g-panel-block">
+        <div class="g-block-title">Schemas</div>
+        <div class="g-src-toolbar-inline">
+          <button class="c-mini-btn" id="g-src-all">All</button>
+          <button class="c-mini-btn" id="g-src-none">None</button>
+        </div>
+        <div class="g-src-row" id="g-sources"></div>
       </div>
     </div>
     <div class="g-legend" id="g-legend">
@@ -1993,12 +2037,29 @@ const METHOD_COLORS = {
   'semantic-name': '#a78bfa',
   'composite':     '#fbbf24',
 };
+const METHOD_DESCRIPTIONS = {
+  'anchored-iri':
+    'Two classes share the same IRI, or one class\'s IRI appears in the other\'s SKOS mappings. ' +
+    'The strongest signal — used when both schemas already anchor to a common ontology term ' +
+    '(e.g. a schema.org URI). Bypasses semantic scoring; a unit-dimension mismatch still vetoes.',
+  'semantic-name':
+    'Class names have a high cosine similarity in the sentence-transformers embedding space ' +
+    '(`all-MiniLM-L6-v2`). Catches synonyms and morphological variants that a substring match ' +
+    'would miss (`Subject` ↔ `Participant`, `Depth` ↔ `depth_mm`).',
+  'composite':
+    'A weighted blend of the full Proteus signal stack — name similarity, token Jaccard, ' +
+    'alias overlap, definition embeddings, IRI anchor, and unit dimensional veto. Used when ' +
+    'no single signal is decisive; the weights are tunable live in the Concepts tab.',
+};
 
 const GRAPH = {
   initted:  false,
   registry: null,
   scope:    'aligned',       // 'aligned' | 'all'
   methods:  new Set(),       // enabled method labels
+  sources:  [],              // all source labels
+  srcOn:    null,            // Set of enabled source labels
+  srcCounts: {},
   nodes:    [], edges: [],
   selected: null,
   transform: { tx: 0, ty: 0, s: 1 },
@@ -2030,12 +2091,30 @@ async function initGraphSchema() {
   GRAPH.methodCounts = methodCounts;
   GRAPH.methods = new Set(Object.keys(methodCounts));
 
+  // Collect source labels and per-source class counts
+  const srcCounts = {};
+  d.classes.forEach(c => (c.sources || []).forEach(s => { srcCounts[s] = (srcCounts[s] || 0) + 1; }));
+  GRAPH.sources = Object.keys(srcCounts).sort((a, b) => srcCounts[b] - srcCounts[a]);
+  GRAPH.srcCounts = srcCounts;
+  GRAPH.srcOn = new Set(GRAPH.sources);
+
   renderMethodChips();
+  renderGraphSources();
   renderGraphLegend();
 
   // Wire scope toggle
   document.getElementById('g-scope-aligned').addEventListener('click', () => setScope('aligned'));
   document.getElementById('g-scope-all').addEventListener('click', () => setScope('all'));
+
+  // Wire source All / None
+  document.getElementById('g-src-all').addEventListener('click', () => {
+    GRAPH.srcOn = new Set(GRAPH.sources);
+    renderGraphSources(); buildGraph(); startGraphSim();
+  });
+  document.getElementById('g-src-none').addEventListener('click', () => {
+    GRAPH.srcOn = new Set();
+    renderGraphSources(); buildGraph(); startGraphSim();
+  });
 
   // Wire canvas interactions once
   wireGraphInteractions();
@@ -2062,16 +2141,39 @@ function setScope(scope) {
 function renderMethodChips() {
   const el = document.getElementById('g-methods');
   const methods = Object.keys(GRAPH.methodCounts).sort();
-  el.innerHTML = methods.map(m => `
+  el.innerHTML = methods.map(m => {
+    const desc = METHOD_DESCRIPTIONS[m];
+    return `
     <div class="g-method${GRAPH.methods.has(m) ? '' : ' off'}" data-m="${esc(m)}">
       <span class="g-method-dot" style="background:${METHOD_COLORS[m] || DEFAULT_SRC_COLOR}"></span>
-      <span>${esc(METHOD_LABELS[m] || m)}</span>
+      <span class="g-method-name">${esc(METHOD_LABELS[m] || m)}</span>
       <span class="g-method-count">${GRAPH.methodCounts[m]}</span>
-    </div>`).join('');
+      ${desc ? `<div class="g-method-desc">${esc(desc)}</div>` : ''}
+    </div>`;
+  }).join('');
   el.querySelectorAll('.g-method').forEach(row => {
     row.addEventListener('click', () => {
       const m = row.dataset.m;
       if (GRAPH.methods.has(m)) GRAPH.methods.delete(m); else GRAPH.methods.add(m);
+      buildGraph();
+      startGraphSim();
+    });
+  });
+}
+
+function renderGraphSources() {
+  const el = document.getElementById('g-sources');
+  el.innerHTML = GRAPH.sources.map(s => `
+    <div class="g-src-item${GRAPH.srcOn.has(s) ? '' : ' off'}" data-src="${esc(s)}">
+      <span class="g-src-swatch" style="background:${SOURCE_COLORS[s] || DEFAULT_SRC_COLOR}"></span>
+      <span>${esc(s)}</span>
+      <span class="g-src-cnt">${GRAPH.srcCounts[s] || 0}</span>
+    </div>`).join('');
+  el.querySelectorAll('.g-src-item').forEach(row => {
+    row.addEventListener('click', () => {
+      const s = row.dataset.src;
+      if (GRAPH.srcOn.has(s)) GRAPH.srcOn.delete(s); else GRAPH.srcOn.add(s);
+      row.classList.toggle('off', !GRAPH.srcOn.has(s));
       buildGraph();
       startGraphSim();
     });
@@ -2098,14 +2200,16 @@ function buildGraph() {
   const cx = W / 2, cy = H / 2;
 
   const { registry, clsById } = GRAPH;
+  const passesSource = c => (c.sources || []).some(s => GRAPH.srcOn.has(s));
 
-  // Collect edges first, filtered by method
+  // Collect edges first, filtered by method AND source (both endpoints must pass)
   const rawEdges = [];
   registry.classes.forEach(c => {
     (c.alignments || []).forEach(a => {
       if (!GRAPH.methods.has(a.method)) return;
       const t = clsById.get(a.target_hash_id);
       if (!t) return;
+      if (!passesSource(c) || !passesSource(t)) return;
       rawEdges.push({
         sourceId: c.hash_id, targetId: t.hash_id,
         distance: a.distance ?? 0.5, method: a.method,
@@ -2120,7 +2224,7 @@ function buildGraph() {
     rawEdges.forEach(e => { ids.add(e.sourceId); ids.add(e.targetId); });
     nodeClasses = registry.classes.filter(c => ids.has(c.hash_id));
   } else {
-    nodeClasses = registry.classes.slice();
+    nodeClasses = registry.classes.filter(passesSource);
   }
 
   // Preserve positions for nodes that survive a rebuild
@@ -3152,7 +3256,7 @@ const ingestLog  = document.getElementById('ingest-log');
 let yamlText = '', fileName = '';
 
 dropZone.addEventListener('click', e => {
-  if (dropZone.classList.contains('has-file')) return;
+  if (dropZone.classList.contains('has-file') || dropZone.classList.contains('paste-mode')) return;
   fileInput.click();
 });
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
@@ -3165,51 +3269,64 @@ dropZone.addEventListener('drop', e => {
 fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
 
 function loadFile(file) {
-  fileName = file.name;
   const reader = new FileReader();
-  reader.onload = ev => {
-    yamlText = ev.target.result;
-    const info = parseYAML(yamlText);
-
-    dropZone.classList.remove('full-width');
-    dropZone.classList.add('has-file');
-    document.getElementById('drop-center').innerHTML = `
-      <div class="loaded-header">
-        <div class="loaded-file-icon">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z"/>
-            <path d="M9 2v4h4"/>
-          </svg>
-        </div>
-        <span class="loaded-name">${esc(file.name)}</span>
-        <button class="clear-btn" id="clear-btn">✕</button>
-      </div>
-      <div class="schema-meta">
-        <div class="sm-row"><span class="sm-label">Name</span><span class="sm-val">${esc(info.name)}</span></div>
-        <div class="sm-row"><span class="sm-label">Classes</span><span class="sm-val">${info.classes}</span></div>
-        <div class="sm-row"><span class="sm-label">Slots</span><span class="sm-val">${info.slots}</span></div>
-        <div class="sm-row"><span class="sm-label">Size</span><span class="sm-val">${(file.size/1024).toFixed(1)} KB</span></div>
-      </div>
-      <button class="reset-btn" id="reset-btn">Drop another file</button>`;
-    document.getElementById('clear-btn').addEventListener('click', resetIngest);
-    document.getElementById('reset-btn').addEventListener('click', resetIngest);
-
-    previewPane.style.display = 'flex';
-    previewBody.className = 'yaml-scroll';
-    previewBody.innerHTML = `<pre class="yaml-pre">${highlightYAML(yamlText)}</pre>`;
-    footMeta.innerHTML = `<span style="color:var(--text-dim)">${esc(info.name)}</span> &middot; <span style="color:var(--muted)">${info.classes} classes</span>`;
-    ingestBtn.disabled = false;
-    ingestLog.classList.remove('open');
-    ingestLog.innerHTML = '';
-  };
+  reader.onload = ev => applyYAMLText(ev.target.result, file.name, file.size);
   reader.readAsText(file);
+}
+
+function applyYAMLText(text, displayName, sizeBytes) {
+  yamlText = text;
+  fileName = displayName;
+  const info = parseYAML(yamlText);
+
+  dropZone.classList.remove('full-width', 'paste-mode');
+  dropZone.classList.add('has-file');
+  document.getElementById('drop-center').innerHTML = `
+    <div class="loaded-header">
+      <div class="loaded-file-icon">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z"/>
+          <path d="M9 2v4h4"/>
+        </svg>
+      </div>
+      <span class="loaded-name">${esc(displayName)}</span>
+      <button class="clear-btn" id="clear-btn">✕</button>
+    </div>
+    <div class="schema-meta">
+      <div class="sm-row"><span class="sm-label">Name</span><span class="sm-val">${esc(info.name)}</span></div>
+      <div class="sm-row"><span class="sm-label">Classes</span><span class="sm-val">${info.classes}</span></div>
+      <div class="sm-row"><span class="sm-label">Slots</span><span class="sm-val">${info.slots}</span></div>
+      <div class="sm-row"><span class="sm-label">Size</span><span class="sm-val">${(sizeBytes/1024).toFixed(1)} KB</span></div>
+    </div>
+    <button class="reset-btn" id="reset-btn">Load another schema</button>`;
+  document.getElementById('clear-btn').addEventListener('click', resetIngest);
+  document.getElementById('reset-btn').addEventListener('click', resetIngest);
+
+  previewPane.style.display = 'flex';
+  previewBody.className = 'yaml-scroll';
+  previewBody.innerHTML = `<pre class="yaml-pre">${highlightYAML(yamlText)}</pre>`;
+  footMeta.innerHTML = `<span style="color:var(--text-dim)">${esc(info.name)}</span> &middot; <span style="color:var(--muted)">${info.classes} classes</span>`;
+  ingestBtn.disabled = false;
+  ingestLog.classList.remove('open');
+  ingestLog.innerHTML = '';
 }
 
 function resetIngest() {
   yamlText = ''; fileName = '';
   dropZone.classList.add('full-width');
-  dropZone.classList.remove('has-file');
-  document.getElementById('drop-center').innerHTML = `
+  dropZone.classList.remove('has-file', 'paste-mode');
+  document.getElementById('drop-center').innerHTML = defaultDropHTML();
+  document.getElementById('paste-toggle').addEventListener('click', showPasteMode);
+  previewPane.style.display = 'none';
+  previewBody.className = 'preview-empty';
+  footMeta.innerHTML = 'No file loaded';
+  ingestBtn.disabled = true;
+  ingestLog.classList.remove('open');
+  fileInput.value = '';
+}
+
+function defaultDropHTML() {
+  return `
     <div class="drop-icon-wrap">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -3220,14 +3337,42 @@ function resetIngest() {
     </div>
     <p class="drop-title">Drop a LinkML YAML schema</p>
     <p class="drop-sub">or click anywhere to browse</p>
-    <p class="drop-ext">.yml · .yaml</p>`;
-  previewPane.style.display = 'none';
-  previewBody.className = 'preview-empty';
-  footMeta.innerHTML = 'No file loaded';
-  ingestBtn.disabled = true;
-  ingestLog.classList.remove('open');
-  fileInput.value = '';
+    <p class="drop-ext">.yml · .yaml</p>
+    <div class="paste-toggle-row">
+      <button class="paste-toggle" id="paste-toggle" type="button">or paste YAML text →</button>
+    </div>`;
 }
+
+function showPasteMode(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  dropZone.classList.remove('has-file');
+  dropZone.classList.add('paste-mode');
+  document.getElementById('drop-center').innerHTML = `
+    <div class="paste-wrap">
+      <p class="paste-title">Paste LinkML YAML</p>
+      <textarea class="paste-textarea" id="paste-textarea" placeholder="Paste your LinkML schema YAML here…" spellcheck="false" autocomplete="off"></textarea>
+      <div class="paste-actions">
+        <button class="paste-back" id="paste-back" type="button">← back to file drop</button>
+        <button class="paste-load" id="paste-load" type="button" disabled>Load pasted YAML</button>
+      </div>
+    </div>`;
+  const ta = document.getElementById('paste-textarea');
+  const loadBtn = document.getElementById('paste-load');
+  ta.addEventListener('input', () => { loadBtn.disabled = !ta.value.trim(); });
+  loadBtn.addEventListener('click', () => {
+    const text = ta.value;
+    if (!text.trim()) return;
+    const info = parseYAML(text);
+    const displayName = (info.name && info.name !== 'unknown' ? info.name : 'pasted') + '.yml';
+    applyYAMLText(text, displayName, new Blob([text]).size);
+  });
+  document.getElementById('paste-back').addEventListener('click', resetIngest);
+  ta.focus();
+}
+
+// Wire the initial paste toggle (the default UI is already in the HTML)
+document.getElementById('drop-center').innerHTML = defaultDropHTML();
+document.getElementById('paste-toggle').addEventListener('click', showPasteMode);
 
 ingestBtn.addEventListener('click', () => {
   if (!yamlText) return;
