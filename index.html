@@ -56,6 +56,41 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 #meta-canvas{width:100%;height:100%;position:relative;}
 #edge-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
 
+/* Search */
+.meta-search{position:absolute;top:14px;left:14px;z-index:5;width:260px;
+  font-family:var(--sans);}
+.search-wrap{position:relative;display:flex;align-items:center;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:0 10px;transition:border-color .15s,box-shadow .15s;}
+.search-wrap:focus-within{border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
+.search-wrap svg{width:13px;height:13px;color:var(--muted);flex-shrink:0;}
+#meta-search-input{background:none;border:none;outline:none;color:var(--text);
+  font-family:var(--sans);font-size:12.5px;padding:8px 6px;width:100%;}
+#meta-search-input::placeholder{color:var(--muted);}
+.search-clear{background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:14px;padding:2px 4px;line-height:1;display:none;}
+.search-clear:hover{color:var(--text-dim);}
+.search-wrap.has-value .search-clear{display:block;}
+.search-results{margin-top:6px;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;max-height:280px;overflow-y:auto;display:none;
+  box-shadow:0 6px 24px rgba(0,0,0,.35);}
+.search-results.open{display:block;}
+.sr-item{padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);
+  display:flex;flex-direction:column;gap:2px;}
+.sr-item:last-child{border-bottom:none;}
+.sr-item:hover,.sr-item.active{background:var(--surface-2);}
+.sr-name{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--teal);}
+.sr-item.abstract .sr-name{color:var(--purple);}
+.sr-tag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+.sr-name mark{background:var(--teal-soft);color:var(--teal);padding:0 2px;border-radius:2px;}
+.sr-item.abstract .sr-name mark{background:var(--purple-soft);color:var(--purple);}
+.sr-empty{padding:12px;color:var(--muted);font-size:12px;text-align:center;}
+
+/* Node highlight state for search */
+.m-node.dim{opacity:.28;}
+.m-node.search-hit{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft),0 0 18px rgba(45,212,191,.35);}
+.m-node.abstract.search-hit{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-soft),0 0 18px rgba(167,139,250,.35);}
+
 .m-node{position:absolute;background:var(--surface);border:1px solid var(--border);
   border-radius:8px;padding:9px 14px;cursor:pointer;user-select:none;
   text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -199,6 +234,16 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 <!-- ── Meta-model ──────────────────────────────────────── -->
 <div id="view-meta" class="view active">
   <div class="meta-main">
+    <div class="meta-search">
+      <div class="search-wrap" id="search-wrap">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/>
+        </svg>
+        <input id="meta-search-input" type="text" placeholder="Search classes…" autocomplete="off" spellcheck="false"/>
+        <button class="search-clear" id="search-clear" aria-label="Clear search">✕</button>
+      </div>
+      <div class="search-results" id="search-results"></div>
+    </div>
     <div id="meta-canvas">
       <svg id="edge-svg"></svg>
     </div>
@@ -453,6 +498,10 @@ function renderGraph() {
   });
 
   drawEdges(W, H);
+
+  // Re-apply search highlight if a query is active
+  const si = document.getElementById('meta-search-input');
+  if (si && si.value.trim()) runSearch();
 }
 
 function drawEdges(W, H) {
@@ -550,6 +599,125 @@ function selectNode(cls) {
 renderGraph();
 window.addEventListener('resize', () => {
   if (document.getElementById('view-meta').classList.contains('active')) renderGraph();
+});
+
+// ────────────────────────────────────────────────────────
+// Meta-model search
+// ────────────────────────────────────────────────────────
+const searchWrap    = document.getElementById('search-wrap');
+const searchInput   = document.getElementById('meta-search-input');
+const searchClear   = document.getElementById('search-clear');
+const searchResults = document.getElementById('search-results');
+let searchMatches = [];
+let searchCursor  = -1;
+
+function scoreMatch(cls, q) {
+  const name = cls.id.toLowerCase();
+  const tag  = (cls.tag || '').toLowerCase();
+  const desc = (cls.desc || '').toLowerCase();
+  if (name === q)               return 0;
+  if (name.startsWith(q))       return 1;
+  if (name.includes(q))         return 2;
+  if (tag.includes(q))          return 3;
+  if (desc.includes(q))         return 4;
+  return -1;
+}
+
+function highlight(text, q) {
+  if (!q) return esc(text);
+  const i = text.toLowerCase().indexOf(q);
+  if (i < 0) return esc(text);
+  return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+}
+
+function runSearch() {
+  const raw = searchInput.value.trim();
+  const q   = raw.toLowerCase();
+  searchWrap.classList.toggle('has-value', raw.length > 0);
+
+  if (!q) {
+    searchResults.classList.remove('open');
+    searchResults.innerHTML = '';
+    searchMatches = [];
+    searchCursor  = -1;
+    document.querySelectorAll('.m-node').forEach(n => n.classList.remove('dim', 'search-hit'));
+    return;
+  }
+
+  searchMatches = CLASSES
+    .map(c => ({ cls: c, score: scoreMatch(c, q) }))
+    .filter(x => x.score >= 0)
+    .sort((a, b) => a.score - b.score || a.cls.id.localeCompare(b.cls.id))
+    .map(x => x.cls);
+
+  // Dim non-matches on the canvas
+  const hitIds = new Set(searchMatches.map(c => c.id));
+  document.querySelectorAll('.m-node').forEach(n => {
+    const id = n.dataset.id;
+    n.classList.toggle('dim', !hitIds.has(id));
+    n.classList.toggle('search-hit', hitIds.has(id));
+  });
+
+  // Dropdown
+  if (searchMatches.length === 0) {
+    searchResults.innerHTML = '<div class="sr-empty">No classes match.</div>';
+  } else {
+    searchResults.innerHTML = searchMatches.map((c, i) => `
+      <div class="sr-item${c.abstract ? ' abstract' : ''}${i === 0 ? ' active' : ''}" data-id="${c.id}">
+        <span class="sr-name">${highlight(c.id, q)}</span>
+        <span class="sr-tag">${esc(c.tag || '')}</span>
+      </div>
+    `).join('');
+    searchCursor = 0;
+    searchResults.querySelectorAll('.sr-item').forEach(item => {
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const cls = CLASSES.find(c => c.id === item.dataset.id);
+        if (cls) pickSearchResult(cls);
+      });
+    });
+  }
+  searchResults.classList.add('open');
+}
+
+function moveCursor(delta) {
+  if (!searchMatches.length) return;
+  searchCursor = (searchCursor + delta + searchMatches.length) % searchMatches.length;
+  searchResults.querySelectorAll('.sr-item').forEach((el, i) => {
+    el.classList.toggle('active', i === searchCursor);
+    if (i === searchCursor) el.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function pickSearchResult(cls) {
+  selectNode(cls);
+  searchResults.classList.remove('open');
+  searchInput.blur();
+}
+
+function clearSearch() {
+  searchInput.value = '';
+  runSearch();
+  searchInput.focus();
+}
+
+searchInput.addEventListener('input', runSearch);
+searchInput.addEventListener('focus', () => { if (searchInput.value.trim()) searchResults.classList.add('open'); });
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor(-1); }
+  else if (e.key === 'Enter' && searchMatches[searchCursor]) {
+    e.preventDefault();
+    pickSearchResult(searchMatches[searchCursor]);
+  } else if (e.key === 'Escape') {
+    if (searchInput.value) clearSearch(); else searchInput.blur();
+  }
+});
+searchClear.addEventListener('click', clearSearch);
+document.addEventListener('mousedown', e => {
+  if (!searchWrap.contains(e.target) && !searchResults.contains(e.target)) {
+    searchResults.classList.remove('open');
+  }
 });
 
 // ────────────────────────────────────────────────────────
