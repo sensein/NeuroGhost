@@ -82,8 +82,12 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .sr-name{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--teal);}
 .sr-item.abstract .sr-name{color:var(--purple);}
 .sr-tag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
-.sr-name mark{background:var(--teal-soft);color:var(--teal);padding:0 2px;border-radius:2px;}
+.sr-name mark,.sr-slot mark{background:var(--teal-soft);color:var(--teal);padding:0 2px;border-radius:2px;}
 .sr-item.abstract .sr-name mark{background:var(--purple-soft);color:var(--purple);}
+.sr-slot{font-family:var(--mono);font-size:10px;color:var(--text-dim);
+  display:inline-flex;align-items:center;gap:5px;margin-top:1px;}
+.sr-slot-label{color:var(--muted);text-transform:uppercase;font-family:var(--sans);
+  letter-spacing:.05em;font-size:9px;}
 .sr-empty{padding:12px;color:var(--muted);font-size:12px;text-align:center;}
 
 /* Node highlight state for search */
@@ -120,6 +124,7 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .p-section{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;margin-bottom:8px;}
 .slot-chip{display:inline-block;background:var(--surface);border:1px solid var(--border);
   border-radius:4px;padding:2px 7px;font-size:10.5px;font-family:var(--mono);color:var(--text-dim);margin:2px 3px 2px 0;}
+.slot-chip.matched{background:var(--teal-soft);border-color:var(--teal-line);color:var(--teal);}
 .panel-legend{border-top:1px solid var(--border);padding:14px 18px;flex-shrink:0;}
 .l-title{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;margin-bottom:10px;}
 .l-row{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--text-dim);margin-bottom:6px;}
@@ -239,7 +244,7 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
           <circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/>
         </svg>
-        <input id="meta-search-input" type="text" placeholder="Search classes…" autocomplete="off" spellcheck="false"/>
+        <input id="meta-search-input" type="text" placeholder="Search classes or slots…" autocomplete="off" spellcheck="false"/>
         <button class="search-clear" id="search-clear" aria-label="Clear search">✕</button>
       </div>
       <div class="search-results" id="search-results"></div>
@@ -578,11 +583,12 @@ function drawEdges(W, H) {
   });
 }
 
-function selectNode(cls) {
+function selectNode(cls, opts = {}) {
   document.querySelectorAll('.m-node').forEach(n => n.classList.remove('selected'));
   const node = document.querySelector(`.m-node[data-id="${cls.id}"]`);
   if (node) node.classList.add('selected');
 
+  const highlightSlot = opts.highlightSlot || null;
   document.getElementById('panel-content').innerHTML = `
     <div class="panel-inner">
       <div class="p-class-name${cls.abstract ? ' abstract' : ''}">${cls.id}</div>
@@ -590,7 +596,7 @@ function selectNode(cls) {
       <p class="p-desc">${cls.desc}</p>
       ${cls.slots && cls.slots.length ? `
         <div class="p-section">Own slots</div>
-        <div>${cls.slots.map(s => `<span class="slot-chip">${s}</span>`).join('')}</div>
+        <div>${cls.slots.map(s => `<span class="slot-chip${s === highlightSlot ? ' matched' : ''}">${s}</span>`).join('')}</div>
       ` : '<div style="font-size:11.5px;color:var(--muted)">Slots inherited only.</div>'}
     </div>`;
 }
@@ -611,23 +617,65 @@ const searchResults = document.getElementById('search-results');
 let searchMatches = [];
 let searchCursor  = -1;
 
-function scoreMatch(cls, q) {
-  const name = cls.id.toLowerCase();
-  const tag  = (cls.tag || '').toLowerCase();
-  const desc = (cls.desc || '').toLowerCase();
-  if (name === q)               return 0;
-  if (name.startsWith(q))       return 1;
-  if (name.includes(q))         return 2;
-  if (tag.includes(q))          return 3;
-  if (desc.includes(q))         return 4;
-  return -1;
+// Returns { score, indices } or null. Lower score = better match.
+// score  0 = exact, 1 = prefix, 2 = substring, 3–4 = fuzzy subsequence.
+function fuzzyMatch(text, q) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (t === q) return { score: 0, indices: q.split('').map((_, i) => i) };
+  if (t.startsWith(q)) return { score: 1, indices: q.split('').map((_, i) => i) };
+  const idx = t.indexOf(q);
+  if (idx >= 0) return { score: 2, indices: q.split('').map((_, i) => idx + i) };
+  const indices = [];
+  let i = 0, j = 0, first = -1, last = -1;
+  while (i < t.length && j < q.length) {
+    if (t[i] === q[j]) {
+      if (first < 0) first = i;
+      last = i;
+      indices.push(i);
+      j++;
+    }
+    i++;
+  }
+  if (j < q.length) return null;
+  const density = q.length / (last - first + 1);   // 1.0 = tight, → 0 as gaps grow
+  return { score: 3 + (1 - density), indices };    // 3 (tight) .. ~4 (sparse)
 }
 
-function highlight(text, q) {
-  if (!q) return esc(text);
-  const i = text.toLowerCase().indexOf(q);
-  if (i < 0) return esc(text);
-  return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+// Best match across name, tag, desc, and slots. Returns null if nothing matches.
+function scoreMatch(cls, q) {
+  const nameHit = fuzzyMatch(cls.id, q);
+  const tagHit  = fuzzyMatch(cls.tag,  q);
+  const descHit = (cls.desc || '').toLowerCase().includes(q) ? { score: 4.5 } : null;
+  let slotHit = null;
+  for (const slot of (cls.slots || [])) {
+    const h = fuzzyMatch(slot, q);
+    if (h && (!slotHit || h.score < slotHit.score)) slotHit = { ...h, slot };
+  }
+
+  const candidates = [];
+  if (nameHit)  candidates.push({ ...nameHit, via: 'name' });
+  if (slotHit)  candidates.push({ score: slotHit.score + 0.5, indices: slotHit.indices, via: 'slot', slot: slotHit.slot });
+  if (tagHit)   candidates.push({ score: tagHit.score + 1.5, indices: tagHit.indices, via: 'tag' });
+  if (descHit)  candidates.push({ score: descHit.score, via: 'desc' });
+
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates[0];
+}
+
+// Highlight characters at the given indices.
+function highlightIndices(text, indices) {
+  if (!indices || !indices.length) return esc(text);
+  const set = new Set(indices);
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const inSet = set.has(i);
+    if (inSet && (i === 0 || !set.has(i - 1))) out += '<mark>';
+    out += esc(text[i]);
+    if (inSet && (i === text.length - 1 || !set.has(i + 1))) out += '</mark>';
+  }
+  return out;
 }
 
 function runSearch() {
@@ -645,13 +693,12 @@ function runSearch() {
   }
 
   searchMatches = CLASSES
-    .map(c => ({ cls: c, score: scoreMatch(c, q) }))
-    .filter(x => x.score >= 0)
-    .sort((a, b) => a.score - b.score || a.cls.id.localeCompare(b.cls.id))
-    .map(x => x.cls);
+    .map(c => ({ cls: c, match: scoreMatch(c, q) }))
+    .filter(x => x.match)
+    .sort((a, b) => a.match.score - b.match.score || a.cls.id.localeCompare(b.cls.id));
 
   // Dim non-matches on the canvas
-  const hitIds = new Set(searchMatches.map(c => c.id));
+  const hitIds = new Set(searchMatches.map(x => x.cls.id));
   document.querySelectorAll('.m-node').forEach(n => {
     const id = n.dataset.id;
     n.classList.toggle('dim', !hitIds.has(id));
@@ -660,14 +707,22 @@ function runSearch() {
 
   // Dropdown
   if (searchMatches.length === 0) {
-    searchResults.innerHTML = '<div class="sr-empty">No classes match.</div>';
+    searchResults.innerHTML = '<div class="sr-empty">No classes or slots match.</div>';
   } else {
-    searchResults.innerHTML = searchMatches.map((c, i) => `
-      <div class="sr-item${c.abstract ? ' abstract' : ''}${i === 0 ? ' active' : ''}" data-id="${c.id}">
-        <span class="sr-name">${highlight(c.id, q)}</span>
-        <span class="sr-tag">${esc(c.tag || '')}</span>
-      </div>
-    `).join('');
+    searchResults.innerHTML = searchMatches.map(({ cls, match }, i) => {
+      const nameHtml = match.via === 'name'
+        ? highlightIndices(cls.id, match.indices)
+        : esc(cls.id);
+      const slotLine = match.via === 'slot'
+        ? `<span class="sr-slot"><span class="sr-slot-label">via slot</span>${highlightIndices(match.slot, match.indices)}</span>`
+        : '';
+      return `
+        <div class="sr-item${cls.abstract ? ' abstract' : ''}${i === 0 ? ' active' : ''}" data-id="${cls.id}">
+          <span class="sr-name">${nameHtml}</span>
+          <span class="sr-tag">${esc(cls.tag || '')}</span>
+          ${slotLine}
+        </div>`;
+    }).join('');
     searchCursor = 0;
     searchResults.querySelectorAll('.sr-item').forEach(item => {
       item.addEventListener('mousedown', e => {
@@ -690,7 +745,9 @@ function moveCursor(delta) {
 }
 
 function pickSearchResult(cls) {
-  selectNode(cls);
+  const hit = searchMatches.find(x => x.cls.id === cls.id);
+  const slot = hit && hit.match.via === 'slot' ? hit.match.slot : null;
+  selectNode(cls, { highlightSlot: slot });
   searchResults.classList.remove('open');
   searchInput.blur();
 }
@@ -708,7 +765,7 @@ searchInput.addEventListener('keydown', e => {
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor(-1); }
   else if (e.key === 'Enter' && searchMatches[searchCursor]) {
     e.preventDefault();
-    pickSearchResult(searchMatches[searchCursor]);
+    pickSearchResult(searchMatches[searchCursor].cls);
   } else if (e.key === 'Escape') {
     if (searchInput.value) clearSearch(); else searchInput.blur();
   }
