@@ -320,6 +320,72 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .d-single-meta{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
 .d-single-nprops{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex-shrink:0;}
 
+/* ══ GRAPH SCHEMA ══════════════════════════════════════════════════════ */
+#view-graph{overflow:hidden;flex-direction:row;}
+.g-main{flex:1;position:relative;overflow:hidden;background:
+  radial-gradient(ellipse 60% 40% at 50% 50%,rgba(45,212,191,.035),transparent);}
+#graph-svg{width:100%;height:100%;display:block;cursor:grab;}
+#graph-svg:active{cursor:grabbing;}
+#graph-svg .g-edge{stroke-linecap:round;pointer-events:none;}
+#graph-svg .g-node{cursor:pointer;transition:filter .1s;}
+#graph-svg .g-node:hover{filter:brightness(1.25);}
+#graph-svg .g-node.selected{stroke:#e6e9f2;stroke-width:2;}
+#graph-svg .g-label{font-family:var(--mono);font-size:9.5px;fill:var(--text);
+  pointer-events:none;text-anchor:middle;opacity:0;transition:opacity .12s;}
+#graph-svg .g-node-group:hover .g-label,#graph-svg .g-node-group.selected .g-label{opacity:1;}
+
+/* Floating overlay controls */
+.g-controls{position:absolute;top:14px;left:14px;z-index:5;
+  display:flex;flex-direction:column;gap:8px;}
+.g-panel-block{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;backdrop-filter:blur(6px);}
+.g-block-title{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:600;margin-bottom:8px;}
+.g-toggle-row{display:flex;gap:6px;}
+.g-tog{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);
+  padding:4px 10px;font-size:11px;font-family:var(--sans);cursor:pointer;flex:1;}
+.g-tog:hover{color:var(--text-dim);}
+.g-tog.on{background:var(--teal-soft);border-color:var(--teal-line);color:var(--teal);}
+.g-method-row{display:flex;flex-direction:column;gap:5px;}
+.g-method{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);cursor:pointer;padding:2px 0;}
+.g-method-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+.g-method-count{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);}
+.g-method.off{opacity:.4;}
+
+.g-legend{position:absolute;top:14px;right:14px;z-index:5;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;min-width:130px;}
+.g-legend-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);
+  margin-bottom:4px;font-family:var(--mono);}
+.g-legend-row:last-child{margin-bottom:0;}
+.g-legend-swatch{width:9px;height:9px;border-radius:99px;flex-shrink:0;}
+
+.g-hint{position:absolute;bottom:14px;left:14px;font-size:10.5px;color:var(--muted);
+  font-family:var(--mono);z-index:5;pointer-events:none;background:var(--bg);
+  border:1px solid var(--border);border-radius:6px;padding:5px 9px;opacity:.75;}
+
+/* Side detail panel (shares meta-panel look) */
+.g-panel{width:320px;border-left:1px solid var(--border);background:var(--bg-elev);
+  display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+.g-panel-scroll{flex:1;overflow-y:auto;padding:20px 18px;}
+.g-panel-empty{height:100%;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;color:var(--muted);text-align:center;gap:10px;font-size:12px;padding:24px;}
+.g-p-name{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--teal);margin-bottom:4px;word-break:break-word;}
+.g-p-iri{font-family:var(--mono);font-size:10.5px;color:var(--muted);word-break:break-all;margin-bottom:14px;}
+.g-p-iri a{color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--border);}
+.g-p-iri a:hover{color:var(--teal);}
+.g-p-def{font-size:12px;color:var(--text-dim);line-height:1.7;margin-bottom:14px;}
+.g-p-section{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:600;margin:12px 0 6px;}
+.g-p-align{border:1px solid var(--border);border-radius:6px;padding:8px 10px;
+  margin-bottom:6px;background:var(--surface);cursor:pointer;transition:border-color .12s;}
+.g-p-align:hover{border-color:var(--teal-line);}
+.g-p-align-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
+.g-p-align-name{font-family:var(--mono);font-size:11.5px;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.g-p-align-dist{font-family:var(--mono);font-size:11px;flex-shrink:0;}
+.g-p-align-method{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;}
+
 /* ══ INGEST ══════════════════════════════════════════════════════════════ */
 #view-ingest{overflow:hidden;}
 .ingest-inner{display:flex;width:100%;height:100%;}
@@ -423,6 +489,17 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
         <line x1="7.5" y1="8" x2="8.5" y2="8"/>
       </svg>
       Diff
+    </button>
+    <button class="tab" data-view="graph">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="3.5" cy="4" r="2"/>
+        <circle cx="12.5" cy="4" r="2"/>
+        <circle cx="8" cy="12" r="2"/>
+        <line x1="5" y1="5" x2="11" y2="5"/>
+        <line x1="4.5" y1="5.5" x2="7" y2="10.5"/>
+        <line x1="11.5" y1="5.5" x2="9" y2="10.5"/>
+      </svg>
+      Graph Schema
     </button>
     <button class="tab" data-view="ingest">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -545,6 +622,44 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   </div>
 </div>
 
+<!-- ── Graph Schema ────────────────────────────────────── -->
+<div id="view-graph" class="view">
+  <div class="g-main">
+    <svg id="graph-svg">
+      <g id="graph-viewport">
+        <g id="graph-edges"></g>
+        <g id="graph-nodes"></g>
+      </g>
+    </svg>
+    <div class="g-controls">
+      <div class="g-panel-block">
+        <div class="g-block-title">Scope</div>
+        <div class="g-toggle-row">
+          <button class="g-tog on" id="g-scope-aligned">Aligned</button>
+          <button class="g-tog" id="g-scope-all">All 677</button>
+        </div>
+      </div>
+      <div class="g-panel-block">
+        <div class="g-block-title">Alignment method</div>
+        <div class="g-method-row" id="g-methods"></div>
+      </div>
+    </div>
+    <div class="g-legend" id="g-legend">
+      <div class="g-block-title">Sources</div>
+    </div>
+    <div class="g-hint">drag nodes · scroll to zoom · drag empty space to pan</div>
+  </div>
+  <div class="g-panel">
+    <div id="g-panel-body" class="g-panel-empty">
+      <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.25">
+        <circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/>
+        <line x1="8" y1="7" x2="16" y2="7"/><line x1="7" y1="8" x2="11" y2="16"/><line x1="17" y1="8" x2="13" y2="16"/>
+      </svg>
+      <span>Click a node to see its class detail and alignments.</span>
+    </div>
+  </div>
+</div>
+
 <!-- ── Ingest ──────────────────────────────────────────── -->
 <div id="view-ingest" class="view">
   <div class="ingest-inner">
@@ -604,6 +719,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     if (target === 'meta') renderGraph();
     else if (target === 'concepts') initConcepts();
     else if (target === 'diff') initDiff();
+    else if (target === 'graph') initGraphSchema();
   });
 });
 
@@ -1543,6 +1659,475 @@ function renderDiffBody() {
     + (list.length > shown.length
         ? `<div class="diff-empty">${list.length - shown.length} more not shown.</div>`
         : '');
+}
+
+// ────────────────────────────────────────────────────────
+// Graph Schema — force-directed content graph
+// ────────────────────────────────────────────────────────
+const SOURCE_COLORS = {
+  aind:         '#2dd4bf',
+  bids:         '#a78bfa',
+  nwb:          '#fbbf24',
+  bbqs:         '#34d399',
+  dandi:        '#f87171',
+  openminds:    '#f472b6',
+  'schema.org': '#fb923c',
+  personinfo:   '#60a5fa',
+};
+const DEFAULT_SRC_COLOR = '#94a3b8';
+const METHOD_LABELS = {
+  'anchored-iri':  'IRI anchor',
+  'semantic-name': 'Semantic name',
+  'composite':     'Composite',
+};
+const METHOD_COLORS = {
+  'anchored-iri':  '#2dd4bf',
+  'semantic-name': '#a78bfa',
+  'composite':     '#fbbf24',
+};
+
+const GRAPH = {
+  initted:  false,
+  registry: null,
+  scope:    'aligned',       // 'aligned' | 'all'
+  methods:  new Set(),       // enabled method labels
+  nodes:    [], edges: [],
+  selected: null,
+  transform: { tx: 0, ty: 0, s: 1 },
+  running:  false,
+  drag:     null,
+  panDrag:  null,
+};
+
+async function initGraphSchema() {
+  if (GRAPH.initted) { resumeGraph(); return; }
+  GRAPH.initted = true;
+
+  const d = await registryPromise;
+  if (!d) {
+    document.getElementById('graph-svg').outerHTML =
+      `<div class="diff-empty">Could not load <code>data/registry.json</code>.</div>`;
+    return;
+  }
+  GRAPH.registry = d;
+  const clsById = new Map(d.classes.map(c => [c.hash_id, c]));
+  GRAPH.clsById = clsById;
+
+  // Detect all methods present in the data
+  const methodCounts = {};
+  d.classes.forEach(c => (c.alignments || []).forEach(a => {
+    const m = a.method || 'unknown';
+    methodCounts[m] = (methodCounts[m] || 0) + 1;
+  }));
+  GRAPH.methodCounts = methodCounts;
+  GRAPH.methods = new Set(Object.keys(methodCounts));
+
+  renderMethodChips();
+  renderGraphLegend();
+
+  // Wire scope toggle
+  document.getElementById('g-scope-aligned').addEventListener('click', () => setScope('aligned'));
+  document.getElementById('g-scope-all').addEventListener('click', () => setScope('all'));
+
+  // Wire canvas interactions once
+  wireGraphInteractions();
+
+  buildGraph();
+  startGraphSim();
+}
+
+function resumeGraph() {
+  // Re-fit if the SVG size changed while hidden
+  fitGraphViewport();
+  if (!GRAPH.running) startGraphSim();
+}
+
+function setScope(scope) {
+  if (GRAPH.scope === scope) return;
+  GRAPH.scope = scope;
+  document.getElementById('g-scope-aligned').classList.toggle('on', scope === 'aligned');
+  document.getElementById('g-scope-all').classList.toggle('on', scope === 'all');
+  buildGraph();
+  startGraphSim();
+}
+
+function renderMethodChips() {
+  const el = document.getElementById('g-methods');
+  const methods = Object.keys(GRAPH.methodCounts).sort();
+  el.innerHTML = methods.map(m => `
+    <div class="g-method${GRAPH.methods.has(m) ? '' : ' off'}" data-m="${esc(m)}">
+      <span class="g-method-dot" style="background:${METHOD_COLORS[m] || DEFAULT_SRC_COLOR}"></span>
+      <span>${esc(METHOD_LABELS[m] || m)}</span>
+      <span class="g-method-count">${GRAPH.methodCounts[m]}</span>
+    </div>`).join('');
+  el.querySelectorAll('.g-method').forEach(row => {
+    row.addEventListener('click', () => {
+      const m = row.dataset.m;
+      if (GRAPH.methods.has(m)) GRAPH.methods.delete(m); else GRAPH.methods.add(m);
+      buildGraph();
+      startGraphSim();
+    });
+  });
+}
+
+function renderGraphLegend() {
+  const el = document.getElementById('g-legend');
+  el.innerHTML = '<div class="g-block-title">Sources</div>' +
+    Object.entries(SOURCE_COLORS).map(([s, c]) =>
+      `<div class="g-legend-row"><span class="g-legend-swatch" style="background:${c}"></span>${esc(s)}</div>`
+    ).join('');
+}
+
+function srcColorFor(cls) {
+  const s = (cls.sources || [])[0];
+  return SOURCE_COLORS[s] || DEFAULT_SRC_COLOR;
+}
+
+function buildGraph() {
+  const svg = document.getElementById('graph-svg');
+  const W = svg.clientWidth || 800;
+  const H = svg.clientHeight || 600;
+  const cx = W / 2, cy = H / 2;
+
+  const { registry, clsById } = GRAPH;
+
+  // Collect edges first, filtered by method
+  const rawEdges = [];
+  registry.classes.forEach(c => {
+    (c.alignments || []).forEach(a => {
+      if (!GRAPH.methods.has(a.method)) return;
+      const t = clsById.get(a.target_hash_id);
+      if (!t) return;
+      rawEdges.push({
+        sourceId: c.hash_id, targetId: t.hash_id,
+        distance: a.distance ?? 0.5, method: a.method,
+      });
+    });
+  });
+
+  // Determine node set
+  let nodeClasses;
+  if (GRAPH.scope === 'aligned') {
+    const ids = new Set();
+    rawEdges.forEach(e => { ids.add(e.sourceId); ids.add(e.targetId); });
+    nodeClasses = registry.classes.filter(c => ids.has(c.hash_id));
+  } else {
+    nodeClasses = registry.classes.slice();
+  }
+
+  // Preserve positions for nodes that survive a rebuild
+  const oldById = new Map((GRAPH.nodes || []).map(n => [n.id, n]));
+  GRAPH.nodes = nodeClasses.map((c, i) => {
+    const prev = oldById.get(c.hash_id);
+    // Seed positions on a jittered circle
+    const angle = (i / nodeClasses.length) * Math.PI * 2;
+    const r = Math.min(W, H) * 0.30;
+    return {
+      id:  c.hash_id, cls: c,
+      x:   prev ? prev.x : cx + Math.cos(angle) * r + (Math.random() - 0.5) * 20,
+      y:   prev ? prev.y : cy + Math.sin(angle) * r + (Math.random() - 0.5) * 20,
+      vx:  prev ? prev.vx : 0, vy: prev ? prev.vy : 0,
+      degree: 0, color: srcColorFor(c),
+    };
+  });
+  const byId = new Map(GRAPH.nodes.map(n => [n.id, n]));
+  GRAPH.edges = rawEdges
+    .filter(e => byId.has(e.sourceId) && byId.has(e.targetId))
+    .map(e => {
+      const src = byId.get(e.sourceId), tgt = byId.get(e.targetId);
+      src.degree++; tgt.degree++;
+      return { source: src, target: tgt, distance: e.distance, method: e.method };
+    });
+
+  drawGraphStatic();
+  fitGraphViewport();
+}
+
+function drawGraphStatic() {
+  const gEdges = document.getElementById('graph-edges');
+  const gNodes = document.getElementById('graph-nodes');
+  gEdges.innerHTML = '';
+  gNodes.innerHTML = '';
+
+  // Edges
+  GRAPH.edges.forEach(e => {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('class', 'g-edge');
+    const strength = 1 - Math.min(1, e.distance);
+    line.setAttribute('stroke', METHOD_COLORS[e.method] || DEFAULT_SRC_COLOR);
+    line.setAttribute('stroke-width', 0.6 + strength * 2.4);
+    line.setAttribute('stroke-opacity', 0.25 + strength * 0.55);
+    e._el = line;
+    gEdges.appendChild(line);
+  });
+
+  // Nodes
+  GRAPH.nodes.forEach(n => {
+    const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    grp.setAttribute('class', 'g-node-group' + (GRAPH.selected === n.id ? ' selected' : ''));
+    grp.dataset.id = n.id;
+
+    const r = Math.max(4, Math.min(14, 4 + Math.sqrt(n.degree) * 2.5));
+    n._r = r;
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('class', 'g-node' + (GRAPH.selected === n.id ? ' selected' : ''));
+    circle.setAttribute('r', r);
+    circle.setAttribute('fill', n.color);
+    circle.setAttribute('stroke', 'rgba(0,0,0,.35)');
+    circle.setAttribute('stroke-width', 0.5);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('class', 'g-label');
+    label.setAttribute('y', -(r + 4));
+    label.textContent = n.cls.name;
+
+    grp.appendChild(circle);
+    grp.appendChild(label);
+    n._el = grp;
+    n._circle = circle;
+
+    grp.addEventListener('mousedown', e => beginNodeDrag(e, n));
+    grp.addEventListener('click', e => { e.stopPropagation(); selectGraphNode(n); });
+    gNodes.appendChild(grp);
+  });
+
+  positionGraphElements();
+}
+
+function positionGraphElements() {
+  GRAPH.edges.forEach(e => {
+    e._el.setAttribute('x1', e.source.x);
+    e._el.setAttribute('y1', e.source.y);
+    e._el.setAttribute('x2', e.target.x);
+    e._el.setAttribute('y2', e.target.y);
+  });
+  GRAPH.nodes.forEach(n => {
+    n._el.setAttribute('transform', `translate(${n.x},${n.y})`);
+  });
+}
+
+function stepGraphSim() {
+  const nodes = GRAPH.nodes, edges = GRAPH.edges;
+  if (!nodes.length) return true;
+
+  const N = nodes.length;
+  // Auto-tune constants by size
+  const repulsion = N < 80 ? 1400 : 900;
+  const springK   = 0.045;
+  const springLen = N < 80 ? 90 : 55;
+  const gravity   = N < 80 ? 0.015 : 0.008;
+  const damping   = 0.82;
+
+  const svg = document.getElementById('graph-svg');
+  const cx = (svg.clientWidth || 800) / 2;
+  const cy = (svg.clientHeight || 600) / 2;
+
+  for (let i = 0; i < N; i++) { nodes[i].fx = 0; nodes[i].fy = 0; }
+
+  // Repulsion (O(n²))
+  for (let i = 0; i < N; i++) {
+    const a = nodes[i];
+    for (let j = i + 1; j < N; j++) {
+      const b = nodes[j];
+      let dx = a.x - b.x, dy = a.y - b.y;
+      let d2 = dx * dx + dy * dy;
+      if (d2 < 0.5) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
+      const inv = repulsion / d2;
+      const d = Math.sqrt(d2);
+      const fx = inv * dx / d, fy = inv * dy / d;
+      a.fx += fx; a.fy += fy;
+      b.fx -= fx; b.fy -= fy;
+    }
+  }
+
+  // Attraction on edges
+  edges.forEach(e => {
+    const a = e.source, b = e.target;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.sqrt(dx * dx + dy * dy) + 0.001;
+    // Closer alignment → tighter spring
+    const target = springLen * (0.6 + e.distance);
+    const f = springK * (d - target);
+    const fx = f * dx / d, fy = f * dy / d;
+    a.fx += fx; a.fy += fy;
+    b.fx -= fx; b.fy -= fy;
+  });
+
+  // Gravity toward the center
+  nodes.forEach(n => {
+    n.fx += (cx - n.x) * gravity;
+    n.fy += (cy - n.y) * gravity;
+  });
+
+  // Integrate
+  let maxV2 = 0;
+  nodes.forEach(n => {
+    if (n.pinned) { n.vx = 0; n.vy = 0; return; }
+    n.vx = (n.vx + n.fx) * damping;
+    n.vy = (n.vy + n.fy) * damping;
+    n.x += n.vx;
+    n.y += n.vy;
+    const v2 = n.vx * n.vx + n.vy * n.vy;
+    if (v2 > maxV2) maxV2 = v2;
+  });
+  return maxV2 < 0.02; // settled?
+}
+
+function startGraphSim() {
+  if (GRAPH.running) return;
+  GRAPH.running = true;
+  let ticks = 0;
+  const maxTicks = GRAPH.nodes.length > 200 ? 600 : 400;
+
+  function tick() {
+    if (!GRAPH.running) return;
+    const settled = stepGraphSim();
+    positionGraphElements();
+    ticks++;
+    if (settled || ticks >= maxTicks) {
+      GRAPH.running = false;
+      return;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function stopGraphSim() { GRAPH.running = false; }
+
+function selectGraphNode(n) {
+  GRAPH.selected = n.id;
+  document.querySelectorAll('#graph-nodes .g-node-group').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === n.id);
+    const c = el.querySelector('.g-node');
+    if (c) c.classList.toggle('selected', el.dataset.id === n.id);
+  });
+  renderGraphDetail(n.cls);
+}
+
+function renderGraphDetail(cls) {
+  const el = document.getElementById('g-panel-body');
+  el.className = 'g-panel-scroll';
+  const iriHtml = cls.iri
+    ? `<div class="g-p-iri"><a href="${esc(cls.iri)}" target="_blank" rel="noopener">${esc(cls.iri)}</a></div>`
+    : '';
+  const srcHtml = (cls.sources || []).map(s =>
+    `<span class="c-src-tag" style="color:${SOURCE_COLORS[s] || DEFAULT_SRC_COLOR};border-color:${SOURCE_COLORS[s] || DEFAULT_SRC_COLOR}44;background:${SOURCE_COLORS[s] || DEFAULT_SRC_COLOR}18">${esc(s)}</span>`
+  ).join(' ');
+
+  // Alignments FROM this class + also reverse edges to it
+  const outgoing = (cls.alignments || []).map(a => ({
+    other: GRAPH.clsById.get(a.target_hash_id),
+    distance: a.distance, method: a.method, dir: '→',
+  })).filter(x => x.other);
+  const incoming = [];
+  GRAPH.registry.classes.forEach(c => {
+    (c.alignments || []).forEach(a => {
+      if (a.target_hash_id === cls.hash_id) {
+        incoming.push({ other: c, distance: a.distance, method: a.method, dir: '←' });
+      }
+    });
+  });
+  const aligns = [...outgoing, ...incoming].sort((a, b) => a.distance - b.distance);
+
+  el.innerHTML = `
+    <div class="g-p-name">${esc(cls.name)}</div>
+    ${iriHtml}
+    <div class="c-src-row">${srcHtml}</div>
+    <div class="g-p-def">${esc(cls.definition || '—')}</div>
+    <div class="g-p-section">Alignments (${aligns.length})</div>
+    ${aligns.length ? aligns.map(a => `
+      <div class="g-p-align" data-jump="${esc(a.other.hash_id)}">
+        <div class="g-p-align-head">
+          <span class="g-p-align-name">${a.dir} ${esc(a.other.name)}</span>
+          <span class="g-p-align-dist" style="color:${distColor(a.distance)}">${(a.distance ?? 0).toFixed(3)}</span>
+        </div>
+        <div class="g-p-align-method">${esc(a.method || '')}</div>
+      </div>
+    `).join('') : '<div class="c-none">No alignments touch this class.</div>'}
+  `;
+
+  el.querySelectorAll('.g-p-align').forEach(row => {
+    row.addEventListener('click', () => {
+      const other = GRAPH.nodes.find(n => n.id === row.dataset.jump);
+      if (other) selectGraphNode(other);
+    });
+  });
+}
+
+// ── SVG viewport (pan/zoom) ────────────────────────────
+function applyViewport() {
+  const g = document.getElementById('graph-viewport');
+  const { tx, ty, s } = GRAPH.transform;
+  g.setAttribute('transform', `translate(${tx},${ty}) scale(${s})`);
+}
+
+function fitGraphViewport() {
+  GRAPH.transform = { tx: 0, ty: 0, s: 1 };
+  applyViewport();
+}
+
+function screenToWorld(sx, sy) {
+  const svg = document.getElementById('graph-svg');
+  const rect = svg.getBoundingClientRect();
+  const { tx, ty, s } = GRAPH.transform;
+  return { x: (sx - rect.left - tx) / s, y: (sy - rect.top - ty) / s };
+}
+
+function beginNodeDrag(evt, node) {
+  evt.preventDefault();
+  evt.stopPropagation();
+  node.pinned = true;
+  GRAPH.drag = { node, ox: 0, oy: 0 };
+  // Wake sim so drag feels reactive
+  startGraphSim();
+}
+
+function wireGraphInteractions() {
+  const svg = document.getElementById('graph-svg');
+
+  svg.addEventListener('mousedown', e => {
+    if (e.target.closest('.g-node-group')) return; // handled per-node
+    GRAPH.panDrag = { x: e.clientX, y: e.clientY, tx: GRAPH.transform.tx, ty: GRAPH.transform.ty };
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (GRAPH.drag) {
+      const w = screenToWorld(e.clientX, e.clientY);
+      GRAPH.drag.node.x = w.x;
+      GRAPH.drag.node.y = w.y;
+      positionGraphElements();
+    } else if (GRAPH.panDrag) {
+      GRAPH.transform.tx = GRAPH.panDrag.tx + (e.clientX - GRAPH.panDrag.x);
+      GRAPH.transform.ty = GRAPH.panDrag.ty + (e.clientY - GRAPH.panDrag.y);
+      applyViewport();
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (GRAPH.drag) { GRAPH.drag.node.pinned = false; GRAPH.drag = null; }
+    GRAPH.panDrag = null;
+  });
+
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const t = GRAPH.transform;
+    const newS = Math.max(0.2, Math.min(4, t.s * factor));
+    // Zoom around the cursor
+    t.tx = cx - (cx - t.tx) * (newS / t.s);
+    t.ty = cy - (cy - t.ty) * (newS / t.s);
+    t.s = newS;
+    applyViewport();
+  }, { passive: false });
+
+  window.addEventListener('resize', () => {
+    if (document.getElementById('view-graph').classList.contains('active')) {
+      positionGraphElements();
+    }
+  });
 }
 
 // ────────────────────────────────────────────────────────
