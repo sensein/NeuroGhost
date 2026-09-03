@@ -41,14 +41,26 @@
 
 ## Website
 
-**[sensein.group/NeuroGhost](https://sensein.group/NeuroGhost/)** — seven tabs: **Concepts**, **Diff**, **Graph Schema**, **Transform**, **Query**, **Provenance**, **Register**. Every view has download buttons.
+**[sensein.group/NeuroGhost](https://sensein.group/NeuroGhost/)** — nine tabs, all client-side, no framework:
+
+| Tab | What it does |
+|-----|--------------|
+| **Meta-model** | Interactive class diagram of the 14 registry types (`RegistryEntity`, `RegistryClass`, `Mapping`, `ProvenanceEntry`, …) with `is_a` and named-relationship edges. Fuzzy search over class names, tags, definitions, and slot names — matches highlight on the canvas and open the side panel. |
+| **Concepts** | Browse all 677 registered classes with a source filter, a name/definition search, and a per-class detail panel showing IRI, definition, properties, and alignments. Four **live weight sliders** — `iri` / `name` / `desc` / `slot` — re-rank each class's alignments by a composite similarity you tune on the fly. |
+| **Diff** | Pick two schemas from the pickers and see matched pairs, only-in-A, and only-in-B. Matching passes: exact name → alignment edge A→B → alignment edge B→A. Every matched pair carries a **slot-level delta** — shared / added / removed — expandable to the actual property names. |
+| **Graph Schema** | Force-directed content graph — every registered class as a node (colored by source), every alignment edge as a link (colored by method, width scaled by `1 − distance`). Scope toggle (Aligned / All 677), method chips with inline **descriptions of each alignment method**, per-schema on/off, drag / zoom / pan, and a side detail panel per node. |
+| **Transform** | Pick a source class in one schema and a target class in another; get a **field-mapping table** with `auto` / `heuristic` / `unmapped` status per property, a coverage bar, and a class-level alignment badge showing the pipeline method and distance when one applies. |
+| **Query** | Cross-registry free-text search over class names, property names, definitions, and IRIs. Kind chips (Classes / Properties / IRIs) with live counts, source facets, and a right-hand detail panel per hit. IRI hits aggregate every class under the same anchor. |
+| **Provenance** | Timeline of every registry version — 18 entries to date — with a W3C-PROV record per bump (`activity`, `attributed_to`, `generated_at`, `derived_from`, `issue`, `archive`) and green/red class-count deltas against the previous version. |
+| **Compose** | **Build your own LinkML schema** by picking classes from the registry. Emits a valid LinkML YAML with `class_uri`, `slot_uri`, `range`, `unit.ucum_code`, and deduplicated slots. One-click **Copy YAML** or **Download .yml**. |
+| **Ingest** (Register) | Submit a new schema via file drop, file browse, or paste. Parses the YAML client-side, previews it, and opens a pre-filled GitHub issue that triggers the CI pipeline to validate, ingest, align, and archive it. |
 
 ---
 
 ## Adding a schema
 
 1. Write a LinkML `.yml` file (copy `registry_schemas/bbqs.yml` as a template).
-2. Go to the [Register tab](https://sensein.group/NeuroGhost/), paste your YAML, click **Open GitHub Issue**.
+2. Go to the **Ingest** tab of the [website](https://sensein.group/NeuroGhost/), drop the file, browse to it, or paste the YAML directly, then click **Open ingestion issue**.
 3. A GitHub Action validates, ingests, aligns, and archives it within minutes.
 
 No installation, no pull request, no reviewers required.
