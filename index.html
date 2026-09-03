@@ -1229,11 +1229,11 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
             <polyline points="9 15 12 18 15 15"/>
           </svg>
         </div>
-        <p class="drop-title">Drop a LinkML YAML schema</p>
+        <p class="drop-title">Drop a LinkML or JSON Schema</p>
         <p class="drop-sub">or click anywhere to browse</p>
-        <p class="drop-ext">.yml · .yaml</p>
+        <p class="drop-ext">.yml · .yaml · .json</p>
       </div>
-      <input type="file" id="file-input" accept=".yml,.yaml" style="display:none">
+      <input type="file" id="file-input" accept=".yml,.yaml,.json" style="display:none">
     </div>
     <div class="preview-pane" id="preview-pane" style="display:none">
       <div class="preview-head">
@@ -3799,7 +3799,7 @@ const previewBody = document.getElementById('preview-body');
 const footMeta   = document.getElementById('foot-meta');
 const ingestBtn  = document.getElementById('ingest-btn');
 const ingestLog  = document.getElementById('ingest-log');
-let yamlText = '', fileName = '';
+let yamlText = '', fileName = '', fileLang = 'yaml', schemaName = 'unknown';
 
 dropZone.addEventListener('click', e => {
   if (dropZone.classList.contains('has-file') || dropZone.classList.contains('paste-mode')) return;
@@ -3823,7 +3823,14 @@ function loadFile(file) {
 function applyYAMLText(text, displayName, sizeBytes) {
   yamlText = text;
   fileName = displayName;
-  const info = parseYAML(yamlText);
+  fileLang = detectLang(text, displayName);
+  const info = parseSchemaInfo(yamlText, fileLang);
+  // A JSON Schema has no `name:` field; fall back to the filename stem so the
+  // submission (and the file the workflow writes) still gets a sensible name.
+  if (!info.name || info.name === 'unknown') {
+    info.name = displayName.replace(/\.(json|ya?ml)$/i, '') || 'schema';
+  }
+  schemaName = info.name;
 
   dropZone.classList.remove('full-width', 'paste-mode');
   dropZone.classList.add('has-file');
@@ -3850,7 +3857,7 @@ function applyYAMLText(text, displayName, sizeBytes) {
 
   previewPane.style.display = 'flex';
   previewBody.className = 'yaml-scroll';
-  previewBody.innerHTML = `<pre class="yaml-pre">${highlightYAML(yamlText)}</pre>`;
+  previewBody.innerHTML = `<pre class="yaml-pre">${fileLang === 'json' ? esc(yamlText) : highlightYAML(yamlText)}</pre>`;
   footMeta.innerHTML = `<span style="color:var(--text-dim)">${esc(info.name)}</span> &middot; <span style="color:var(--muted)">${info.classes} classes</span>`;
   ingestBtn.disabled = false;
   ingestLog.classList.remove('open');
@@ -3881,9 +3888,9 @@ function defaultDropHTML() {
         <polyline points="9 15 12 18 15 15"/>
       </svg>
     </div>
-    <p class="drop-title">Drop a LinkML YAML schema</p>
+    <p class="drop-title">Drop a LinkML or JSON Schema</p>
     <p class="drop-sub">or click anywhere to browse</p>
-    <p class="drop-ext">.yml · .yaml</p>
+    <p class="drop-ext">.yml · .yaml · .json</p>
     <div class="paste-toggle-row">
       <button class="paste-toggle" id="paste-toggle" type="button">or paste YAML text →</button>
     </div>`;
@@ -3895,8 +3902,8 @@ function showPasteMode(e) {
   dropZone.classList.add('paste-mode');
   document.getElementById('drop-center').innerHTML = `
     <div class="paste-wrap">
-      <p class="paste-title">Paste LinkML YAML</p>
-      <textarea class="paste-textarea" id="paste-textarea" placeholder="Paste your LinkML schema YAML here…" spellcheck="false" autocomplete="off"></textarea>
+      <p class="paste-title">Paste LinkML YAML or JSON Schema</p>
+      <textarea class="paste-textarea" id="paste-textarea" placeholder="Paste your LinkML YAML or JSON Schema here…" spellcheck="false" autocomplete="off"></textarea>
       <div class="paste-actions">
         <button class="paste-back" id="paste-back" type="button">← back to file drop</button>
         <button class="paste-load" id="paste-load" type="button" disabled>Load pasted YAML</button>
@@ -3908,8 +3915,10 @@ function showPasteMode(e) {
   loadBtn.addEventListener('click', () => {
     const text = ta.value;
     if (!text.trim()) return;
-    const info = parseYAML(text);
-    const displayName = (info.name && info.name !== 'unknown' ? info.name : 'pasted') + '.yml';
+    const lang = detectLang(text, '');
+    const info = parseSchemaInfo(text, lang);
+    const base = (info.name && info.name !== 'unknown') ? info.name : 'pasted';
+    const displayName = base + (lang === 'json' ? '.json' : '.yml');
     applyYAMLText(text, displayName, new Blob([text]).size);
   });
   document.getElementById('paste-back').addEventListener('click', resetIngest);
@@ -3922,12 +3931,15 @@ document.getElementById('paste-toggle').addEventListener('click', showPasteMode)
 
 ingestBtn.addEventListener('click', () => {
   if (!yamlText) return;
-  const info  = parseYAML(yamlText);
+  const info = parseSchemaInfo(yamlText, fileLang);
   // Title MUST start with "schema-submission:" — schema_submission.yml triggers
   // on that exact prefix and strips it to derive the schema name.
-  const title = encodeURIComponent(`schema-submission: ${info.name}`);
+  const title = encodeURIComponent(`schema-submission: ${schemaName}`);
+  // Fence with the detected language: the workflow converts a ```json /
+  // ```json-schema block via from_jsonschema, and treats anything else as
+  // LinkML — so JSON must NOT go out as ```yaml.
   const body  = encodeURIComponent(
-    `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0,10)}\n\n\`\`\`yaml\n${yamlText.slice(0, 8000)}\n\`\`\``
+    `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0,10)}\n\n\`\`\`${fileLang}\n${yamlText.slice(0, 8000)}\n\`\`\``
   );
   const url = `https://github.com/sensein/NeuroGhost/issues/new?title=${title}&body=${body}&labels=schema-submission`;
 
@@ -3937,7 +3949,7 @@ ingestBtn.addEventListener('click', () => {
 
   const steps = [
     ['→ Validating schema structure…', ''],
-    [`→ Parsed: ${info.name} · ${info.classes} classes · ${info.slots} slots`, ''],
+    [`→ Parsed: ${schemaName} · ${info.classes} classes · ${info.slots} slots`, ''],
     ['→ Opening GitHub issue to trigger CI pipeline…', ''],
     ['✓ Issue created — Actions will validate, ingest, align, and archive.', 'ok'],
   ];
@@ -3962,6 +3974,42 @@ function parseYAML(raw) {
     ? (raw.split(/^slots:/m)[1] || '').match(/^\s{2}\w/mg) || []
     : []).length;
   return { name, classes, slots };
+}
+
+// Detect submission format from content: a JSON Schema is valid JSON (starts
+// with '{'); LinkML is YAML. The filename extension is a fallback hint. The
+// workflow converts JSON -> LinkML server-side (from_jsonschema); the UI only
+// needs to fence it correctly and preview it.
+function detectLang(text, name) {
+  const t = (text || '').trim();
+  if (t.startsWith('{')) return 'json';
+  if (name && /\.json$/i.test(name)) return 'json';
+  return 'yaml';
+}
+
+// Lightweight info (name + class/slot counts) for a JSON Schema, mirroring
+// parseYAML's role for LinkML — just for the preview panel and issue title.
+function parseJSONSchema(raw) {
+  try {
+    const d = JSON.parse(raw);
+    const defs = { ...(d.$defs || {}), ...(d.definitions || {}) };
+    let classes = 0, slots = 0;
+    const count = o => {
+      if (o && typeof o === 'object' && (o.type === 'object' || o.properties)) {
+        classes++;
+        slots += Object.keys(o.properties || {}).length;
+      }
+    };
+    if (d.type === 'object' || d.properties) count(d);
+    Object.values(defs).forEach(count);
+    return { name: (d.title || '').trim() || 'unknown', classes, slots };
+  } catch (e) {
+    return { name: 'unknown', classes: 0, slots: 0 };
+  }
+}
+
+function parseSchemaInfo(text, lang) {
+  return lang === 'json' ? parseJSONSchema(text) : parseYAML(text);
 }
 
 function highlightYAML(raw) {
