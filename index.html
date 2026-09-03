@@ -684,6 +684,29 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   padding:2px 6px;line-height:1;border-radius:4px;}
 .cp-picked-remove:hover{color:var(--red);background:rgba(248,113,113,.1);}
 
+/* Expandable slot picker per class */
+.cp-picked-row{flex-wrap:wrap;}
+.cp-picked-top{display:flex;align-items:center;gap:10px;width:100%;}
+.cp-expand-btn{background:none;border:none;color:var(--muted);cursor:pointer;padding:0 4px;
+  font-family:var(--mono);font-size:11px;transition:transform .15s;}
+.cp-expand-btn.open{transform:rotate(90deg);color:var(--teal);}
+.cp-picked-slots{width:100%;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:none;}
+.cp-picked-row.expanded .cp-picked-slots{display:block;}
+.cp-slot-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;
+  font-size:10.5px;color:var(--muted);font-family:var(--mono);}
+.cp-slot-tools{display:flex;gap:4px;}
+.cp-slot-tool{background:none;border:1px solid var(--border);border-radius:4px;
+  padding:1px 8px;font-size:10px;font-family:var(--sans);color:var(--muted);cursor:pointer;}
+.cp-slot-tool:hover{color:var(--teal);border-color:var(--teal-line);}
+.cp-slot-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.cp-slot-chip{font-family:var(--mono);font-size:10.5px;padding:3px 9px;border-radius:99px;
+  border:1px solid var(--teal-line);background:var(--teal-soft);color:var(--teal);cursor:pointer;
+  user-select:none;transition:all .12s;}
+.cp-slot-chip.off{background:var(--surface-2);border-color:var(--border);color:var(--muted);
+  text-decoration:line-through;}
+.cp-slot-chip:hover{filter:brightness(1.1);}
+.cp-no-slots{font-size:11px;color:var(--muted);font-style:italic;}
+
 /* Preview */
 .cp-preview{background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;
   overflow:hidden;display:flex;flex-direction:column;min-height:240px;}
@@ -3437,7 +3460,8 @@ const COMPOSE = {
   sources: [], srcCounts: {},
   enabled: null,           // Set of enabled source labels
   query: '',
-  picked: new Map(),       // hash_id → class
+  picked: new Map(),       // hash_id → { cls, excluded: Set<slotName> }
+  expanded: new Set(),     // hash_ids currently showing their slot picker
   meta: null,              // { name, id, prefix, description }
 };
 
@@ -3527,8 +3551,12 @@ function renderComposeList() {
       const hash = row.dataset.hash;
       const cls = COMPOSE.registry.classes.find(c => c.hash_id === hash);
       if (!cls) return;
-      if (COMPOSE.picked.has(hash)) COMPOSE.picked.delete(hash);
-      else COMPOSE.picked.set(hash, cls);
+      if (COMPOSE.picked.has(hash)) {
+        COMPOSE.picked.delete(hash);
+        COMPOSE.expanded.delete(hash);
+      } else {
+        COMPOSE.picked.set(hash, { cls, excluded: new Set() });
+      }
       renderComposeList();
       renderComposePicked();
       renderComposePreview();
@@ -3539,32 +3567,95 @@ function renderComposeList() {
 function renderComposePicked() {
   const el = document.getElementById('cp-picked-list');
   const cntEl = document.getElementById('cp-picked-cnt');
-  const items = [...COMPOSE.picked.values()];
-  cntEl.textContent = items.length;
+  const entries = [...COMPOSE.picked.values()];
+  cntEl.textContent = entries.length;
 
-  if (!items.length) {
-    el.innerHTML = `<div class="cp-picked-empty">Pick classes from the library on the left. Their properties are folded into the schema automatically.</div>`;
+  if (!entries.length) {
+    el.innerHTML = `<div class="cp-picked-empty">Pick classes from the library on the left, then tap ▶ on any picked class to choose exactly which slots to keep.</div>`;
     return;
   }
-  items.sort((a, b) => a.name.localeCompare(b.name));
-  el.innerHTML = items.map(c => {
-    const props = (c.properties || []).length;
-    const src = (c.sources || [])[0] || '';
+  entries.sort((a, b) => a.cls.name.localeCompare(b.cls.name));
+  el.innerHTML = entries.map(({ cls, excluded }) => {
+    const props = cls.properties || [];
+    const kept = props.filter(p => !excluded.has(p.name)).length;
+    const src = (cls.sources || [])[0] || '';
+    const expanded = COMPOSE.expanded.has(cls.hash_id);
+    const slotChips = props.length
+      ? props.map(p => {
+          const off = excluded.has(p.name);
+          return `<span class="cp-slot-chip${off ? ' off' : ''}" data-slot="${esc(p.name)}" title="${esc(p.definition || '')}">${esc(p.name)}</span>`;
+        }).join('')
+      : '<div class="cp-no-slots">No own properties on this class.</div>';
+
     return `
-      <div class="cp-picked-row${c.is_abstract ? ' abstract' : ''}" data-hash="${esc(c.hash_id)}">
-        <div class="cp-picked-main">
-          <div class="cp-picked-name">${esc(c.name)}</div>
-          <div class="cp-picked-meta">${esc(src)} · ${props} slot${props === 1 ? '' : 's'}${c.is_abstract ? ' · abstract' : ''}</div>
+      <div class="cp-picked-row${cls.is_abstract ? ' abstract' : ''}${expanded ? ' expanded' : ''}" data-hash="${esc(cls.hash_id)}">
+        <div class="cp-picked-top">
+          <button class="cp-expand-btn${expanded ? ' open' : ''}" ${props.length ? '' : 'disabled'} aria-label="Toggle slot picker">▶</button>
+          <div class="cp-picked-main">
+            <div class="cp-picked-name">${esc(cls.name)}</div>
+            <div class="cp-picked-meta">${esc(src)} · ${kept}/${props.length} slot${props.length === 1 ? '' : 's'}${cls.is_abstract ? ' · abstract' : ''}</div>
+          </div>
+          <button class="cp-picked-remove" aria-label="Remove">✕</button>
         </div>
-        <button class="cp-picked-remove" aria-label="Remove">✕</button>
+        ${props.length ? `
+          <div class="cp-picked-slots">
+            <div class="cp-slot-toolbar">
+              <span>Click a slot to exclude it. Excluded slots are omitted from the class's <code>slots:</code> list and dropped from the top-level <code>slots:</code> block when no picked class keeps them.</span>
+              <div class="cp-slot-tools">
+                <button class="cp-slot-tool" data-tool="all">All</button>
+                <button class="cp-slot-tool" data-tool="none">None</button>
+              </div>
+            </div>
+            <div class="cp-slot-chips">${slotChips}</div>
+          </div>` : ''}
       </div>`;
   }).join('');
+
   el.querySelectorAll('.cp-picked-row').forEach(row => {
+    const hash = row.dataset.hash;
+    const entry = COMPOSE.picked.get(hash);
+    if (!entry) return;
+
     row.querySelector('.cp-picked-remove').addEventListener('click', () => {
-      COMPOSE.picked.delete(row.dataset.hash);
+      COMPOSE.picked.delete(hash);
+      COMPOSE.expanded.delete(hash);
       renderComposeList();
       renderComposePicked();
       renderComposePreview();
+    });
+
+    const expandBtn = row.querySelector('.cp-expand-btn');
+    if (expandBtn && !expandBtn.disabled) {
+      expandBtn.addEventListener('click', () => {
+        if (COMPOSE.expanded.has(hash)) COMPOSE.expanded.delete(hash);
+        else COMPOSE.expanded.add(hash);
+        renderComposePicked();
+      });
+    }
+
+    row.querySelectorAll('.cp-slot-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const name = chip.dataset.slot;
+        if (entry.excluded.has(name)) entry.excluded.delete(name);
+        else entry.excluded.add(name);
+        chip.classList.toggle('off');
+        // Update the kept/total count in the header
+        const total = (entry.cls.properties || []).length;
+        const kept  = total - entry.excluded.size;
+        row.querySelector('.cp-picked-meta').textContent =
+          `${(entry.cls.sources || [])[0] || ''} · ${kept}/${total} slot${total === 1 ? '' : 's'}${entry.cls.is_abstract ? ' · abstract' : ''}`;
+        renderComposePreview();
+      });
+    });
+
+    row.querySelectorAll('.cp-slot-tool').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tool = btn.dataset.tool;
+        if (tool === 'all') entry.excluded.clear();
+        else (entry.cls.properties || []).forEach(p => entry.excluded.add(p.name));
+        renderComposePicked();
+        renderComposePreview();
+      });
     });
   });
 }
@@ -3605,13 +3696,18 @@ function normalizeRange(r) {
 
 function generateComposeYAML() {
   const m = composeMeta();
-  const classes = [...COMPOSE.picked.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const entries = [...COMPOSE.picked.values()]
+    .sort((a, b) => a.cls.name.localeCompare(b.cls.name));
 
-  // Deduplicate slots by name across all picked classes
+  // Deduplicate slots by name — only include a top-level slot definition
+  // if at least one picked class actually keeps it.
   const slotByName = new Map();
-  classes.forEach(c => (c.properties || []).forEach(p => {
-    if (p.name && !slotByName.has(p.name)) slotByName.set(p.name, p);
-  }));
+  entries.forEach(({ cls, excluded }) => {
+    (cls.properties || []).forEach(p => {
+      if (!p.name || excluded.has(p.name)) return;
+      if (!slotByName.has(p.name)) slotByName.set(p.name, p);
+    });
+  });
 
   const lines = [];
   lines.push(`id: ${m.id}`);
@@ -3629,22 +3725,26 @@ function generateComposeYAML() {
   lines.push('  - linkml:types');
   lines.push('');
   lines.push(`# Composed from the NeuroGhost registry on ${new Date().toISOString().slice(0, 10)}`);
-  lines.push(`# Source classes: ${classes.map(c => `${c.name} (${(c.sources || [])[0] || '?'})`).join(', ') || '—'}`);
+  lines.push(`# Source classes: ${entries.map(({ cls }) => `${cls.name} (${(cls.sources || [])[0] || '?'})`).join(', ') || '—'}`);
   lines.push('');
 
-  if (classes.length) {
+  if (entries.length) {
     lines.push('classes:');
-    classes.forEach(c => {
-      lines.push(`  ${c.name}:`);
-      if (c.definition) lines.push(`    description: ${yamlScalar(c.definition, 6)}`);
-      if (c.iri)        lines.push(`    class_uri: ${c.iri}`);
-      if (c.is_abstract) lines.push('    abstract: true');
+    entries.forEach(({ cls, excluded }) => {
+      lines.push(`  ${cls.name}:`);
+      if (cls.definition) lines.push(`    description: ${yamlScalar(cls.definition, 6)}`);
+      if (cls.iri)        lines.push(`    class_uri: ${cls.iri}`);
+      if (cls.is_abstract) lines.push('    abstract: true');
       // subclass_of holds IRIs; keep them as a note rather than emit invalid is_a
-      (c.subclass_of || []).forEach(sc => lines.push(`    # inherits (source IRI): ${sc}`));
-      const slots = (c.properties || []).map(p => p.name).filter(Boolean);
+      (cls.subclass_of || []).forEach(sc => lines.push(`    # inherits (source IRI): ${sc}`));
+      const slots = (cls.properties || []).map(p => p.name).filter(n => n && !excluded.has(n));
+      const dropped = (cls.properties || []).filter(p => p.name && excluded.has(p.name)).map(p => p.name);
       if (slots.length) {
         lines.push('    slots:');
         slots.forEach(s => lines.push(`      - ${s}`));
+      }
+      if (dropped.length) {
+        lines.push(`    # excluded via UI: ${dropped.join(', ')}`);
       }
     });
     lines.push('');
@@ -3672,11 +3772,19 @@ function renderComposePreview() {
 
   const nPicked = COMPOSE.picked.size;
   let nSlots = 0;
-  COMPOSE.picked.forEach(c => nSlots += (c.properties || []).length);
-  document.getElementById('cp-c-sub').textContent = `${nPicked} class${nPicked === 1 ? '' : 'es'} · ${nSlots} slot${nSlots === 1 ? '' : 's'}`;
+  const uniqNames = new Set();
+  COMPOSE.picked.forEach(({ cls, excluded }) => {
+    (cls.properties || []).forEach(p => {
+      if (!p.name || excluded.has(p.name)) return;
+      nSlots++;                              // per-class-occurrence
+      uniqNames.add(p.name);
+    });
+  });
+  document.getElementById('cp-c-sub').textContent =
+    `${nPicked} class${nPicked === 1 ? '' : 'es'} · ${uniqNames.size} slot${uniqNames.size === 1 ? '' : 's'} (${nSlots} across classes)`;
   document.getElementById('cp-preview-cnt').textContent = `${yaml.length.toLocaleString()} bytes`;
   document.getElementById('cp-preview-meta').textContent = nPicked
-    ? `${nPicked} class${nPicked === 1 ? '' : 'es'} · ${nSlots} slot${nSlots === 1 ? '' : 's'}`
+    ? `${nPicked} class${nPicked === 1 ? '' : 'es'} · ${uniqNames.size} unique slot${uniqNames.size === 1 ? '' : 's'}`
     : 'no classes picked yet';
 
   document.getElementById('cp-download').disabled = nPicked === 0;
