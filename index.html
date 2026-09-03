@@ -608,6 +608,100 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .pv-d-placeholder{height:100%;display:flex;align-items:center;justify-content:center;
   color:var(--muted);font-size:12px;text-align:center;padding:24px;}
 
+/* ══ COMPOSE ═══════════════════════════════════════════════════════════ */
+#view-compose{overflow:hidden;flex-direction:row;}
+.cp-browser{width:340px;border-right:1px solid var(--border);flex-shrink:0;
+  display:flex;flex-direction:column;background:var(--bg-elev);overflow:hidden;}
+.cp-head{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cp-head-title{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;}
+.cp-src-pills{display:flex;flex-wrap:wrap;gap:4px;padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cp-src-pill{background:var(--surface);border:1px solid var(--border);border-radius:99px;
+  padding:3px 9px;font-size:10.5px;font-family:var(--mono);color:var(--text-dim);cursor:pointer;user-select:none;}
+.cp-src-pill.off{opacity:.35;text-decoration:line-through;}
+.cp-src-pill.on{background:var(--teal-soft);border-color:var(--teal-line);color:var(--teal);}
+.cp-search-wrap{padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cp-search{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:12px;outline:none;}
+.cp-search:focus{border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
+.cp-list{overflow-y:auto;flex:1;}
+.cp-cls-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);
+  cursor:pointer;transition:background .12s;}
+.cp-cls-row:hover{background:var(--surface);}
+.cp-cls-row.picked{background:var(--teal-soft);}
+.cp-cls-name{flex:1;min-width:0;font-family:var(--mono);font-size:11.5px;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
+.cp-cls-row.picked .cp-cls-name{color:var(--teal);}
+.cp-cls-row.abstract .cp-cls-name{color:var(--purple);}
+.cp-cls-src{font-family:var(--mono);font-size:9.5px;padding:1px 6px;border-radius:99px;
+  background:var(--surface-2);color:var(--muted);border:1px solid var(--border);flex-shrink:0;}
+.cp-cls-btn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);
+  padding:3px 8px;font-size:11px;font-family:var(--sans);cursor:pointer;flex-shrink:0;transition:all .12s;}
+.cp-cls-btn:hover{border-color:var(--teal);color:var(--teal);}
+.cp-cls-row.picked .cp-cls-btn{border-color:var(--teal-line);color:var(--teal);}
+.cp-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
+
+/* Composer side */
+.cp-composer{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.cp-c-head{padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+  display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.cp-c-title{font-size:14px;font-weight:600;color:var(--text);}
+.cp-c-sub{font-size:11.5px;color:var(--muted);font-family:var(--mono);}
+.cp-actions{display:flex;gap:8px;}
+.cp-btn{background:none;border:1px solid var(--border);border-radius:7px;
+  padding:7px 14px;font-size:12px;font-family:var(--sans);color:var(--text-dim);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s;}
+.cp-btn:hover{border-color:var(--teal-line);color:var(--teal);}
+.cp-btn.primary{background:var(--teal);color:#0a1017;border-color:var(--teal);font-weight:600;}
+.cp-btn.primary:hover{opacity:.88;}
+.cp-btn:disabled{opacity:.4;cursor:not-allowed;}
+.cp-btn svg{width:12px;height:12px;}
+
+.cp-c-body{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px;}
+.cp-meta-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;display:grid;grid-template-columns:110px 1fr;gap:10px 12px;align-items:center;}
+.cp-meta-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;}
+.cp-meta-input,.cp-meta-textarea{background:var(--surface-2);border:1px solid var(--border);
+  border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--mono);font-size:11.5px;
+  outline:none;width:100%;box-sizing:border-box;}
+.cp-meta-input:focus,.cp-meta-textarea:focus{border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
+.cp-meta-textarea{resize:vertical;min-height:44px;font-family:var(--sans);}
+
+.cp-section-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+  font-weight:600;display:flex;justify-content:space-between;align-items:baseline;}
+.cp-section-lbl .cnt{font-family:var(--mono);color:var(--text-dim);font-size:10.5px;}
+
+.cp-picked-list{display:flex;flex-direction:column;gap:6px;}
+.cp-picked-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;font-style:italic;
+  border:1px dashed var(--border);border-radius:8px;background:var(--bg-elev);}
+.cp-picked-row{background:var(--surface);border:1px solid var(--border);border-radius:7px;
+  padding:9px 12px;display:flex;align-items:center;gap:10px;}
+.cp-picked-main{flex:1;min-width:0;}
+.cp-picked-name{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cp-picked-row.abstract .cp-picked-name{color:var(--purple);}
+.cp-picked-meta{font-size:10.5px;color:var(--muted);font-family:var(--mono);margin-top:1px;}
+.cp-picked-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;
+  padding:2px 6px;line-height:1;border-radius:4px;}
+.cp-picked-remove:hover{color:var(--red);background:rgba(248,113,113,.1);}
+
+/* Preview */
+.cp-preview{background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;
+  overflow:hidden;display:flex;flex-direction:column;min-height:240px;}
+.cp-preview-head{padding:8px 14px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.cp-preview-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;}
+.cp-preview-meta{font-family:var(--mono);font-size:10px;color:var(--muted);}
+.cp-preview-body{overflow:auto;padding:12px 16px;flex:1;}
+.cp-preview-body pre{font-family:var(--mono);font-size:11px;line-height:1.65;white-space:pre;color:var(--text-dim);}
+
+/* Copy toast */
+.cp-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:var(--teal);color:#0a1017;padding:8px 18px;border-radius:99px;
+  font-size:12px;font-weight:600;font-family:var(--sans);z-index:99;
+  box-shadow:0 6px 24px rgba(0,0,0,.35);opacity:0;pointer-events:none;
+  transition:opacity .2s;}
+.cp-toast.show{opacity:1;}
+
 /* ══ INGEST ══════════════════════════════════════════════════════════════ */
 #view-ingest{overflow:hidden;}
 .ingest-inner{display:flex;width:100%;height:100%;}
@@ -770,6 +864,17 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
         <line x1="5.5" y1="11.5" x2="10.5" y2="8.5"/>
       </svg>
       Provenance
+    </button>
+    <button class="tab" data-view="compose">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="2" width="5" height="5" rx="1"/>
+        <rect x="9" y="2" width="5" height="5" rx="1"/>
+        <rect x="2" y="9" width="5" height="5" rx="1"/>
+        <line x1="10" y1="9" x2="14" y2="9"/>
+        <line x1="12" y1="7" x2="12" y2="11"/>
+        <line x1="10" y1="13" x2="14" y2="13"/>
+      </svg>
+      Compose
     </button>
     <button class="tab" data-view="ingest">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1010,6 +1115,84 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   </div>
 </div>
 
+<!-- ── Compose ─────────────────────────────────────────── -->
+<div id="view-compose" class="view">
+  <div class="cp-browser">
+    <div class="cp-head">
+      <span class="cp-head-title">Class library</span>
+    </div>
+    <div class="cp-src-pills" id="cp-src-pills"></div>
+    <div class="cp-search-wrap">
+      <input id="cp-search" class="cp-search" placeholder="Search classes to add…" spellcheck="false" autocomplete="off"/>
+    </div>
+    <div class="cp-list" id="cp-list">
+      <div class="cp-empty">Loading registry…</div>
+    </div>
+  </div>
+
+  <div class="cp-composer">
+    <div class="cp-c-head">
+      <div>
+        <div class="cp-c-title">Compose a LinkML schema</div>
+        <div class="cp-c-sub" id="cp-c-sub">0 classes · 0 slots</div>
+      </div>
+      <div class="cp-actions">
+        <button class="cp-btn" id="cp-copy" disabled>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="4" y="4" width="9" height="10" rx="1"/>
+            <path d="M3 11V3a1 1 0 011-1h8"/>
+          </svg>
+          Copy YAML
+        </button>
+        <button class="cp-btn primary" id="cp-download" disabled>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M8 2v9"/><polyline points="5 8 8 11 11 8"/><path d="M3 13h10"/>
+          </svg>
+          Download .yml
+        </button>
+      </div>
+    </div>
+
+    <div class="cp-c-body">
+      <div class="cp-meta-card">
+        <div class="cp-meta-lbl">Name</div>
+        <input class="cp-meta-input" id="cp-meta-name" value="my_schema"/>
+        <div class="cp-meta-lbl">Schema ID</div>
+        <input class="cp-meta-input" id="cp-meta-id" value="https://example.org/my-schema"/>
+        <div class="cp-meta-lbl">Prefix</div>
+        <input class="cp-meta-input" id="cp-meta-prefix" value="my_schema"/>
+        <div class="cp-meta-lbl">Description</div>
+        <textarea class="cp-meta-textarea" id="cp-meta-desc" rows="2">Custom schema composed from NeuroGhost registry.</textarea>
+      </div>
+
+      <div>
+        <div class="cp-section-lbl">Picked classes <span class="cnt" id="cp-picked-cnt">0</span></div>
+        <div class="cp-picked-list" id="cp-picked-list" style="margin-top:8px;">
+          <div class="cp-picked-empty">Pick classes from the library on the left. Their properties are folded into the schema automatically.</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="cp-section-lbl">Preview <span class="cnt" id="cp-preview-cnt">— bytes</span></div>
+        <div class="cp-preview" style="margin-top:8px;">
+          <div class="cp-preview-head">
+            <span class="cp-preview-lbl">LinkML YAML</span>
+            <span class="cp-preview-meta" id="cp-preview-meta">no classes picked yet</span>
+          </div>
+          <div class="cp-preview-body">
+            <pre id="cp-preview-pre">
+# Pick one or more classes on the left, then this preview will
+# populate with a downloadable LinkML schema.
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cp-toast" id="cp-toast">Copied to clipboard</div>
+</div>
+
 <!-- ── Ingest ──────────────────────────────────────────── -->
 <div id="view-ingest" class="view">
   <div class="ingest-inner">
@@ -1073,6 +1256,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     else if (target === 'transform') initTransform();
     else if (target === 'query') initQuery();
     else if (target === 'prov') initProv();
+    else if (target === 'compose') initCompose();
   });
 });
 
@@ -3242,6 +3426,299 @@ function renderProvDetail(e) {
         <b>Concepts</b> tab's weight sliders and in the <b>Graph Schema</b> node detail.
       </div>
     </div>`;
+}
+
+// ────────────────────────────────────────────────────────
+// Compose — build a custom LinkML schema from registry classes
+// ────────────────────────────────────────────────────────
+const COMPOSE = {
+  initted: false,
+  registry: null,
+  sources: [], srcCounts: {},
+  enabled: null,           // Set of enabled source labels
+  query: '',
+  picked: new Map(),       // hash_id → class
+  meta: null,              // { name, id, prefix, description }
+};
+
+async function initCompose() {
+  if (COMPOSE.initted) return;
+  COMPOSE.initted = true;
+
+  const d = await registryPromise;
+  if (!d) {
+    document.getElementById('cp-list').innerHTML =
+      `<div class="cp-empty">Could not load <code>data/registry.json</code>.</div>`;
+    return;
+  }
+  COMPOSE.registry = d;
+
+  const counts = {};
+  d.classes.forEach(c => (c.sources || []).forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
+  COMPOSE.sources = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  COMPOSE.srcCounts = counts;
+  COMPOSE.enabled = new Set(COMPOSE.sources);
+
+  renderComposeSrc();
+  renderComposeList();
+
+  const searchEl = document.getElementById('cp-search');
+  searchEl.addEventListener('input', () => {
+    COMPOSE.query = searchEl.value.trim().toLowerCase();
+    renderComposeList();
+  });
+
+  ['cp-meta-name', 'cp-meta-id', 'cp-meta-prefix', 'cp-meta-desc'].forEach(id => {
+    document.getElementById(id).addEventListener('input', renderComposePreview);
+  });
+
+  document.getElementById('cp-download').addEventListener('click', downloadComposeYAML);
+  document.getElementById('cp-copy').addEventListener('click', copyComposeYAML);
+
+  renderComposePreview();
+}
+
+function renderComposeSrc() {
+  const el = document.getElementById('cp-src-pills');
+  el.innerHTML = COMPOSE.sources.map(s => `
+    <span class="cp-src-pill on" data-src="${esc(s)}">${esc(s)} · ${COMPOSE.srcCounts[s]}</span>`
+  ).join('');
+  el.querySelectorAll('.cp-src-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const s = pill.dataset.src;
+      if (COMPOSE.enabled.has(s)) { COMPOSE.enabled.delete(s); pill.classList.remove('on'); pill.classList.add('off'); }
+      else                        { COMPOSE.enabled.add(s);    pill.classList.remove('off'); pill.classList.add('on'); }
+      renderComposeList();
+    });
+  });
+}
+
+function renderComposeList() {
+  const el = document.getElementById('cp-list');
+  const q = COMPOSE.query;
+  const filtered = COMPOSE.registry.classes.filter(c => {
+    if (!(c.sources || []).some(s => COMPOSE.enabled.has(s))) return false;
+    if (!q) return true;
+    return (c.name || '').toLowerCase().includes(q)
+        || (c.definition || '').toLowerCase().includes(q);
+  }).sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!filtered.length) {
+    el.innerHTML = `<div class="cp-empty">No classes match the current filter.</div>`;
+    return;
+  }
+
+  const shown = filtered.slice(0, 400);
+  el.innerHTML = shown.map(c => {
+    const isPicked = COMPOSE.picked.has(c.hash_id);
+    return `
+      <div class="cp-cls-row${c.is_abstract ? ' abstract' : ''}${isPicked ? ' picked' : ''}" data-hash="${esc(c.hash_id)}">
+        <span class="cp-cls-name">${esc(c.name)}</span>
+        <span class="cp-cls-src">${esc((c.sources || [])[0] || '')}</span>
+        <button class="cp-cls-btn">${isPicked ? 'Remove' : 'Add +'}</button>
+      </div>`;
+  }).join('') + (filtered.length > shown.length
+    ? `<div class="cp-empty">${filtered.length - shown.length} more — refine to see.</div>`
+    : '');
+
+  el.querySelectorAll('.cp-cls-row').forEach(row => {
+    row.querySelector('.cp-cls-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      const hash = row.dataset.hash;
+      const cls = COMPOSE.registry.classes.find(c => c.hash_id === hash);
+      if (!cls) return;
+      if (COMPOSE.picked.has(hash)) COMPOSE.picked.delete(hash);
+      else COMPOSE.picked.set(hash, cls);
+      renderComposeList();
+      renderComposePicked();
+      renderComposePreview();
+    });
+  });
+}
+
+function renderComposePicked() {
+  const el = document.getElementById('cp-picked-list');
+  const cntEl = document.getElementById('cp-picked-cnt');
+  const items = [...COMPOSE.picked.values()];
+  cntEl.textContent = items.length;
+
+  if (!items.length) {
+    el.innerHTML = `<div class="cp-picked-empty">Pick classes from the library on the left. Their properties are folded into the schema automatically.</div>`;
+    return;
+  }
+  items.sort((a, b) => a.name.localeCompare(b.name));
+  el.innerHTML = items.map(c => {
+    const props = (c.properties || []).length;
+    const src = (c.sources || [])[0] || '';
+    return `
+      <div class="cp-picked-row${c.is_abstract ? ' abstract' : ''}" data-hash="${esc(c.hash_id)}">
+        <div class="cp-picked-main">
+          <div class="cp-picked-name">${esc(c.name)}</div>
+          <div class="cp-picked-meta">${esc(src)} · ${props} slot${props === 1 ? '' : 's'}${c.is_abstract ? ' · abstract' : ''}</div>
+        </div>
+        <button class="cp-picked-remove" aria-label="Remove">✕</button>
+      </div>`;
+  }).join('');
+  el.querySelectorAll('.cp-picked-row').forEach(row => {
+    row.querySelector('.cp-picked-remove').addEventListener('click', () => {
+      COMPOSE.picked.delete(row.dataset.hash);
+      renderComposeList();
+      renderComposePicked();
+      renderComposePreview();
+    });
+  });
+}
+
+// ── YAML generation ──────────────────────────────────────
+function composeMeta() {
+  return {
+    name:        document.getElementById('cp-meta-name').value.trim() || 'my_schema',
+    id:          document.getElementById('cp-meta-id').value.trim() || 'https://example.org/my-schema',
+    prefix:      document.getElementById('cp-meta-prefix').value.trim() || 'my_schema',
+    description: document.getElementById('cp-meta-desc').value.trim(),
+  };
+}
+
+// Quote a scalar the safe way for LinkML YAML.
+function yamlScalar(s, indent) {
+  s = String(s);
+  if (!s) return '""';
+  if (s.includes('\n')) {
+    const pad = ' '.repeat(indent);
+    return '|-\n' + s.split('\n').map(l => pad + l).join('\n');
+  }
+  // Quote if contains any YAML-reserved character
+  if (/[:#&*!|>'"%@`\[\]\{\},]/.test(s) || /^\s|\s$/.test(s)) return JSON.stringify(s);
+  return s;
+}
+
+// Extract a range hint from a `value_range` field which may be a URL.
+function normalizeRange(r) {
+  if (!r) return null;
+  if (/^https?:\/\//.test(r)) {
+    const seg = r.replace(/[?#].*$/, '').split(/[\/#]/).filter(Boolean).pop() || '';
+    if (/^[A-Za-z][A-Za-z0-9_]*$/.test(seg)) return { name: seg, uri: r };
+    return { uri: r };
+  }
+  return { name: r };
+}
+
+function generateComposeYAML() {
+  const m = composeMeta();
+  const classes = [...COMPOSE.picked.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Deduplicate slots by name across all picked classes
+  const slotByName = new Map();
+  classes.forEach(c => (c.properties || []).forEach(p => {
+    if (p.name && !slotByName.has(p.name)) slotByName.set(p.name, p);
+  }));
+
+  const lines = [];
+  lines.push(`id: ${m.id}`);
+  lines.push(`name: ${m.name}`);
+  if (m.description) lines.push(`description: ${yamlScalar(m.description, 2)}`);
+  lines.push(`license: https://creativecommons.org/publicdomain/zero/1.0/`);
+  lines.push('');
+  lines.push('prefixes:');
+  lines.push('  linkml: https://w3id.org/linkml/');
+  const base = m.id.endsWith('/') ? m.id : m.id + '/';
+  lines.push(`  ${m.prefix}: ${base}`);
+  lines.push(`default_prefix: ${m.prefix}`);
+  lines.push('default_range: string');
+  lines.push('imports:');
+  lines.push('  - linkml:types');
+  lines.push('');
+  lines.push(`# Composed from the NeuroGhost registry on ${new Date().toISOString().slice(0, 10)}`);
+  lines.push(`# Source classes: ${classes.map(c => `${c.name} (${(c.sources || [])[0] || '?'})`).join(', ') || '—'}`);
+  lines.push('');
+
+  if (classes.length) {
+    lines.push('classes:');
+    classes.forEach(c => {
+      lines.push(`  ${c.name}:`);
+      if (c.definition) lines.push(`    description: ${yamlScalar(c.definition, 6)}`);
+      if (c.iri)        lines.push(`    class_uri: ${c.iri}`);
+      if (c.is_abstract) lines.push('    abstract: true');
+      // subclass_of holds IRIs; keep them as a note rather than emit invalid is_a
+      (c.subclass_of || []).forEach(sc => lines.push(`    # inherits (source IRI): ${sc}`));
+      const slots = (c.properties || []).map(p => p.name).filter(Boolean);
+      if (slots.length) {
+        lines.push('    slots:');
+        slots.forEach(s => lines.push(`      - ${s}`));
+      }
+    });
+    lines.push('');
+  }
+
+  if (slotByName.size) {
+    lines.push('slots:');
+    for (const [name, p] of slotByName) {
+      lines.push(`  ${name}:`);
+      if (p.definition) lines.push(`    description: ${yamlScalar(p.definition, 6)}`);
+      if (p.iri)        lines.push(`    slot_uri: ${p.iri}`);
+      const range = normalizeRange(p.value_range);
+      if (range && range.name) lines.push(`    range: ${range.name}`);
+      if (range && range.uri && !range.name) lines.push(`    # value_range (source IRI): ${range.uri}`);
+      if (p.units)      lines.push(`    unit:\n      ucum_code: ${yamlScalar(p.units, 8)}`);
+    }
+  }
+
+  return lines.join('\n') + '\n';
+}
+
+function renderComposePreview() {
+  const yaml = generateComposeYAML();
+  document.getElementById('cp-preview-pre').textContent = yaml;
+
+  const nPicked = COMPOSE.picked.size;
+  let nSlots = 0;
+  COMPOSE.picked.forEach(c => nSlots += (c.properties || []).length);
+  document.getElementById('cp-c-sub').textContent = `${nPicked} class${nPicked === 1 ? '' : 'es'} · ${nSlots} slot${nSlots === 1 ? '' : 's'}`;
+  document.getElementById('cp-preview-cnt').textContent = `${yaml.length.toLocaleString()} bytes`;
+  document.getElementById('cp-preview-meta').textContent = nPicked
+    ? `${nPicked} class${nPicked === 1 ? '' : 'es'} · ${nSlots} slot${nSlots === 1 ? '' : 's'}`
+    : 'no classes picked yet';
+
+  document.getElementById('cp-download').disabled = nPicked === 0;
+  document.getElementById('cp-copy').disabled = nPicked === 0;
+}
+
+function downloadComposeYAML() {
+  const yaml = generateComposeYAML();
+  const m = composeMeta();
+  const blob = new Blob([yaml], { type: 'application/x-yaml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(m.name || 'schema').replace(/[^A-Za-z0-9_.-]/g, '_')}.yml`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+async function copyComposeYAML() {
+  const yaml = generateComposeYAML();
+  try {
+    await navigator.clipboard.writeText(yaml);
+    showComposeToast('Copied to clipboard');
+  } catch {
+    // Fallback for browsers without clipboard permission
+    const ta = document.createElement('textarea');
+    ta.value = yaml;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showComposeToast('Copied'); } catch {}
+    ta.remove();
+  }
+}
+
+function showComposeToast(text) {
+  const t = document.getElementById('cp-toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(t._to);
+  t._to = setTimeout(() => t.classList.remove('show'), 1600);
 }
 
 // ────────────────────────────────────────────────────────
