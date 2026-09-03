@@ -1272,7 +1272,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + target).classList.add('active');
-    if (target === 'meta') renderGraph();
+    if (target === 'meta') loadMetamodel().then(renderGraph);
     else if (target === 'concepts') initConcepts();
     else if (target === 'diff') initDiff();
     else if (target === 'graph') initGraphSchema();
@@ -1310,101 +1310,61 @@ registryPromise.then(d => {
 // ────────────────────────────────────────────────────────
 // Meta-model data
 // ────────────────────────────────────────────────────────
-const CLASSES = [
-  {
-    id: 'RegistryEntity', abstract: true, tag: 'abstract base',
-    desc: 'Root of the class hierarchy. Every entity in the registry carries a UUID id and a sha256_hash content fingerprint that drives cross-source deduplication.',
-    slots: ['id', 'sha256_hash', 'name', 'description', 'review_status', 'skos_mappings', 'aliases'],
-  },
-  {
-    id: 'RegistryClass', abstract: false, tag: 'schema class',
-    desc: 'A class extracted from a registered LinkML schema. Content-addressed by (name, description, slot set).',
-    slots: ['properties', 'parent_class', 'class_mixins', 'is_abstract', 'is_mixin', 'class_uri'],
-  },
-  {
-    id: 'RegistryProperty', abstract: false, tag: 'schema property',
-    desc: 'A slot extracted from a registered LinkML class. Content-addressed by (name, description, range, units).',
-    slots: ['value_range', 'multivalued', 'required', 'slot_uri', 'ucum_code', 'has_quantity_kind', 'units'],
-  },
-  {
-    id: 'RegistryValueSet', abstract: false, tag: 'value set',
-    desc: 'A named enumeration extracted from a registered schema. Holds a list of PermissibleValue nodes.',
-    slots: ['permissible_values', 'value_set_uri'],
-  },
-  {
-    id: 'Mapping', abstract: false, tag: 'alignment edge',
-    desc: 'An alignment edge between two RegistryClass nodes. Carries a SKOS predicate, confidence score, distance, and provenance.',
-    slots: ['source_class', 'target_class', 'mapping_type', 'confidence', 'distance', 'method', 'mapping_set_id'],
-  },
-  {
-    id: 'RegistryRule', abstract: false, tag: 'validation rule',
-    desc: 'A named constraint applied during schema ingestion or alignment. Severity and type classify how the rule fires.',
-    slots: ['rule_type', 'severity', 'rule_expression'],
-  },
-  {
-    id: 'ProvenanceEntry', abstract: false, tag: 'provenance record',
-    desc: 'W3C-PROV-style provenance attached to any RegistryEntity. Records which schema submission produced the node.',
-    slots: ['source', 'source_description', 'registry_version', 'generated_at', 'attributed_to', 'activity', 'derived_from'],
-  },
-  {
-    id: 'RegistrySchema', abstract: false, tag: 'registered schema',
-    desc: 'Represents a full registered LinkML schema. Links to its SchemaSource and carries version history.',
-    slots: ['schema_label', 'schema_uri', 'source_ref', 'registry_version', 'class_count', 'property_count'],
-  },
-  {
-    id: 'PermissibleValue', abstract: false, tag: 'enum value',
-    desc: 'A single allowed value within a RegistryValueSet. Carries a meaning IRI for ontology anchoring.',
-    slots: ['meaning', 'pv_description'],
-  },
-  {
-    id: 'UnitOfMeasure', abstract: false, tag: 'unit',
-    desc: 'A physical unit attached to a RegistryProperty. Used by the unit-dimension veto in alignment.',
-    slots: ['ucum_code', 'quantity_kind', 'symbol', 'dimension_vector'],
-  },
-  {
-    id: 'Transform', abstract: false, tag: 'data transform',
-    desc: 'A field-mapping rule that translates a data record from one schema format to another via alignment edges.',
-    slots: ['source_schema', 'target_schema', 'field_mappings', 'transform_expression'],
-  },
-  {
-    id: 'MappingProvenanceEntry', abstract: false, tag: 'mapping provenance',
-    desc: 'Extends ProvenanceEntry with Mapping-specific metadata — algorithm, weights, and signal subscores.',
-    slots: ['algorithm', 'weights', 'score_iri', 'score_name', 'score_desc', 'score_slot'],
-  },
-  {
-    id: 'SchemaSource', abstract: false, tag: 'schema source',
-    desc: 'Metadata about the origin of a registered schema — publisher, homepage, IRI, and MIME type.',
-    slots: ['label', 'title', 'publisher', 'contact', 'homepage', 'is_hub', 'source_iri', 'mime_type'],
-  },
-  {
-    id: 'SchemaVersionSnapshot', abstract: false, tag: 'version snapshot',
-    desc: 'An immutable snapshot of a SchemaSource at a point in time. Tracks class and property counts and a changelog summary.',
-    slots: ['schema_label', 'source_version', 'yml_path', 'class_count', 'property_count', 'changes_summary', 'created_at'],
-  },
-];
+// The meta-model's structural facts (which classes exist, abstract flag, own
+// slots, is_a parents) are GENERATED from meta_model.yaml into
+// data/metamodel.json by scripts/gen_metamodel_json.py, and loaded at runtime
+// by loadMetamodel() below — so this view never drifts when the model changes.
+// Only presentation stays here: TAG (short label), POS (node layout, below),
+// and NAMED_EDGES (the curated non-is_a relationships to draw).
+let CLASSES = [];
+let EDGES = [];
 
-const EDGES = [
-  // is_a — all concrete classes inherit from RegistryEntity
-  {from:'RegistryClass',           to:'RegistryEntity',  type:'isa'},
-  {from:'RegistryProperty',        to:'RegistryEntity',  type:'isa'},
-  {from:'RegistryValueSet',        to:'RegistryEntity',  type:'isa'},
-  {from:'Mapping',                 to:'RegistryEntity',  type:'isa'},
-  {from:'RegistryRule',            to:'RegistryEntity',  type:'isa'},
-  {from:'ProvenanceEntry',         to:'RegistryEntity',  type:'isa'},
-  {from:'RegistrySchema',          to:'RegistryEntity',  type:'isa'},
-  {from:'PermissibleValue',        to:'RegistryEntity',  type:'isa'},
-  {from:'UnitOfMeasure',           to:'RegistryEntity',  type:'isa'},
-  {from:'Transform',               to:'RegistryEntity',  type:'isa'},
-  {from:'MappingProvenanceEntry',  to:'ProvenanceEntry', type:'isa'},
-  {from:'SchemaSource',            to:'RegistryEntity',  type:'isa'},
-  {from:'SchemaVersionSnapshot',   to:'RegistryEntity',  type:'isa'},
-  // named relationships
+// id -> short label shown on each node. Presentation only; a class with no
+// entry falls back to a blank tag.
+const TAG = {
+  'RegistryEntity': 'abstract base',
+  'RegistryClass': 'schema class',
+  'RegistryProperty': 'schema property',
+  'RegistryValueSet': 'value set',
+  'Mapping': 'alignment edge',
+  'RegistryRule': 'validation rule',
+  'ProvenanceEntry': 'provenance record',
+  'RegistrySchema': 'registered schema',
+  'PermissibleValue': 'enum value',
+  'Transform': 'data transform',
+  'MappingProvenanceEntry': 'mapping provenance',
+  'SchemaSource': 'schema source',
+  'SchemaVersionSnapshot': 'version snapshot',
+};
+
+// The curated subset of named (non-is_a) relationships the diagram draws.
+// Presentation only — filtered at load to classes that actually exist.
+const NAMED_EDGES = [
   {from:'RegistryClass',    to:'RegistryProperty',       type:'rel', label:'HAS_PROPERTY'},
   {from:'RegistryValueSet', to:'PermissibleValue',       type:'rel', label:'HAS_PERMISSIBLE_VALUE'},
   {from:'Mapping',          to:'MappingProvenanceEntry', type:'rel', label:'HAS_PROVENANCE'},
   {from:'RegistrySchema',   to:'SchemaSource',           type:'rel', label:'SOURCED_FROM'},
   {from:'SchemaSource',     to:'SchemaVersionSnapshot',  type:'rel', label:'HAS_SNAPSHOT'},
 ];
+
+// Load the generated meta-model (structure) and merge in presentation overlays.
+// Idempotent; safe to call on every Meta-model tab activation.
+let _metamodelLoaded = false;
+async function loadMetamodel() {
+  if (_metamodelLoaded) return;
+  try {
+    const r = await fetch('./data/metamodel.json');
+    if (!r.ok) throw new Error(r.status);
+    const mm = await r.json();
+    CLASSES = mm.classes.map(c => ({ ...c, tag: TAG[c.id] || '' }));
+    const ids = new Set(CLASSES.map(c => c.id));
+    EDGES = [...mm.edges, ...NAMED_EDGES].filter(e => ids.has(e.from) && ids.has(e.to));
+    _metamodelLoaded = true;
+  } catch (e) {
+    // metamodel.json missing (e.g. opened via file://) — leave empty so the
+    // Meta-model view renders nothing rather than throwing.
+  }
+}
 
 // Node center positions as [cx%, cy%] of canvas
 const POS = {
@@ -1550,8 +1510,8 @@ function selectNode(cls, opts = {}) {
     </div>`;
 }
 
-// Initial render + resize
-renderGraph();
+// Initial load (fetch generated meta-model) + render, then re-render on resize
+loadMetamodel().then(renderGraph);
 window.addEventListener('resize', () => {
   if (document.getElementById('view-meta').classList.contains('active')) renderGraph();
 });

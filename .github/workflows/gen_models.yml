@@ -18,12 +18,15 @@ on:
     paths:
       - "meta_model.yaml"
       - "scripts/gen_models.sh"
+      - "scripts/gen_metamodel_json.py"
       - ".github/workflows/gen_models.yml"
   pull_request:
     paths:
       - "meta_model.yaml"
       - "scripts/gen_models.sh"
+      - "scripts/gen_metamodel_json.py"
       - "schema_registry_utils/models.py"
+      - "data/metamodel.json"
   workflow_dispatch:
 
 jobs:
@@ -50,6 +53,12 @@ jobs:
 
       - name: Verify models.py matches the meta-model
         run: ./scripts/gen_models.sh --check
+
+      # data/metamodel.json feeds the web UI's Meta-model tab and is generated
+      # from meta_model.yaml too — keep it from drifting (PyYAML comes in with
+      # LinkML above).
+      - name: Verify metamodel.json matches the meta-model
+        run: python scripts/gen_metamodel_json.py --check
 
   # ---------------------------------------------------------------------------
   # main path: regenerate, prove the pipeline still works, then commit.
@@ -82,6 +91,9 @@ jobs:
       - name: Regenerate models.py
         run: ./scripts/gen_models.sh
 
+      - name: Regenerate metamodel.json (web UI Meta-model tab)
+        run: python scripts/gen_metamodel_json.py
+
       # The generated models are strict (id/sha256_hash required, provenance
       # inlined), so a meta-model change can invalidate the builders in
       # ingest_linkml.py / seed.py. Committing a models.py that breaks
@@ -94,10 +106,10 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add schema_registry_utils/models.py
+          git add schema_registry_utils/models.py data/metamodel.json
 
           if git diff --cached --quiet; then
-            echo "models.py already up to date — nothing to commit."
+            echo "models.py / metamodel.json already up to date — nothing to commit."
           else
             git commit -m "chore(models): regenerate from meta_model.yaml [skip ci]"
             git push origin HEAD:main
