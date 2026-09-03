@@ -51,9 +51,9 @@ classes:
 
       * `id` is a UUID (uuid4) minted on first ingest — the registry's stable
         graph handle. Cross-references (class properties, parent_class,
-        class_mixins, property_range, ProvenanceEntry.attests_to) all use
-        UUIDs, so every FK is uniform regardless of the referent's type or
-        whether it is content-addressed.
+        class_mixins, RegistryRule.applies_to / rule_value range targets,
+        ProvenanceEntry.attests_to) all use UUIDs, so every FK is uniform
+        regardless of the referent's type or whether it is content-addressed.
 
       * `sha256_hash` is a content fingerprint derived from the fields marked
         `in_subset: HashSubset` in this schema. It is not the identifier;
@@ -90,14 +90,18 @@ classes:
     is_a: RegistryEntity
     description: >-
       A registered property (data element) representing a characteristic or
-      attribute that can be attached to a RegistryClass, e.g. "age". Usage
-      constraints (required, multivalued, min/max, pattern) are deliberately
-      not here — they belong on RegistryRule, since the same property can be required
-      in one source's usage and optional in another's without being a
-      different concept.
-    slots:
-      - property_range
-      - unit
+      attribute that can be attached to a RegistryClass, e.g. "age". A
+      RegistryProperty is a *pure concept*: its identity is its name and
+      description, nothing about how a particular schema realizes it. Usage
+      constraints (required, multivalued, min/max, pattern) AND the value
+      type/range and unit are deliberately not here — they belong on
+      RegistryRule (rule_type RANGE for the type, one RANGE rule per permitted
+      range; UNIT for the unit), because the same concept can be required in
+      one source and optional in another, or typed as an integer here and a
+      string there, or measured in years here and months there, without being
+      a different concept. This is what lets "age" from two schemas collapse to
+      one entry — the type/unit differences live on per-source rules, not on
+      the property.
 
   ProvenanceEntry:
     description: >-
@@ -283,25 +287,6 @@ classes:
       HAS_PERMISSIBLE_VALUE edges.
     slots:
       - permissible_values
-
-  UnitOfMeasure:
-    class_uri: qudt:Unit
-    annotations:
-      db_inline: true
-    description: >-
-      A structured unit of measure for a RegistryProperty, inlined (not its
-      own content-addressed entity). Field names/slot_uri follow LinkML's
-      own linkml:units module — defined locally rather than imported, since
-      db.py's DDL generator reads meta_model.yaml's own classes directly and
-      doesn't resolve LinkML imports (see git history for the import-vs-
-      repeat discussion). LinkML's own alignment for units *is* QUDT/rdfs —
-      there's no separate "linkml:" URI for these concepts to also target.
-    slots:
-      - ucum_code
-      - has_quantity_kind
-      - symbol
-      - abbreviation
-      - descriptive_name
 
   SchemaSource:
     description: >-
@@ -531,51 +516,6 @@ slots:
     in_subset:
       - HashSubset
     description: Additional classes mixed into this class.
-
-  property_range:
-    range: string
-    required: true
-    slot_uri: linkml:range
-    # Not in HashSubset — the range is a reference into the graph
-    # (a class id, an enum id, or an XSD CURIE for primitives).
-    # Making it identity-defining forces class hashes and property hashes
-    # into a mutual dependency: a class's hash includes its properties'
-    # UUIDs, and a property's sha256_hash would include the class UUID it
-    # points at, so a self-referential slot
-    # (e.g. `was_derived_from: range: ProvEntity` on ProvEntity) can't be
-    # hashed at all. Range is metadata that ingestion resolves to real
-    # graph references; datatype compatibility for alignment reads the
-    # resolved range directly, and per-usage range refinements live on
-    # RegistryRule (rule_type=RANGE), which does carry range in its own
-    # HashSubset. See ingest_linkml.build_registry_entities() for the
-    # order in which class hashes settle before property_range is filled in.
-    description: >-
-      The data type or value range for this property: a canonical XSD
-      CURIE for primitives (e.g. "xsd:string", "xsd:integer"), or the
-      id of a RegistryClass or RegistryValueSet for entity/enum
-      references. Bare primitive names ("string", "float") are
-      deprecated: datatype compatibility is an alignment signal and an
-      incompatibility veto, so "float", "xsd:float" and "double" must
-      not read as three unrelated types. Ingestion normalizes
-      source-native type names to XSD CURIEs.
-
-  unit:
-    range: UnitOfMeasure
-    inlined: true
-    slot_uri: qudt:unit
-    in_subset:
-      - HashSubset
-    description: >-
-      Structured unit of measure for this property's values, if applicable.
-      ucum_code is the primary field for programmatic unit-compatibility
-      checks (align.py's unit veto); the others are supplementary.
-
-      Deliberately inlined: UnitOfMeasure is a value type (no `id` slot,
-      no independent identity — two properties measured in "mV" don't need
-      to share a graph node), so referencing by id doesn't apply here the
-      way it does for provenance/skos_mappings. UnitOfMeasure also carries
-      `annotations.db_inline: true` so its fields flatten into the parent's
-      LadybugDB row instead of forming a separate table.
 
   concept_uri:
     range: uriorcurie
@@ -1015,8 +955,8 @@ slots:
     description: >-
       Default range for slots that don't declare one explicitly, carried
       into the exported schema's `default_range:`. Optional — a composed
-      schema may leave every RegistryProperty's own property_range
-      explicit and not need a default.
+      schema may give every property an explicit RANGE rule and not need
+      a default.
 
   imports:
     range: string
@@ -1072,42 +1012,6 @@ slots:
     description: >-
       The set of permissible values for this RegistryValueSet. Stored as id
       references; HAS_PERMISSIBLE_VALUE edges are the graph traversal.
-
-  # --- UnitOfMeasure slots ---------------------------------------------------
-
-  ucum_code:
-    range: string
-    slot_uri: qudt:ucumCode
-    description: >-
-      UCUM (Unified Code for Units of Measure) code, e.g. "mV", "deg", "Hz".
-      Compact and machine-parseable — the primary field for programmatic
-      unit-compatibility checks (align.py's unit veto).
-
-  has_quantity_kind:
-    range: uriorcurie
-    slot_uri: qudt:hasQuantityKind
-    description: >-
-      IRI naming the dimension/kind of quantity being measured, e.g. a QUDT
-      quantity-kind IRI for "ElectricPotential" or "PlaneAngle". Lets
-      incommensurable units (different quantity kinds) be vetoed outright,
-      independent of whether a conversion factor is known.
-
-  symbol:
-    range: string
-    slot_uri: qudt:symbol
-    description: Name of the unit encoded as a symbol (e.g. "Ω", "°").
-
-  abbreviation:
-    range: string
-    slot_uri: qudt:abbreviation
-    description: >-
-      Short ASCII abbreviation for the unit, for contexts where non-ASCII
-      symbols would be problematic.
-
-  descriptive_name:
-    range: string
-    slot_uri: rdfs:label
-    description: The spelled-out name of the unit, e.g. "millivolt".
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -1232,19 +1136,34 @@ enums:
           (`rule_value` = "false") carry multiple values.
       RANGE:
         description: >-
-          Property's value type is refined to a specific range in the
-          enclosing class scope. `rule_value` is an XSD CURIE
-          (e.g. "xsd:integer") or a RegistryValueSet id, same shape as
-          RegistryProperty.property_range. Distinct from that slot:
-          property_range is the property's default type, a RANGE RegistryRule
-          with `used_in_class` set is a per-class narrowing (LinkML
-          `slot_usage` range refinement, JSON Schema `if/then` type
-          switches).
+          One permitted value type for the property in a given usage.
+          `rule_value` is an XSD CURIE (e.g. "xsd:integer") for a primitive,
+          or a RegistryClass / RegistryValueSet id for an entity/enum
+          reference. This is where a property's type lives — it is NOT part of
+          RegistryProperty identity (a property is a "pure concept"), so the
+          same property collapses across schemas even when one types it
+          integer and another string, and each source's choice is its own
+          RANGE rule. A union / polymorphic property (LinkML `any_of`, JSON
+          Schema `anyOf`) simply produces several RANGE rules — one per
+          permitted type, each an atomic assertion that collapses across
+          schemas independently, just as MIN_VALUE and MAX_VALUE are separate
+          rules. A rule with `used_in_class` unset is the schema-level range;
+          with `used_in_class` set it is a per-class narrowing (LinkML
+          `slot_usage` range refinement, JSON Schema `if/then` type switches).
+      UNIT:
+        description: >-
+          The unit of measure for the property's values in a given usage.
+          `rule_value` is the UCUM code (e.g. "a" for years, "mo" for months,
+          "mV", "Hz"). Like RANGE, unit is a realization detail, not part of
+          RegistryProperty identity — so "age in full years" and "age in full
+          months" are the same concept, and each source's unit is its own UNIT
+          rule. This is what lets alignment's unit veto compare units
+          per-source without the property splitting on unit.
       ENUM_MEMBERSHIP:
         description: >-
           Value must be drawn from a RegistryValueSet. `rule_value` is the
-          RegistryValueSet's id. Distinct from setting property_range to
-          a RegistryValueSet — that is a type declaration; this is the
+          RegistryValueSet's id. Distinct from a RANGE rule that names a
+          RegistryValueSet — that is a type declaration; this is the
           enforceable check.
       DEFAULT:
         description: >-

@@ -85,13 +85,16 @@ Options: `--fresh` (wipe DB), `--skip-converters` (skip BIDS/NWB/DANDI/openMINDS
 
 Open `index.html` in a browser when done.
 
-To inspect a single schema without running the full pipeline:
+To inspect or ingest a single schema without running the full pipeline, use `ingest.py` — it accepts **LinkML (`.yml`)** or **JSON Schema (`.json`)** (JSON is converted to LinkML first):
 
 ```bash
-python neuro_ghost/ingest_linkml.py --file registry_schemas/bbqs.yml --dry-run --verbose
+python neuro_ghost/ingest.py --dry-run --verbose registry_schemas/bbqs.yml
+python neuro_ghost/ingest.py --dry-run --verbose dandiset.json   # JSON Schema
 ```
 
-`--dry-run` parses and reports counts without writing to the DB; `--verbose` additionally prints every `RegistryClass`/`RegistryProperty`/`RegistryValueSet`/`ProvenanceEntry` that would be created, in full.
+`--dry-run` parses and reports counts without writing to the DB; `--verbose` additionally prints every `RegistryClass`/`RegistryProperty`/`RegistryValueSet`/`RegistryRule`/`ProvenanceEntry` that would be created, exactly as stored (id references shown as raw UUIDs). `--verbose-readable` is the same but resolves those id references to names for easier reading. Format is chosen by extension; override a misnamed file with `--format linkml|json`.
+
+(`ingest_linkml.py` is the LinkML-only ingester underneath; `ingest.py` is the format-aware wrapper.)
 
 ---
 
@@ -123,7 +126,7 @@ See [docs/GOVERNANCE.md](docs/GOVERNANCE.md) for the full spec.
 | Module | Maintainer | Repository | Behind main | Compare |
 |--------|-----------|------------|-------------|---------|
 | Proteus | @neurovium (Nema) | [neurovium/Proteus](https://github.com/neurovium/Proteus) | ⚠ pin unset | [compare ↗](https://github.com/neurovium/Proteus/commits/main) |
-| Dorada | @djarecka | [djarecka/NeuroGhost](https://github.com/djarecka/NeuroGhost) | 147 commits | [compare ↗](https://github.com/sensein/NeuroGhost/compare/main...djarecka:NeuroGhost:main) |
+| Dorada | @djarecka | [djarecka/NeuroGhost](https://github.com/djarecka/NeuroGhost) | 162 commits | [compare ↗](https://github.com/sensein/NeuroGhost/compare/main...djarecka:NeuroGhost:main) |
 <!-- MODULE_SYNC_END -->
 
 ---

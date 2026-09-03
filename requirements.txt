@@ -17,6 +17,12 @@ pyyaml>=6.0
 # sha256_hash. .github/workflows/gen_models.yml installs this exact line; bump it
 # here and regenerate models.py in the same commit.
 linkml==1.11.1
+# X -> LinkML importers (JSON Schema now; OWL/SQL/etc. available for later).
+# Compatible with the linkml==1.11.1 pin above (requires linkml<2,>=1.10.0).
+# NOTE: pulls a large dependency tail (only the JSON Schema importer is used);
+# its importer drops pattern/minimum/maximum, which converters/from_jsonschema.py
+# re-applies in a post-process pass (upstream fix pending).
+schema-automator>=0.5.7,<0.6
 pytest>=8.0.0
 # Upper bound matches pyproject.toml: mcp 2.0.0 dropped mcp.server.fastmcp,
 # which neuro_ghost/mcp_server.py imports.

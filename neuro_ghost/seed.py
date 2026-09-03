@@ -203,13 +203,13 @@ def build_registry_entities(
             if prop["iri"] in seen_prop_iris:
                 continue
             seen_prop_iris[prop["iri"]] = prop["name"]
-            value_range = prop["ranges"][0] if prop["ranges"] else "xsd:string"
+            # A RegistryProperty is a pure concept: name + description only.
+            # Value type/unit are realization details (RANGE/UNIT RegistryRules)
+            # — this schema.org seeder doesn't emit those rules yet.
             fields = dict(
                 name=prop["name"],
                 description=prop["comment"] or "",
-                range=value_range,
-                unit=None,           # schema.org carries no unit information
-                slot_uri=prop["iri"] or None,
+                concept_uri=prop["iri"] or None,
                 skos_mappings=[],
             )
             p_sha = compute_content_hash_for(RegistryProperty, fields)

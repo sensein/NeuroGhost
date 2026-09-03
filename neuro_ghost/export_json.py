@@ -43,6 +43,30 @@ def _attesting_sources(conn, label: str, rel: str, id: str) -> list[str]:
     })
 
 
+def _rule_values(conn, prop_id: str, rule_type: str) -> list[str]:
+    """Distinct rule_values of the given rule_type on rules that apply to this
+    property (rule -[:APPLIES_TO_P]-> property), sorted."""
+    return sorted({
+        r[0] for r in conn.execute(f"""
+            MATCH (rr:RegistryRule)-[:APPLIES_TO_P]->(:RegistryProperty {{id: $pid}})
+            WHERE rr.rule_type = '{rule_type}' AND rr.rule_value IS NOT NULL
+            RETURN rr.rule_value
+        """, {"pid": prop_id}).get_all()
+    })
+
+
+def _property_range(conn, prop_id: str) -> str:
+    """The property's value type(s), read back from its RANGE rules. Range
+    moved off the property node onto rules — a union (or divergent per-source
+    types) yields several, joined here for the snapshot."""
+    return " | ".join(_rule_values(conn, prop_id, "RANGE"))
+
+
+def _property_unit(conn, prop_id: str) -> str:
+    """The property's unit(s), read back from its UNIT rule(s)."""
+    return " | ".join(_rule_values(conn, prop_id, "UNIT"))
+
+
 def export_snapshot(conn, registry_version: str) -> dict:
     # ---- sources -----------------------------------------------------------
     src_rows = conn.execute(
@@ -73,7 +97,7 @@ def export_snapshot(conn, registry_version: str) -> dict:
 
         props = conn.execute("""
             MATCH (c:RegistryClass {id: $id})-[:HAS_PROPERTY]->(p:RegistryProperty)
-            RETURN p.id, p.sha256_hash, p.concept_uri, p.name, p.description, p.property_range, p.ucum_code
+            RETURN p.id, p.sha256_hash, p.concept_uri, p.name, p.description
             ORDER BY p.name
         """, {"id": node_id}).get_all()
 
@@ -107,8 +131,10 @@ def export_snapshot(conn, registry_version: str) -> dict:
                     "iri":         r[2] or "",
                     "name":        r[3] or "",
                     "definition":  r[4] or "",
-                    "value_range": r[5] or "",
-                    "units":       r[6] or "",
+                    # Value type and unit live on RANGE/UNIT rules now, not on
+                    # the property node — fetch them back here.
+                    "value_range": _property_range(conn, r[0]),
+                    "units":       _property_unit(conn, r[0]),
                     "sources":     _attesting_sources(conn, "RegistryProperty", "HAS_PROVENANCE_P", r[0]),
                 }
                 for r in props

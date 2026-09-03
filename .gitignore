@@ -223,3 +223,9 @@ __marimo__/
 #   must not be committed (see version-42 vs 41 conflicts).
 *.lbug
 *.lbug.*
+
+# Claude Code
+#   Personal, per-machine settings (local permission grants etc.) — never
+#   shared. Shared project config (.claude/settings.json, agents/, skills/,
+#   commands/) is deliberately NOT ignored, so it can be committed.
+.claude/settings.local.json

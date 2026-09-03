@@ -100,9 +100,11 @@ HAS_PROVENANCE_REL = {
 # _build_registry_ddl()), never a "unit"-named column of their own. Kept
 # explicit here, matching LIST_FIELDS/HAS_PROVENANCE_REL's style, rather than
 # introspecting meta_model.yaml at write time.
-INLINE_FIELDS = {
-    "unit": ("ucum_code", "has_quantity_kind", "symbol", "abbreviation", "descriptive_name"),
-}
+# No inline classes remain in the meta-model (UnitOfMeasure was removed when
+# unit moved to a UNIT RegistryRule). Kept as an extension point: a db_inline
+# class would map its field name here to the sub-fields it flattens into the
+# parent's node table.
+INLINE_FIELDS: dict[str, tuple[str, ...]] = {}
 
 
 def scalar_fields(entity) -> dict:

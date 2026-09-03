@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/person.schema.json",
+  "title": "Person",
+  "description": "An individual human being.",
+  "type": "object",
+  "properties": {
+    "name":      { "type": "string", "description": "Given (first) name.", "pattern": "^[A-Za-z ]+$" },
+    "last_name": { "type": "string", "description": "Family (last) name." },
+    "age":       { "type": "integer", "description": "Age in years.", "minimum": 0, "maximum": 120 },
+    "address":   { "$ref": "#/$defs/Address" },
+    "roles":     { "type": "array", "description": "Roles held.", "items": { "$ref": "#/$defs/RoleType" } }
+  },
+  "required": ["last_name"],
+  "$defs": {
+    "Address": {
+      "type": "object",
+      "description": "A postal address.",
+      "properties": {
+        "city": { "type": "string" },
+        "zip":  { "type": "string" }
+      }
+    },
+    "RoleType": {
+      "title": "RoleType",
+      "description": "An enumeration of roles.",
+      "enum": ["author", "editor", "reviewer"]
+    }
+  }
+}

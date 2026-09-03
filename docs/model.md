@@ -4,8 +4,8 @@ A logical view of every class and relationship in `meta_model.yaml`
 (LinkML's `gen-erdiagram`, run via `scripts/gen_erdiagram.sh`). This shows
 *logical* relationships — every object-valued slot is drawn as an edge,
 regardless of how it's actually stored. For the *physical* LadybugDB layout
-(inline classes like `UnitOfMeasure` flattened onto their parent's own
-columns, per `db.py`'s `_build_registry_ddl()`), see the "Graph Schema"
+(multivalued scalars as native list columns, class refs as id-FK columns or REL
+tables, per `db.py`'s `_build_registry_ddl()`), see the "Graph Schema"
 diagram in `index.html` instead, kept in sync via `scripts/update_graph.py`.
 
 See [`ingestion.md`](ingestion.md) for the field-by-field walkthrough of
@@ -71,7 +71,6 @@ RegistryEntity {
     string sha256_hash
 }
 RegistryProperty {
-    string property_range
     string id
     string name
     string description
@@ -140,13 +139,6 @@ Transform {
     string name
     string description
 }
-UnitOfMeasure {
-    string abbreviation
-    string descriptive_name
-    uriorcurie has_quantity_kind
-    string symbol
-    string ucum_code
-}
 
 Mapping ||--}| MappingProvenanceEntry : "provenance"
 MappingProvenanceEntry ||--|o SchemaSource : "had_primary_source"
@@ -162,7 +154,6 @@ RegistryClass ||--}o RegistryProperty : "properties"
 RegistryClass ||--}| ProvenanceEntry : "provenance"
 RegistryEntity ||--}o Mapping : "skos_mappings"
 RegistryEntity ||--}| ProvenanceEntry : "provenance"
-RegistryProperty ||--|o UnitOfMeasure : "unit"
 RegistryProperty ||--}o Mapping : "skos_mappings"
 RegistryProperty ||--}| ProvenanceEntry : "provenance"
 RegistryRule ||--|o RegistryClass : "used_in_class"
