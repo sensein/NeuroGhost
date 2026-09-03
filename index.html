@@ -3923,7 +3923,9 @@ document.getElementById('paste-toggle').addEventListener('click', showPasteMode)
 ingestBtn.addEventListener('click', () => {
   if (!yamlText) return;
   const info  = parseYAML(yamlText);
-  const title = encodeURIComponent(`Schema submission: ${info.name}`);
+  // Title MUST start with "schema-submission:" — schema_submission.yml triggers
+  // on that exact prefix and strips it to derive the schema name.
+  const title = encodeURIComponent(`schema-submission: ${info.name}`);
   const body  = encodeURIComponent(
     `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0,10)}\n\n\`\`\`yaml\n${yamlText.slice(0, 8000)}\n\`\`\``
   );
