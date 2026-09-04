@@ -1,34 +1,36 @@
 """
 source_metadata.py — per-schema source-metadata sidecar
 =======================================================
-Schema-level descriptive metadata lives on the SchemaBundle (the logical
-schema), not the per-file SchemaSource. Most of it is *propagated* from the
-ingested schema itself: `ensure_schema_bundle()` sets `title`, `description`,
-`source_id`, `license` and `source_iri` from the schema's own
-`title:` / `description:` / `id:` / `license:` (see parse_linkml's `meta`). That's
-the path that matters going forward — as real schemas replace the current test
-set, their metadata comes along for free.
+A schema may ship an OPTIONAL sidecar file next to it, named
+`<schema_stem>_source.yaml` (or `.yml`), carrying metadata that the LinkML/JSON
+schema itself has no standard place for:
 
-For fields a LinkML/JSON schema has no standard place for — `homepage`,
-`publisher`, `contact` — a schema may ship an OPTIONAL sidecar file next to it,
-named `<schema_stem>_source.yaml` (or `.yml`):
+    registry_schemas/dandiset.yml
+    registry_schemas/dandiset_source.yaml
 
-    registry_schemas/dandi.yml
-    registry_schemas/dandi_source.yaml
+The sidecar is a flat mapping. A key routes by a `bundle_` PREFIX (see
+ingest_linkml._split_metadata):
 
-The sidecar is a flat mapping whose keys are SchemaBundle slot names:
+  * `bundle_`-prefixed keys → the **SchemaBundle** (the logical schema), with the
+    prefix stripped: `bundle_label` (the umbrella name shared by a multi-file
+    schema's files), `bundle_title`, `bundle_homepage`, `bundle_publisher`,
+    `bundle_contact`, `bundle_license`, `bundle_description`.
+  * bare keys → the per-file **SchemaSource**: `source_id`, `source_iri`,
+    `source_version`, and its own `title` / `description` / `homepage`.
 
-    homepage: https://www.dandiarchive.org/    # SchemaBundle.homepage (uri)
-    publisher: DANDI Team                       # SchemaBundle.publisher
-    contact: help@dandiarchive.org              # SchemaBundle.contact
-    # may also override the propagated title / description / source_id /
-    # source_iri / source_version / license, and set bundle_label for a
-    # multi-file schema (the umbrella name shared by its files)
+So a bare `homepage:` documents the individual file, while `bundle_homepage:`
+documents the whole bundle. Example (one file of the multi-file DANDI schema):
 
+    bundle_label: dandi                          # groups asset + dandiset
+    bundle_title: DANDI Schema                   # SchemaBundle.title
+    bundle_homepage: https://www.dandiarchive.org/
+    source_id: https://github.com/dandi/schema   # this file's own provenance
+    source_version: 0.8.0
+
+Per-file `title` / `description` / `source_id` are also *propagated* from the
+schema's own `title:` / `description:` / `id:` when the sidecar doesn't set them.
 Unknown keys are ignored (ensure_schema_bundle/ensure_schema_source only write
-their own slots). It's discovered automatically at ingest and merged over the
-propagated fields; the web UI's ingest flow can submit the same content
-alongside a schema. Absent sidecar → those fields are simply blank.
+their own slots). Absent sidecar → those fields are simply blank.
 """
 from __future__ import annotations
 

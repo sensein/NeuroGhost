@@ -197,29 +197,34 @@ def _schema(tmp_schema, name, *, title=None, sidecar=None):
     return path
 
 
-def test_schema_source_propagates_and_overlays_metadata(conn, tmp_schema):
-    """Schema-level metadata lives on the SchemaBundle: title/source_id are
-    PROPAGATED from the schema's own title:/id:; the optional <stem>_source.yaml
-    sidecar supplies homepage/publisher/contact."""
+def test_metadata_splits_source_vs_bundle(conn, tmp_schema):
+    """Per-file metadata (title/source_id) is PROPAGATED from the schema onto its
+    SchemaSource; sidecar keys route by prefix — `bundle_*` → the SchemaBundle
+    (shared), bare keys → the file's SchemaSource (per-file)."""
     schema = _schema(tmp_schema, "myschema", title="My Example Schema",
-                     sidecar={"homepage": "https://example.org/",
-                              "publisher": "Example Org"})
+                     sidecar={"bundle_title": "My Bundle",
+                              "bundle_homepage": "https://bundle.example/",
+                              "bundle_publisher": "Example Org",
+                              "homepage": "https://file.example/"})
     insert_schema(conn, parse_linkml(schema), "myschema", agent="tester")
-    row = conn.execute(
-        "MATCH (b:SchemaBundle {label: 'myschema'}) "
-        "RETURN b.bundle_title, b.source_id, b.homepage, b.publisher"
-    ).get_next()
-    assert row[0] == "My Example Schema"             # propagated title
-    assert row[1] == "https://example.org/myschema"  # propagated source_id (schema id:)
-    assert row[2] == "https://example.org/"          # sidecar homepage
-    assert row[3] == "Example Org"                    # sidecar publisher
 
-    # the SchemaSource file itself is part_of that bundle
-    part_of = conn.execute(
-        "MATCH (s:SchemaSource {label: 'myschema'}) RETURN s.part_of").get_next()[0]
-    bundle_id = conn.execute(
-        "MATCH (b:SchemaBundle {label: 'myschema'}) RETURN b.id").get_next()[0]
-    assert part_of == bundle_id
+    # bundle: only the bundle_* keys land here
+    b = conn.execute(
+        "MATCH (b:SchemaBundle {label: 'myschema'}) "
+        "RETURN b.title, b.homepage, b.publisher, b.id").get_next()
+    assert b[0] == "My Bundle"                 # bundle_title
+    assert b[1] == "https://bundle.example/"   # bundle_homepage
+    assert b[2] == "Example Org"               # bundle_publisher
+
+    # source: propagated title/source_id + the bare (per-file) sidecar homepage,
+    # and it is part_of that bundle
+    s = conn.execute(
+        "MATCH (s:SchemaSource {label: 'myschema'}) "
+        "RETURN s.title, s.source_id, s.homepage, s.part_of").get_next()
+    assert s[0] == "My Example Schema"                 # propagated title:
+    assert s[1] == "https://example.org/myschema"      # propagated source_id (schema id:)
+    assert s[2] == "https://file.example/"             # bare sidecar homepage → source
+    assert s[3] == b[3]                                 # part_of that bundle
 
 
 def test_sidecar_accepts_both_yaml_and_yml(tmp_path):
@@ -232,36 +237,39 @@ def test_sidecar_accepts_both_yaml_and_yml(tmp_path):
     assert load_source_sidecar(tmp_path / "s.yml") == {"homepage": "https://s/"}
 
 
-def test_schema_bundle_without_sidecar_is_blank(conn, tmp_schema):
-    """No sidecar and no title: → blank supplemental bundle fields; source_iri
-    still propagates from the schema's id:."""
+def test_source_provenance_without_sidecar(conn, tmp_schema):
+    """No sidecar and no title: → blank bundle title/homepage; the SchemaSource
+    still gets source_id from the schema's id: and a synthetic per-file source_iri."""
     schema = _schema(tmp_schema, "bare")
     insert_schema(conn, parse_linkml(schema), "bare", agent="tester")
-    row = conn.execute(
-        "MATCH (b:SchemaBundle {label: 'bare'}) RETURN b.bundle_title, b.homepage, b.source_id, b.source_iri"
-    ).get_next()
-    assert row[0] == ""                                 # no title:
-    assert row[1] == ""                                 # no sidecar
-    assert row[2] == "https://example.org/bare"         # source_id from schema id:
-    assert row[3].startswith("https://registry.sensein.io/bundle/")  # synthetic source_iri
+    b = conn.execute(
+        "MATCH (b:SchemaBundle {label: 'bare'}) RETURN b.title, b.homepage").get_next()
+    assert b[0] == ""                                   # no bundle_title
+    assert b[1] == ""                                   # no sidecar
+    s = conn.execute(
+        "MATCH (s:SchemaSource {label: 'bare'}) RETURN s.source_id, s.source_iri").get_next()
+    assert s[0] == "https://example.org/bare"           # source_id from schema id:
+    assert s[1].startswith("https://registry.sensein.io/source/")  # synthetic per-file iri
 
 
-def test_export_snapshot_includes_bundle_metadata(conn, tmp_schema):
-    """export_snapshot() surfaces the schema-level metadata in bundles[] (and the
-    file in sources[], part_of that bundle) — also a regression test that export
-    runs at all."""
+def test_export_snapshot_includes_bundle_and_source_metadata(conn, tmp_schema):
+    """export_snapshot() surfaces bundle_* metadata in bundles[] and per-file
+    provenance in sources[] (each part_of its bundle) — also a regression test
+    that export runs at all."""
     from export_json import export_snapshot
     schema = _schema(tmp_schema, "es", title="ES Schema",
-                     sidecar={"homepage": "https://es.example/"})
+                     sidecar={"bundle_title": "ES Bundle",
+                              "bundle_homepage": "https://es.example/"})
     insert_schema(conn, parse_linkml(schema), "es", agent="tester")
     snap = export_snapshot(conn, "1.0.0")
     bnd = next(b for b in snap["bundles"] if b["label"] == "es")
-    assert bnd["bundle_title"] == "ES Schema"
-    assert bnd["homepage"] == "https://es.example/"
-    assert bnd["source_id"] == "https://example.org/es"
+    assert bnd["title"] == "ES Bundle"                  # bundle_title
+    assert bnd["homepage"] == "https://es.example/"     # bundle_homepage
     assert bnd["parts"] == ["es"]
     src = next(s for s in snap["sources"] if s["label"] == "es")
     assert src["bundle"] == "es"
+    assert src["title"] == "ES Schema"                  # propagated per-file title
+    assert src["source_id"] == "https://example.org/es"  # per-file source_id
 
 
 def test_schema_source_records_and_exports_content_hash(conn):

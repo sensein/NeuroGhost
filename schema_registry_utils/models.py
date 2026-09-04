@@ -313,7 +313,11 @@ class RegistryEntity(ConfiguredBaseModel):
 A change in any HashSubset field produces a different sha256_hash (a different entity), never an edit of the old one; lineage is tracked via was_derived_from on each ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     provenance: list[str] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects id or sha256_hash. Mirrored by ProvenanceEntry.attests_to so the relationship round-trips in either direction — the entity owns the list, and each entry names the entity it belongs to.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Mapping'], 'inverse': 'attests_to'} })
@@ -353,7 +357,11 @@ class RegistryClass(RegistryEntity):
 A change in any HashSubset field produces a different sha256_hash (a different entity), never an edit of the old one; lineage is tracked via was_derived_from on each ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     provenance: list[str] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects id or sha256_hash. Mirrored by ProvenanceEntry.attests_to so the relationship round-trips in either direction — the entity owns the list, and each entry names the entity it belongs to.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Mapping'], 'inverse': 'attests_to'} })
@@ -380,7 +388,11 @@ class RegistryProperty(RegistryEntity):
 A change in any HashSubset field produces a different sha256_hash (a different entity), never an edit of the old one; lineage is tracked via was_derived_from on each ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     provenance: list[str] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects id or sha256_hash. Mirrored by ProvenanceEntry.attests_to so the relationship round-trips in either direction — the entity owns the list, and each entry names the entity it belongs to.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Mapping'], 'inverse': 'attests_to'} })
@@ -408,10 +420,7 @@ class ProvenanceEntry(ConfiguredBaseModel):
     had_primary_source: str = Field(default=..., description="""The SchemaSource this attestation came from (stored as id FK, like is_a). A real Entity->Entity link, not a denormalized label copy — PROV-O's own hadPrimarySource is a relationship between entities. Mirrored by SchemaSource.attestations so the relationship round-trips: a query starting from a SchemaSource can walk forward to every ProvenanceEntry that names it.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry'],
          'inverse': 'attestations',
          'slot_uri': 'prov:hadPrimarySource'} })
-    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry',
-                       'SchemaSource',
-                       'SchemaBundle',
-                       'SchemaVersionSnapshot']} })
+    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry', 'SchemaSource', 'SchemaVersionSnapshot']} })
     registry_version: Optional[str] = Field(default=None, description="""Registry snapshot version in effect when this ProvenanceEntry was generated. Not on RegistryClass/RegistryProperty directly — the same entity can be attested by different sources at different times, each under a different registry version, so it belongs on the per-source attestation, not the entity itself. No PROV-O term — purely our own versioning concept.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry', 'SchemaSource', 'SchemaVersionSnapshot']} })
     generated_at_time: datetime  = Field(default=..., description="""ISO-8601 timestamp this ProvenanceEntry was generated.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry'], 'slot_uri': 'prov:generatedAtTime'} })
     was_attributed_to: str = Field(default=..., description="""Agent (user or system) that generated this ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry'], 'slot_uri': 'prov:wasAttributedTo'} })
@@ -443,10 +452,7 @@ class MappingProvenanceEntry(ProvenanceEntry):
     had_primary_source: Optional[str] = Field(default=None, description="""The SchemaSource this attestation came from (stored as id FK, like is_a). A real Entity->Entity link, not a denormalized label copy — PROV-O's own hadPrimarySource is a relationship between entities. Mirrored by SchemaSource.attestations so the relationship round-trips: a query starting from a SchemaSource can walk forward to every ProvenanceEntry that names it.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry'],
          'inverse': 'attestations',
          'slot_uri': 'prov:hadPrimarySource'} })
-    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry',
-                       'SchemaSource',
-                       'SchemaBundle',
-                       'SchemaVersionSnapshot']} })
+    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry', 'SchemaSource', 'SchemaVersionSnapshot']} })
     registry_version: Optional[str] = Field(default=None, description="""Registry snapshot version in effect when this ProvenanceEntry was generated. Not on RegistryClass/RegistryProperty directly — the same entity can be attested by different sources at different times, each under a different registry version, so it belongs on the per-source attestation, not the entity itself. No PROV-O term — purely our own versioning concept.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry', 'SchemaSource', 'SchemaVersionSnapshot']} })
     generated_at_time: datetime  = Field(default=..., description="""ISO-8601 timestamp this ProvenanceEntry was generated.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry'], 'slot_uri': 'prov:generatedAtTime'} })
     was_attributed_to: str = Field(default=..., description="""Agent (user or system) that generated this ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry'], 'slot_uri': 'prov:wasAttributedTo'} })
@@ -510,7 +516,11 @@ class RegistryRule(RegistryEntity):
 A change in any HashSubset field produces a different sha256_hash (a different entity), never an edit of the old one; lineage is tracked via was_derived_from on each ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     provenance: list[str] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects id or sha256_hash. Mirrored by ProvenanceEntry.attests_to so the relationship round-trips in either direction — the entity owns the list, and each entry names the entity it belongs to.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Mapping'], 'inverse': 'attests_to'} })
@@ -535,7 +545,11 @@ class Transform(ConfiguredBaseModel):
                        'RegistrySchema']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
 
@@ -559,7 +573,11 @@ class PermissibleValue(RegistryEntity):
 A change in any HashSubset field produces a different sha256_hash (a different entity), never an edit of the old one; lineage is tracked via was_derived_from on each ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     provenance: list[str] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects id or sha256_hash. Mirrored by ProvenanceEntry.attests_to so the relationship round-trips in either direction — the entity owns the list, and each entry names the entity it belongs to.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Mapping'], 'inverse': 'attests_to'} })
@@ -587,7 +605,11 @@ class RegistryValueSet(RegistryEntity):
 A change in any HashSubset field produces a different sha256_hash (a different entity), never an edit of the old one; lineage is tracked via was_derived_from on each ProvenanceEntry.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     provenance: list[str] = Field(default=..., description="""One ProvenanceEntry per source attesting to this entity. Accumulates as more sources are ingested — never affects id or sha256_hash. Mirrored by ProvenanceEntry.attests_to so the relationship round-trips in either direction — the entity owns the list, and each entry names the entity it belongs to.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Mapping'], 'inverse': 'attests_to'} })
@@ -600,7 +622,7 @@ class SchemaSource(ConfiguredBaseModel):
     """
     Registry record for a schema source (one node per ingested schema label). A stable label used to attribute registry entities to where they came from — nothing more. Every attestation about a registry entity that names this schema as its primary source is surfaced on `attestations`, the inverse of ProvenanceEntry.had_primary_source, so a schema-regen query can walk forward from a SchemaSource to every entity it defined in one hop.
     Deliberately does NOT model the ingested schema's shape metadata (default_prefix, default_range, declared prefix bindings, imports). RegistrySchema owns the \"schema-shape\" concerns for schemas the registry emits; SchemaSource is only a provenance record. Reconstructing the source schema verbatim isn't a registry use case today, so those fields don't need to be captured on the input side.
-    Identity uses id (a UUID, as everywhere) because this is a mutable administrative record, not a content-addressed entity. A SchemaSource is one physical file/module; the schema-level descriptive metadata (title, publisher, contact, homepage, license, the declared source_id/iri) lives once on the SchemaBundle this source is `part_of`, not repeated here. What stays on the source is what is genuinely per-file: its `label`, `content_hash`, `mime_type`, ingest `created_at`/`registry_version`, and an optional per-file `source_version` override.
+    Identity uses id (a UUID, as everywhere) because this is a mutable administrative record, not a content-addressed entity. A SchemaSource is one physical file/module. What lives here is what is genuinely per-file: its `label`, `content_hash`, `mime_type`, ingest `created_at`/`registry_version`, and its own provenance — the declared `source_id`/`source_iri`, `source_version`, and its own `title` / `description` / `homepage`. Bundle-level metadata shared across the files (bundle title/description/homepage plus publisher, contact, license) lives once on the SchemaBundle this source is `part_of`, set via `bundle_`- prefixed keys in the sidecar.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://example.org/schema-registry-utils/meta-model'})
 
@@ -614,10 +636,18 @@ class SchemaSource(ConfiguredBaseModel):
                        'RegistrySchema']} })
     label: str = Field(default=..., description="""Short identifier label for this schema source (e.g. \"bids\", \"nwb\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource', 'SchemaBundle']} })
     part_of: Optional[str] = Field(default=None, description="""The SchemaBundle (logical schema) this source file belongs to, stored as an id FK. Every SchemaSource is part of exactly one bundle; a single-file schema's bundle has just this one part.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource'], 'inverse': 'parts'} })
-    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry',
+    title: Optional[str] = Field(default=None, description="""Human-readable name. On a SchemaSource it is the file's own declared `title:`; on a SchemaBundle it is the optional display name for the whole bundle (e.g. \"DANDI Schema\"), set in the sidecar as `bundle_title` and falling back to `bundle_label` (the short predictable grouping key) in the UI when blank.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource', 'SchemaBundle']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
                        'SchemaSource',
                        'SchemaBundle',
-                       'SchemaVersionSnapshot']} })
+                       'RegistrySchema'],
+         'in_subset': ['HashSubset'],
+         'slot_uri': 'skos:definition'} })
+    homepage: Optional[str] = Field(default=None, description="""Documentation or landing page for this schema.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource', 'SchemaBundle']} })
+    source_id: Optional[str] = Field(default=None, description="""The persistent IRI the source schema declared as its own `id:` (in LinkML: `schema.id`; the equivalent in other formats). Distinct from SchemaSource.id — that is the registry's internal UUID primary key, needed as a stable graph handle for FKs. `source_id` preserves the author's own identifier for the schema so a round-trip export can reconstruct `id:` losslessly.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource']} })
+    source_iri: Optional[str] = Field(default=None, description="""Canonical IRI for this schema source.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource']} })
+    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry', 'SchemaSource', 'SchemaVersionSnapshot']} })
     mime_type: Optional[str] = Field(default=None, description="""MIME type of the schema file (e.g. \"application/yaml\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource']} })
     content_hash: Optional[str] = Field(default=None, description="""SHA-256 of the schema source's canonicalised raw text — a file-level fingerprint used to detect (and reject) a schema whose exact content is already in the registry before re-ingesting it. Distinct from the per-entity sha256_hash on RegistryClass/RegistryProperty.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource']} })
     created_at: Optional[datetime ] = Field(default=None, description="""ISO-8601 timestamp when this record was created.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource',
@@ -630,8 +660,8 @@ class SchemaSource(ConfiguredBaseModel):
 
 class SchemaBundle(ConfiguredBaseModel):
     """
-    A logical schema, grouping the one-or-more SchemaSource files it is ingested from (e.g. DANDI = dandiset.json + asset.json). Schema-level descriptive metadata — bundle_title, publisher, contact, homepage, license, and the schema's own declared source_id / source_iri / source_version — lives here once, rather than being repeated on every constituent file. A single-file schema is simply a bundle with exactly one part.
-    Identity uses id (a UUID) — a mutable administrative record, like SchemaSource. On (re-)ingestion a bundle is resolved-or-created by its declared `source_id` (falling back to `label`), so every file that declares the same schema id joins the same bundle. `parts` is the inverse of SchemaSource.part_of.
+    A logical schema, grouping the one-or-more SchemaSource files it is ingested from (e.g. DANDI = dandiset.json + asset.json). Bundle-level descriptive metadata that is shared across the files — title, description, publisher, contact, homepage, license — lives here once, rather than being repeated on every constituent file. Per-file provenance (each file's own source_id / source_iri / source_version, and its own title / description / homepage) stays on the SchemaSource, so a multi-file schema records where each file came from. A single-file schema is simply a bundle with exactly one part.
+    In the `<stem>_source.yaml` sidecar, a key prefixed `bundle_` (e.g. `bundle_title`, `bundle_homepage`) sets the bundle slot of that name; a bare key sets the SchemaSource slot. Identity uses id (a UUID) — a mutable administrative record, like SchemaSource. On (re-)ingestion a bundle is resolved-or-created by its **name** — `bundle_label`, falling back to the file's `label` — so every file carrying the same `bundle_label` joins the same bundle. `parts` is the inverse of SchemaSource.part_of.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://example.org/schema-registry-utils/meta-model'})
 
@@ -644,19 +674,17 @@ class SchemaBundle(ConfiguredBaseModel):
                        'SchemaVersionSnapshot',
                        'RegistrySchema']} })
     label: str = Field(default=..., description="""Short identifier label for this schema source (e.g. \"bids\", \"nwb\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource', 'SchemaBundle']} })
-    bundle_title: Optional[str] = Field(default=None, description="""Optional human-readable name for the bundle (e.g. \"DANDI Schema\"), distinct from `bundle_label`, the short predictable identifier used to group files. Falls back to the schema's own declared `title:` if unset, and the UI shows `bundle_label` when it is blank.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
-         'in_subset': ['HashSubset'],
-         'slot_uri': 'skos:definition'} })
-    source_id: Optional[str] = Field(default=None, description="""The persistent IRI the source schema declared as its own `id:` (in LinkML: `schema.id`; the equivalent in other formats). Distinct from SchemaSource.id — that is the registry's internal UUID primary key, needed as a stable graph handle for FKs. `source_id` preserves the author's own identifier for the schema so a round-trip export can reconstruct `id:` losslessly.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
-    source_iri: Optional[str] = Field(default=None, description="""Canonical IRI for this schema source.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
-    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry',
+    title: Optional[str] = Field(default=None, description="""Human-readable name. On a SchemaSource it is the file's own declared `title:`; on a SchemaBundle it is the optional display name for the whole bundle (e.g. \"DANDI Schema\"), set in the sidecar as `bundle_title` and falling back to `bundle_label` (the short predictable grouping key) in the UI when blank.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource', 'SchemaBundle']} })
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
                        'SchemaSource',
                        'SchemaBundle',
-                       'SchemaVersionSnapshot']} })
+                       'RegistrySchema'],
+         'in_subset': ['HashSubset'],
+         'slot_uri': 'skos:definition'} })
     publisher: Optional[str] = Field(default=None, description="""Organization or group that maintains this schema.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
     contact: Optional[str] = Field(default=None, description="""Contact point for this schema (person, mailing list, or URL).""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
-    homepage: Optional[str] = Field(default=None, description="""Documentation or landing page for this schema.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
+    homepage: Optional[str] = Field(default=None, description="""Documentation or landing page for this schema.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource', 'SchemaBundle']} })
     license: Optional[str] = Field(default=None, description="""License of the schema, as an SPDX identifier or name (e.g. \"CC-BY-4.0\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
     created_at: Optional[datetime ] = Field(default=None, description="""ISO-8601 timestamp when this record was created.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource',
                        'SchemaBundle',
@@ -681,10 +709,7 @@ class SchemaVersionSnapshot(ConfiguredBaseModel):
                        'SchemaVersionSnapshot',
                        'RegistrySchema']} })
     schema_label: str = Field(default=..., description="""Label of the schema this snapshot belongs to (FK to SchemaSource.label).""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaVersionSnapshot']} })
-    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry',
-                       'SchemaSource',
-                       'SchemaBundle',
-                       'SchemaVersionSnapshot']} })
+    source_version: Optional[str] = Field(default=None, description="""Version of the source schema as declared by the source itself, never invented or bumped by the registry. On SchemaSource: the version at first ingestion (known frozen-value limitation). On ProvenanceEntry: the source's version at the time of this attestation — this is what lets a query scope entities and mappings to \"BIDS 1.9 specifically\", lets re-ingestion diff by version, and makes an alignment run's inputs statable, without needing SchemaVersionSnapshot.""", json_schema_extra = { "linkml_meta": {'domain_of': ['ProvenanceEntry', 'SchemaSource', 'SchemaVersionSnapshot']} })
     yml_path: Optional[str] = Field(default=None, description="""Relative path to the schema YAML file at snapshot time.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaVersionSnapshot']} })
     class_count: Optional[int] = Field(default=None, description="""Number of classes in the schema at this version.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaVersionSnapshot']} })
     property_count: Optional[int] = Field(default=None, description="""Number of properties in the schema at this version.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaVersionSnapshot']} })
@@ -714,7 +739,11 @@ class RegistrySchema(ConfiguredBaseModel):
                        'RegistrySchema']} })
     name: str = Field(default=..., description="""Human-readable label for this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'RegistrySchema'],
          'in_subset': ['HashSubset']} })
-    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
+    description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity',
+                       'Transform',
+                       'SchemaSource',
+                       'SchemaBundle',
+                       'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })
     namespace_iri: str = Field(default=..., description="""Base namespace for this schema — becomes its own `id:` when exported to LinkML (or the equivalent namespace declaration in another output format).""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistrySchema']} })

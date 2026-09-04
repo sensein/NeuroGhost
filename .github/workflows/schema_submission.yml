@@ -154,9 +154,12 @@ jobs:
           # / SchemaBundle slot names), with the web-UI's "### Source metadata" yaml
           # block as a fallback.
           meta = {}
+          # A submission describes the bundle it creates/joins, so the shared
+          # descriptive fields are written with the `bundle_` prefix (the sidecar
+          # convention: bundle_* -> SchemaBundle, bare keys -> per-file SchemaSource).
           for key, label in [("bundle_label", "Bundle"), ("bundle_title", "Bundle title"),
-                             ("homepage", "Homepage"), ("publisher", "Publisher"),
-                             ("contact", "Contact"), ("license", "License")]:
+                             ("bundle_homepage", "Homepage"), ("bundle_publisher", "Publisher"),
+                             ("bundle_contact", "Contact"), ("bundle_license", "License")]:
               v = field(label)
               if v:
                   meta[key] = v
