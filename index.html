@@ -4482,12 +4482,12 @@ ingestBtn.addEventListener('click', async () => {
   // also triggers CI.
   const bundleSel = document.getElementById('im-bundle');
   const bundle_label = (bundleSel && bundleSel.value !== '__new__') ? bundleSel.value : val('im-bundle-new');
-  const formatLabel = fileLang === 'json' ? 'JSON Schema' : 'LinkML (YAML)';
 
+  // NOTE: GitHub issue forms can't prefill `dropdown` fields via URL (returns
+  // 406), so we don't prefill `format` — the submitter picks it in the form.
   const base = new URLSearchParams({ template: 'schema_submission.yml' });
   base.set('title', `schema-submission: ${schemaName}`);
   base.set('name', schemaName);
-  base.set('format', formatLabel);
   const addIf = (k, v) => { if (v) base.set(k, v); };
   addIf('bundle_label', bundle_label);
   addIf('schema_title', val('im-title'));
