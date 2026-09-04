@@ -91,6 +91,20 @@ from db import (
     write_registry_entities, write_structural_edges, write_rule_edges,
     ensure_schema_source, find_id_by_sha256,
 )
+from source_metadata import load_source_sidecar
+
+
+def _source_metadata(parsed: dict) -> dict:
+    """SchemaSource descriptive metadata, keyed by slot name: `title` and
+    `source_id` propagated from the schema's own `title:`/`id:`, overlaid with
+    its optional `<stem>_source.yaml` sidecar (publisher/contact/homepage/
+    source_iri/…, which may also override the propagated values)."""
+    meta = parsed.get("meta", {})
+    return {
+        "title": meta.get("title", ""),
+        "source_id": meta.get("id", ""),
+        **(parsed.get("source_metadata") or {}),
+    }
 
 DB_PATH = "./registry.lbug"
 
@@ -282,6 +296,7 @@ def _parse_schemaview(sv, path: Path) -> dict[str, Any]:
     meta = {
         "id":          sv.schema.id or "",
         "name":        sv.schema.name or path.stem,
+        "title":       sv.schema.title or "",
         "version":     str(sv.schema.version or "1.0.0"),
         "description": sv.schema.description or "",
     }
@@ -372,6 +387,8 @@ def _parse_schemaview(sv, path: Path) -> dict[str, Any]:
         "classes":  classes,
         "slots":    slots,
         "enums":    enums,
+        # Optional per-schema source-metadata sidecar (<stem>_source.yaml).
+        "source_metadata": load_source_sidecar(path),
     }
 
 
@@ -828,6 +845,7 @@ def insert_schema(conn, parsed: dict, source_label: str, agent: str = "anonymous
     # gets a throwaway placeholder id instead of writing anything.
     schema_source_id = ensure_schema_source(
         conn, source_label, meta["version"], registry_version, dry_run=dry_run,
+        metadata=_source_metadata(parsed),
     )
 
     properties, registry_classes, value_sets, permissible_values, rules, provenance_entries = build_registry_entities(
@@ -1056,6 +1074,7 @@ def cli(file, db, dry_run, verbose, verbose_readable, wipe,
             preview_source_id = ensure_schema_source(
                 conn, source_label, parsed["meta"]["version"],
                 registry_version, dry_run=dry_run,
+                metadata=_source_metadata(parsed),
             )
             p_props, p_classes, p_vs, p_pvs, p_rules, p_provs = build_registry_entities(
                 parsed, preview_source_id, agent, issue, registry_version, conn=conn,

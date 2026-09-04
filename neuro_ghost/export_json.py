@@ -39,7 +39,7 @@ def _attesting_sources(conn, label: str, rel: str, id: str) -> list[str]:
         r[0] for r in conn.execute(f"""
             MATCH (:{label} {{id: $node_id}})-[:{rel}]->(:ProvenanceEntry)-[:HAD_PRIMARY_SOURCE]->(ss:SchemaSource)
             RETURN ss.label
-        """, {"id": node_id}).get_all()
+        """, {"node_id": id}).get_all()
     })
 
 
@@ -69,18 +69,29 @@ def _property_unit(conn, prop_id: str) -> str:
 
 def export_snapshot(conn, registry_version: str) -> dict:
     # ---- sources -----------------------------------------------------------
-    src_rows = conn.execute(
-        "MATCH (s:SchemaSource) RETURN s.id, s.label, s.source_version"
-    ).get_all()
+    src_rows = conn.execute("""
+        MATCH (s:SchemaSource)
+        RETURN s.id, s.label, s.source_version, s.title, s.publisher, s.contact,
+               s.homepage, s.source_iri, s.source_id, s.mime_type,
+               s.created_at, s.registry_version
+    """).get_all()
 
     sources = []
-    for _, label, ver in src_rows:
+    for (_id, label, ver, title, publisher, contact, homepage,
+         source_iri, source_id, mime_type, created_at, reg_ver) in src_rows:
         count = conn.execute("""
             MATCH (n:RegistryClass)-[:HAS_PROVENANCE]->(:ProvenanceEntry)-[:HAD_PRIMARY_SOURCE]->(:SchemaSource {label: $src})
             RETURN count(DISTINCT n)
         """, {"src": label}).get_next()[0]
-        sources.append({"label": label, "version": ver or "1.0.0",
-                        "class_count": count})
+        sources.append({
+            "label": label, "version": ver or "1.0.0", "class_count": count,
+            # Descriptive metadata (curated per source; blank when unknown).
+            "title": title or "", "publisher": publisher or "",
+            "contact": contact or "", "homepage": homepage or "",
+            "source_iri": source_iri or "", "source_id": source_id or "",
+            "mime_type": mime_type or "", "created_at": created_at or "",
+            "registry_version": reg_ver or "",
+        })
 
     # ---- classes -----------------------------------------------------------
     # Identity is shared across sources now, so a class/property no longer

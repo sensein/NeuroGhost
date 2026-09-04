@@ -175,3 +175,78 @@ def test_bican_prov_ingests_expected_classes_and_properties(conn):
         ("ProvEntity", "was_derived_from"),
         ("ProvEntity", "was_generated_by"),
     }
+
+
+def _schema(tmp_schema, name, *, title=None, sidecar=None):
+    """A minimal LinkML schema written via the conftest `tmp_schema` factory
+    (id: + optional title:), plus an optional `<name>_source.yaml` sidecar next
+    to it. Returns the schema path."""
+    import yaml
+    body = {
+        "id": f"https://example.org/{name}", "name": name,
+        "prefixes": {"linkml": "https://w3id.org/linkml/"},
+        "default_range": "string", "imports": ["linkml:types"],
+        "classes": {"Thing": {"attributes": {"x": {"range": "string"}}}},
+    }
+    if title:
+        body["title"] = title
+    path = tmp_schema(name, body)
+    if sidecar is not None:
+        (path.parent / f"{name}_source.yaml").write_text(yaml.safe_dump(sidecar))
+    return path
+
+
+def test_schema_source_propagates_and_overlays_metadata(conn, tmp_schema):
+    """title/source_iri are PROPAGATED from the schema's own title:/id:; the
+    optional <stem>_source.yaml sidecar supplies homepage/publisher/contact."""
+    schema = _schema(tmp_schema, "myschema", title="My Example Schema",
+                     sidecar={"homepage": "https://example.org/",
+                              "publisher": "Example Org"})
+    insert_schema(conn, parse_linkml(schema), "myschema", agent="tester")
+    row = conn.execute(
+        "MATCH (s:SchemaSource {label: 'myschema'}) "
+        "RETURN s.title, s.source_id, s.homepage, s.publisher"
+    ).get_next()
+    assert row[0] == "My Example Schema"             # propagated title
+    assert row[1] == "https://example.org/myschema"  # propagated source_id (schema id:)
+    assert row[2] == "https://example.org/"          # sidecar homepage
+    assert row[3] == "Example Org"                    # sidecar publisher
+
+
+def test_sidecar_accepts_both_yaml_and_yml(tmp_path):
+    """The sidecar is discovered whether it's named `<stem>_source.yaml` or
+    `<stem>_source.yml`."""
+    import yaml as _yaml
+    from source_metadata import load_source_sidecar
+    (tmp_path / "s.yml").write_text("id: x\nname: s\n")
+    (tmp_path / "s_source.yml").write_text(_yaml.safe_dump({"homepage": "https://s/"}))
+    assert load_source_sidecar(tmp_path / "s.yml") == {"homepage": "https://s/"}
+
+
+def test_schema_source_without_sidecar_is_blank(conn, tmp_schema):
+    """No sidecar and no title: → blank supplemental fields; source_iri still
+    propagates from the schema's id:."""
+    schema = _schema(tmp_schema, "bare")
+    insert_schema(conn, parse_linkml(schema), "bare", agent="tester")
+    row = conn.execute(
+        "MATCH (s:SchemaSource {label: 'bare'}) RETURN s.title, s.homepage, s.source_id, s.source_iri"
+    ).get_next()
+    assert row[0] == ""                                 # no title:
+    assert row[1] == ""                                 # no sidecar
+    assert row[2] == "https://example.org/bare"         # source_id from schema id:
+    assert row[3].startswith("https://registry.sensein.io/source/")  # synthetic source_iri
+
+
+def test_export_snapshot_includes_source_metadata(conn, tmp_schema):
+    """export_snapshot() surfaces the metadata in sources[] — and this doubles
+    as a regression test that export runs at all (it previously crashed in
+    _attesting_sources on an undefined name)."""
+    from export_json import export_snapshot
+    schema = _schema(tmp_schema, "es", title="ES Schema",
+                     sidecar={"homepage": "https://es.example/"})
+    insert_schema(conn, parse_linkml(schema), "es", agent="tester")
+    snap = export_snapshot(conn, "1.0.0")
+    src = next(s for s in snap["sources"] if s["label"] == "es")
+    assert src["title"] == "ES Schema"
+    assert src["homepage"] == "https://es.example/"
+    assert src["source_id"] == "https://example.org/es"

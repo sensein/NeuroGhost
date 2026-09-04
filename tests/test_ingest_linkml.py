@@ -37,6 +37,7 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
         "meta": {
             "id": "https://example.org/comprehensive",
             "name": "comprehensive",
+            "title": "",
             "version": "1.0.0",
             "description": "A schema exercising every element parse_linkml must extract.",
         },
@@ -127,6 +128,7 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
             },
         },
         "enums": {},
+        "source_metadata": {},
     }
 
 

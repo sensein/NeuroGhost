@@ -207,7 +207,7 @@ def write_provenance(conn, label: str, node_id: str, prov) -> bool:
 
 
 def ensure_schema_source(conn, source_label: str, version: str, registry_version: str,
-                         dry_run: bool = False) -> str:
+                         dry_run: bool = False, metadata: dict | None = None) -> str:
     """
     One SchemaSource node per source label, reused across ingests. Shared by
     ingest_linkml.py and seed.py, same as the other entity/provenance writers.
@@ -226,19 +226,32 @@ def ensure_schema_source(conn, source_label: str, version: str, registry_version
         return r.get_next()[0]
     if dry_run:
         return f"dry-run-placeholder:{source_label}"
-    source_id = make_id()
+    node_id = make_id()
+    # Descriptive metadata supplied by the caller, keyed by SchemaSource slot
+    # name: `title`/`source_id` are propagated from the schema's own title:/id:,
+    # and any of publisher/contact/homepage/source_iri/source_version/mime_type
+    # may come from its <stem>_source.yaml sidecar. All optional. `source_id` is
+    # the source's declared id:; `source_iri` is a canonical registry IRI
+    # (synthetic unless the sidecar overrides it).
+    md = metadata or {}
     conn.execute("""
         CREATE (:SchemaSource {
-            id: $id, source_iri: $source_iri,
-            source_version: $source_version, created_at: $t,
-            label: $label, mime_type: 'application/yaml',
-            registry_version: $rv
+            id: $id, label: $label, created_at: $t, registry_version: $rv,
+            source_id: $source_id, source_iri: $source_iri,
+            source_version: $source_version, mime_type: $mime_type,
+            title: $title, publisher: $publisher, contact: $contact,
+            homepage: $homepage
         })
     """, {
-        "id": source_id, "source_iri": f"{REG}source/{source_id}", "source_version": version,
-        "t": now_iso(), "label": source_label, "rv": registry_version,
+        "id": node_id, "label": source_label, "t": now_iso(), "rv": registry_version,
+        "source_id": md.get("source_id", ""),
+        "source_iri": md.get("source_iri") or f"{REG}source/{node_id}",
+        "source_version": md.get("source_version") or version,
+        "mime_type": md.get("mime_type") or "application/yaml",
+        "title": md.get("title", ""), "publisher": md.get("publisher", ""),
+        "contact": md.get("contact", ""), "homepage": md.get("homepage", ""),
     })
-    return source_id
+    return node_id
 
 
 def write_registry_entities(conn, properties: dict, registry_classes: dict,
