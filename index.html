@@ -767,7 +767,6 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   cursor:pointer;transition:background .15s;position:relative;overflow:hidden;}
 .drop-zone.drag-over{background:var(--teal-soft);}
 .drop-zone.has-file{align-items:flex-start;padding:22px 24px;cursor:default;background:var(--bg-elev);}
-.drop-zone.full-width{flex:0 0 100%;}
 .drop-center{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;pointer-events:none;}
 .drop-icon-wrap{width:56px;height:56px;border-radius:14px;background:var(--surface);
   border:1px solid var(--border);display:grid;place-items:center;margin-bottom:4px;}
@@ -1288,7 +1287,7 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 <!-- ── Ingest ──────────────────────────────────────────── -->
 <div id="view-ingest" class="view">
   <div class="ingest-inner">
-    <div id="drop-zone" class="drop-zone full-width">
+    <div id="drop-zone" class="drop-zone">
       <div class="drop-center" id="drop-center">
         <div class="drop-icon-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1304,16 +1303,16 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
       </div>
       <input type="file" id="file-input" accept=".yml,.yaml,.json" style="display:none">
     </div>
-    <div class="preview-pane" id="preview-pane" style="display:none">
+    <div class="preview-pane" id="preview-pane">
       <div class="preview-head">
-        <span class="preview-label">Preview</span>
+        <span class="preview-label">Preview &amp; submit</span>
       </div>
       <div id="preview-body" class="preview-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
         </svg>
-        <span>Drop a file on the left to preview it</span>
+        <span>Drop or paste a schema on the left to preview it</span>
       </div>
       <div class="ingest-meta" id="ingest-meta">
         <div class="ingest-meta-head">Source metadata <span class="ingest-meta-opt">— optional, saved as <code>&lt;schema&gt;_source.yaml</code></span></div>
@@ -4168,7 +4167,7 @@ function applyYAMLText(text, displayName, sizeBytes) {
   }
   schemaName = info.name;
 
-  dropZone.classList.remove('full-width', 'paste-mode');
+  dropZone.classList.remove('paste-mode');
   dropZone.classList.add('has-file');
   document.getElementById('drop-center').innerHTML = `
     <div class="loaded-header">
@@ -4191,7 +4190,6 @@ function applyYAMLText(text, displayName, sizeBytes) {
   document.getElementById('clear-btn').addEventListener('click', resetIngest);
   document.getElementById('reset-btn').addEventListener('click', resetIngest);
 
-  previewPane.style.display = 'flex';
   previewBody.className = 'yaml-scroll';
   previewBody.innerHTML = `<pre class="yaml-pre">${fileLang === 'json' ? esc(yamlText) : highlightYAML(yamlText)}</pre>`;
   footMeta.innerHTML = `<span style="color:var(--text-dim)">${esc(info.name)}</span> &middot; <span style="color:var(--muted)">${info.classes} classes</span>`;
@@ -4202,12 +4200,16 @@ function applyYAMLText(text, displayName, sizeBytes) {
 
 function resetIngest() {
   yamlText = ''; fileName = '';
-  dropZone.classList.add('full-width');
   dropZone.classList.remove('has-file', 'paste-mode');
   document.getElementById('drop-center').innerHTML = defaultDropHTML();
   document.getElementById('paste-toggle').addEventListener('click', showPasteMode);
-  previewPane.style.display = 'none';
   previewBody.className = 'preview-empty';
+  previewBody.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+    <span>Drop or paste a schema on the left to preview it</span>`;
   footMeta.innerHTML = 'No file loaded';
   ingestBtn.disabled = true;
   ingestLog.classList.remove('open');
