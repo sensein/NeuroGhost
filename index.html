@@ -835,6 +835,15 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .preview-foot{padding:13px 16px;border-top:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;}
 .foot-meta{font-size:11.5px;color:var(--muted);}
+.ingest-meta{border-top:1px solid var(--border);padding:12px 16px;flex-shrink:0;background:var(--bg-elev);}
+.ingest-meta-head{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:9px;}
+.ingest-meta-opt{text-transform:none;letter-spacing:0;font-weight:400;}
+.ingest-meta-opt code{font-family:var(--mono);font-size:10px;color:var(--text-dim);}
+.ingest-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.ingest-meta-input{background:var(--surface);border:1px solid var(--border);border-radius:6px;
+  padding:6px 9px;color:var(--text);font-size:11.5px;font-family:var(--sans);}
+.ingest-meta-input::placeholder{color:var(--muted);}
+.ingest-meta-input:focus{outline:none;border-color:var(--teal-line);box-shadow:0 0 0 3px var(--teal-soft);}
 .ingest-btn{background:var(--teal);color:#0a1017;border:none;border-radius:7px;
   padding:8px 18px;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;
   display:inline-flex;align-items:center;gap:7px;transition:opacity .15s;white-space:nowrap;}
@@ -1305,6 +1314,15 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
           <polyline points="14 2 14 8 20 8"/>
         </svg>
         <span>Drop a file on the left to preview it</span>
+      </div>
+      <div class="ingest-meta" id="ingest-meta">
+        <div class="ingest-meta-head">Source metadata <span class="ingest-meta-opt">— optional, saved as <code>&lt;schema&gt;_source.yaml</code></span></div>
+        <div class="ingest-meta-grid">
+          <input class="ingest-meta-input" id="im-title" type="text" placeholder="title" spellcheck="false" autocomplete="off"/>
+          <input class="ingest-meta-input" id="im-homepage" type="text" placeholder="homepage (https://…)" spellcheck="false" autocomplete="off"/>
+          <input class="ingest-meta-input" id="im-publisher" type="text" placeholder="publisher" spellcheck="false" autocomplete="off"/>
+          <input class="ingest-meta-input" id="im-contact" type="text" placeholder="contact (email or URL)" spellcheck="false" autocomplete="off"/>
+        </div>
       </div>
       <div class="preview-foot">
         <div class="foot-meta" id="foot-meta">No file loaded</div>
@@ -4194,6 +4212,10 @@ function resetIngest() {
   ingestBtn.disabled = true;
   ingestLog.classList.remove('open');
   fileInput.value = '';
+  ['im-title', 'im-homepage', 'im-publisher', 'im-contact'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
 }
 
 function defaultDropHTML() {
@@ -4247,6 +4269,21 @@ function showPasteMode(e) {
 document.getElementById('drop-center').innerHTML = defaultDropHTML();
 document.getElementById('paste-toggle').addEventListener('click', showPasteMode);
 
+// Optional source metadata (homepage/publisher/…) → a marked YAML block the
+// workflow writes to `<schema>_source.yaml` next to the schema. Empty → omitted.
+function sourceMetadataBlock() {
+  const fields = {
+    title:     (document.getElementById('im-title')     || {}).value,
+    homepage:  (document.getElementById('im-homepage')  || {}).value,
+    publisher: (document.getElementById('im-publisher') || {}).value,
+    contact:   (document.getElementById('im-contact')   || {}).value,
+  };
+  const lines = Object.entries(fields)
+    .filter(([, v]) => (v || '').trim())
+    .map(([k, v]) => `${k}: ${v.trim()}`);
+  return lines.length ? `\n\n### Source metadata\n\`\`\`yaml\n${lines.join('\n')}\n\`\`\`` : '';
+}
+
 ingestBtn.addEventListener('click', () => {
   if (!yamlText) return;
   const info = parseSchemaInfo(yamlText, fileLang);
@@ -4257,7 +4294,7 @@ ingestBtn.addEventListener('click', () => {
   // ```json-schema block via from_jsonschema, and treats anything else as
   // LinkML — so JSON must NOT go out as ```yaml.
   const body  = encodeURIComponent(
-    `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0,10)}\n\n\`\`\`${fileLang}\n${yamlText.slice(0, 8000)}\n\`\`\``
+    `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0,10)}\n\n\`\`\`${fileLang}\n${yamlText.slice(0, 8000)}\n\`\`\`${sourceMetadataBlock()}`
   );
   const url = `https://github.com/sensein/NeuroGhost/issues/new?title=${title}&body=${body}&labels=schema-submission`;
 

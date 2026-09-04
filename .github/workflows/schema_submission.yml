@@ -114,6 +114,17 @@ jobs:
               with open(out_path, "w") as f:
                   f.write(content)
               print(f"Wrote {out_path}")
+
+          # Optional "### Source metadata" block from the issue → a
+          # <name>_source.yaml sidecar that parse_linkml() picks up next to the
+          # schema (title/homepage/publisher/contact, keyed by SchemaSource slot).
+          meta_m = re.search(r'###\s*Source metadata\s*\n+```[\w-]*\s*\n(.*?)```',
+                             body, re.DOTALL)
+          if meta_m and meta_m.group(1).strip():
+              sc_path = f"registry_schemas/{name}_source.yaml"
+              with open(sc_path, "w") as f:
+                  f.write(meta_m.group(1).strip() + "\n")
+              print(f"Wrote source-metadata sidecar {sc_path}")
           PYEOF
 
       # -----------------------------------------------------------------------
@@ -145,6 +156,9 @@ jobs:
             data/registry.json \
             data/versions/ \
             data/provenance.json
+          # The source-metadata sidecar is optional — add it only if written.
+          SIDECAR="registry_schemas/${{ steps.meta.outputs.schema_name }}_source.yaml"
+          [ -f "$SIDECAR" ] && git add "$SIDECAR" || true
           git diff --cached --quiet || git commit -m \
             "feat(registry): ingest ${{ steps.meta.outputs.schema_name }} (issue #${{ github.event.issue.number }})"
           git push
