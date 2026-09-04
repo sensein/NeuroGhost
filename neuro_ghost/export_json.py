@@ -73,12 +73,12 @@ def export_snapshot(conn, registry_version: str) -> dict:
         MATCH (s:SchemaSource)
         RETURN s.id, s.label, s.source_version, s.title, s.publisher, s.contact,
                s.homepage, s.source_iri, s.source_id, s.mime_type,
-               s.created_at, s.registry_version
+               s.created_at, s.registry_version, s.content_hash
     """).get_all()
 
     sources = []
     for (_id, label, ver, title, publisher, contact, homepage,
-         source_iri, source_id, mime_type, created_at, reg_ver) in src_rows:
+         source_iri, source_id, mime_type, created_at, reg_ver, content_hash) in src_rows:
         count = conn.execute("""
             MATCH (n:RegistryClass)-[:HAS_PROVENANCE]->(:ProvenanceEntry)-[:HAD_PRIMARY_SOURCE]->(:SchemaSource {label: $src})
             RETURN count(DISTINCT n)
@@ -91,6 +91,9 @@ def export_snapshot(conn, registry_version: str) -> dict:
             "source_iri": source_iri or "", "source_id": source_id or "",
             "mime_type": mime_type or "", "created_at": created_at or "",
             "registry_version": reg_ver or "",
+            # File-level fingerprint so the UI can pre-check a dropped/pasted
+            # schema against sources already in the registry (see schema_hash.py).
+            "content_hash": content_hash or "",
         })
 
     # ---- classes -----------------------------------------------------------

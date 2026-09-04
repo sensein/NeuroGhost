@@ -323,6 +323,7 @@ classes:
       - source_iri
       - source_version
       - mime_type
+      - content_hash
       - created_at
       - registry_version
       - attestations
@@ -914,6 +915,14 @@ slots:
   mime_type:
     range: string
     description: MIME type of the schema file (e.g. "application/yaml").
+
+  content_hash:
+    range: string
+    description: >-
+      SHA-256 of the schema source's canonicalised raw text — a file-level
+      fingerprint used to detect (and reject) a schema whose exact content is
+      already in the registry before re-ingesting it. Distinct from the
+      per-entity sha256_hash on RegistryClass/RegistryProperty.
 
   created_at:
     range: datetime

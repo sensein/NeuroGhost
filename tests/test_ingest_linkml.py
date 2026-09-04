@@ -33,6 +33,12 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
     """
     parsed = parse_linkml(FIXTURES / "comprehensive.yml")
 
+    # meta.content_hash is a computed file-level fingerprint — verify it, then
+    # pop it so the exact-dict comparison below stays focused on parsed structure.
+    from schema_hash import content_hash
+    assert parsed["meta"].pop("content_hash") == \
+        content_hash((FIXTURES / "comprehensive.yml").read_text())
+
     assert parsed == {
         "meta": {
             "id": "https://example.org/comprehensive",

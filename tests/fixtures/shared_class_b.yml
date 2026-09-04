@@ -1,0 +1,20 @@
+id: https://example.org/shared-b
+name: shared_class_b
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+default_range: string
+classes:
+  Sample:
+    description: A biological sample
+    attributes:
+      tissue:
+        description: Tissue type
+        range: string
+  OnlyInB:
+    description: A class only in schema B
+    attributes:
+      b_field:
+        description: A field unique to B
+        range: string

@@ -89,9 +89,10 @@ from schema_registry_utils import (
 from db import (
     get_connection, make_iri, make_id, now_iso,
     write_registry_entities, write_structural_edges, write_rule_edges,
-    ensure_schema_source, find_id_by_sha256,
+    ensure_schema_source, find_id_by_sha256, find_duplicate_source,
 )
 from source_metadata import load_source_sidecar
+from schema_hash import content_hash
 
 
 def _source_metadata(parsed: dict) -> dict:
@@ -103,6 +104,7 @@ def _source_metadata(parsed: dict) -> dict:
     return {
         "title": meta.get("title", ""),
         "source_id": meta.get("id", ""),
+        "content_hash": meta.get("content_hash", ""),
         **(parsed.get("source_metadata") or {}),
     }
 
@@ -299,6 +301,10 @@ def _parse_schemaview(sv, path: Path) -> dict[str, Any]:
         "title":       sv.schema.title or "",
         "version":     str(sv.schema.version or "1.0.0"),
         "description": sv.schema.description or "",
+        # File-level fingerprint of the raw source text (canonicalised) — lets
+        # ingestion reject a schema that is already in the registry, and lets
+        # the UI pre-check a dropped/pasted file. See schema_hash.py.
+        "content_hash": content_hash(Path(path).read_text()),
     }
 
     classes: dict[str, dict] = {}
@@ -839,6 +845,22 @@ def insert_schema(conn, parsed: dict, source_label: str, agent: str = "anonymous
     Returns a stats dict.
     """
     meta = parsed["meta"]
+    schema_hash = meta.get("content_hash", "")
+
+    # Reject a file whose exact content is already in the registry under a
+    # different source label — the schema was already added (see
+    # find_duplicate_source). Re-ingesting the SAME label is an update, not a
+    # duplicate, and falls through to the normal schema_unchanged path below.
+    if not dry_run:
+        dup = find_duplicate_source(conn, schema_hash, exclude_label=source_label)
+        if dup:
+            return {
+                "classes_new": 0, "classes_existing": 0,
+                "properties_new": 0, "properties_existing": 0,
+                "provenance_added": 0, "rels": 0,
+                "duplicate_of": dup, "skipped": True,
+                "content_hash": schema_hash,
+            }
 
     # SchemaSource must exist before any ProvenanceEntry is built, since
     # had_primary_source is a real FK to it — including in dry-run, which
@@ -1088,6 +1110,11 @@ def cli(file, db, dry_run, verbose, verbose_readable, wipe,
             registry_version=registry_version,
             yml_path=str(path),
         )
+
+        if stats.get("skipped") and stats.get("duplicate_of"):
+            click.echo(f"  Skipped — identical content already ingested as "
+                       f"'{stats['duplicate_of']}'. Not re-added.")
+            continue
 
         prefix = "[dry-run]" if dry_run else "Result:"
         click.echo(

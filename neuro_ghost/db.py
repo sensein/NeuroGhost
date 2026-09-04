@@ -240,7 +240,7 @@ def ensure_schema_source(conn, source_label: str, version: str, registry_version
             source_id: $source_id, source_iri: $source_iri,
             source_version: $source_version, mime_type: $mime_type,
             title: $title, publisher: $publisher, contact: $contact,
-            homepage: $homepage
+            homepage: $homepage, content_hash: $content_hash
         })
     """, {
         "id": node_id, "label": source_label, "t": now_iso(), "rv": registry_version,
@@ -250,8 +250,32 @@ def ensure_schema_source(conn, source_label: str, version: str, registry_version
         "mime_type": md.get("mime_type") or "application/yaml",
         "title": md.get("title", ""), "publisher": md.get("publisher", ""),
         "contact": md.get("contact", ""), "homepage": md.get("homepage", ""),
+        "content_hash": md.get("content_hash", ""),
     })
     return node_id
+
+
+def find_duplicate_source(conn, content_hash: str, exclude_label: str = "") -> str | None:
+    """
+    Return the label of an already-ingested SchemaSource whose file content is
+    identical to `content_hash`, or None. `exclude_label` skips the schema's own
+    prior record, so a re-ingest of the SAME source is an update (handled by the
+    schema_unchanged path), not a "duplicate file". A match under a DIFFERENT
+    label means the exact same schema was already added under another name.
+
+    This is a FILE-level check (see schema_hash.py), separate from the per-entity
+    sha256_hash dedup that already collapses shared classes/properties.
+    """
+    if not content_hash:
+        return None
+    rows = conn.execute(
+        "MATCH (s:SchemaSource) WHERE s.content_hash = $ch RETURN s.label",
+        {"ch": content_hash},
+    ).get_all()
+    for (label,) in rows:
+        if label != exclude_label:
+            return label
+    return None
 
 
 def write_registry_entities(conn, properties: dict, registry_classes: dict,

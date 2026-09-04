@@ -1,5 +1,6 @@
 from conftest import FIXTURES
 from ingest_linkml import insert_schema, parse_linkml
+from schema_hash import content_hash
 
 
 def test_identical_property_from_two_sources_collapses_to_one_entity(conn):
@@ -250,3 +251,72 @@ def test_export_snapshot_includes_source_metadata(conn, tmp_schema):
     assert src["title"] == "ES Schema"
     assert src["homepage"] == "https://es.example/"
     assert src["source_id"] == "https://example.org/es"
+
+
+def test_schema_source_records_and_exports_content_hash(conn):
+    """The file-level content_hash is stored on SchemaSource and surfaced in the
+    export so the UI can pre-check a dropped/pasted file against known sources."""
+    from export_json import export_snapshot
+
+    insert_schema(conn, parse_linkml(FIXTURES / "source_a.yml"), "source_a", agent="tester")
+
+    expected = content_hash((FIXTURES / "source_a.yml").read_text())
+    stored = conn.execute(
+        "MATCH (s:SchemaSource {label: 'source_a'}) RETURN s.content_hash"
+    ).get_next()[0]
+    assert stored == expected
+
+    snap = export_snapshot(conn, "1.0.0")
+    src = next(s for s in snap["sources"] if s["label"] == "source_a")
+    assert src["content_hash"] == expected
+
+
+def test_identical_file_under_a_new_label_is_rejected(conn):
+    """Re-adding the exact same schema file under a DIFFERENT source label is
+    rejected up front — 'this schema is already in the registry' — creating no
+    second SchemaSource and no extra provenance. (Re-ingesting the SAME label is
+    an update, covered by test_reingesting_same_source_is_idempotent.)"""
+    parsed = parse_linkml(FIXTURES / "source_a.yml")
+
+    first = insert_schema(conn, parsed, "source_a", agent="tester")
+    assert first["classes_new"] == 1
+    assert not first.get("skipped")
+
+    second = insert_schema(conn, parsed, "source_a_copy", agent="tester")
+    assert second.get("skipped") is True
+    assert second["duplicate_of"] == "source_a"
+    assert second["classes_new"] == 0
+    assert second["provenance_added"] == 0
+
+    # No SchemaSource was created for the rejected label.
+    labels = {
+        r[0] for r in
+        conn.execute("MATCH (s:SchemaSource) RETURN s.label").get_all()
+    }
+    assert labels == {"source_a"}
+
+
+def test_repeated_class_in_a_different_schema_dedups_but_is_not_rejected(conn):
+    """A schema that REUSES a class also defined in another schema — but is not
+    a byte-identical file — must NOT be caught by the file-level content_hash
+    guard. The shared class dedups to one sha256_hash (existing behaviour), the
+    new schema's own class is still added, and both sources are ingested.
+
+    This is the counterpart to test_identical_file_under_a_new_label_is_rejected:
+    the file guard rejects only whole-file duplicates, never a partial overlap.
+    """
+    a = insert_schema(conn, parse_linkml(FIXTURES / "shared_class_a.yml"), "shared_a", agent="tester")
+    b = insert_schema(conn, parse_linkml(FIXTURES / "shared_class_b.yml"), "shared_b", agent="tester")
+
+    assert not b.get("skipped")          # different file → not rejected
+    assert a["classes_new"] == 2         # Sample + OnlyInA
+    assert b["classes_new"] == 1         # OnlyInB only — Sample deduped
+    assert b["classes_existing"] == 1    # Sample already present
+
+    # Sample is one shared node; OnlyInA and OnlyInB both exist; both sources kept.
+    sample = conn.execute("MATCH (c:RegistryClass {name: 'Sample'}) RETURN c.sha256_hash").get_all()
+    assert len(sample) == 1
+    names = {r[0] for r in conn.execute("MATCH (c:RegistryClass) RETURN c.name").get_all()}
+    assert {"Sample", "OnlyInA", "OnlyInB"} <= names
+    src_labels = {r[0] for r in conn.execute("MATCH (s:SchemaSource) RETURN s.label").get_all()}
+    assert src_labels == {"shared_a", "shared_b"}

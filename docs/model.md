@@ -111,6 +111,7 @@ RegistryValueSet {
 SchemaSource {
     string id
     string contact
+    string content_hash
     datetime created_at
     uri homepage
     boolean is_hub

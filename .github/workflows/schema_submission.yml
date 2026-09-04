@@ -128,6 +128,14 @@ jobs:
           PYEOF
 
       # -----------------------------------------------------------------------
+      # Reject a schema whose exact content is already committed under another
+      # name — "this schema is already in the registry" — before ingesting.
+      - name: Check for duplicate schema
+        run: |
+          python scripts/check_duplicate_schema.py \
+            registry_schemas/${{ steps.meta.outputs.schema_name }}.yml
+
+      # -----------------------------------------------------------------------
       - name: Validate LinkML schema
         run: |
           python neuro_ghost/validate_schema.py \
