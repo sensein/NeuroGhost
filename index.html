@@ -4451,7 +4451,7 @@ function sourceMetadataBlock() {
   return lines.length ? `\n\n### Source metadata\n\`\`\`yaml\n${lines.join('\n')}\n\`\`\`` : '';
 }
 
-ingestBtn.addEventListener('click', () => {
+ingestBtn.addEventListener('click', async () => {
   if (!yamlText) return;
   const info = parseSchemaInfo(yamlText, fileLang);
   // Title MUST start with "schema-submission:" — schema_submission.yml triggers
@@ -4459,11 +4459,25 @@ ingestBtn.addEventListener('click', () => {
   const title = encodeURIComponent(`schema-submission: ${schemaName}`);
   // Fence with the detected language: the workflow converts a ```json /
   // ```json-schema block via from_jsonschema, and treats anything else as
-  // LinkML — so JSON must NOT go out as ```yaml.
-  const body  = encodeURIComponent(
-    `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0,10)}\n\n\`\`\`${fileLang}\n${yamlText.slice(0, 8000)}\n\`\`\`${sourceMetadataBlock()}`
-  );
-  const url = `https://github.com/sensein/NeuroGhost/issues/new?title=${title}&body=${body}&labels=schema-submission`;
+  // LinkML — so JSON must NOT go out as ```yaml. The FULL schema goes in — no
+  // truncation (that produced invalid, cut-off submissions).
+  const fullBody =
+    `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0, 10)}\n\n` +
+    `\`\`\`${fileLang}\n${yamlText}\n\`\`\`${sourceMetadataBlock()}`;
+  const prefillUrl = `https://github.com/sensein/NeuroGhost/issues/new?title=${title}&body=${encodeURIComponent(fullBody)}&labels=schema-submission`;
+
+  // GitHub/browsers cap a prefilled-issue URL (~8 KB); a big schema overflows it
+  // and gets silently cut. When that happens, copy the full submission to the
+  // clipboard and open a blank issue for the user to paste — nothing is lost.
+  const tooLong = prefillUrl.length > 7000;
+  let openUrl = prefillUrl, copied = false;
+  if (tooLong) {
+    try { await navigator.clipboard.writeText(fullBody); copied = true; } catch (e) {}
+    const note = copied
+      ? '_The full submission was copied to your clipboard — paste it here (⌘/Ctrl-V), keep the title, then submit._'
+      : '_This schema is too large to prefill. Paste the whole schema as a `' + fileLang + '` fenced block here, keep the title, then submit._';
+    openUrl = `https://github.com/sensein/NeuroGhost/issues/new?title=${title}&body=${encodeURIComponent(note)}&labels=schema-submission`;
+  }
 
   ingestLog.innerHTML = '';
   ingestLog.classList.add('open');
@@ -4472,8 +4486,13 @@ ingestBtn.addEventListener('click', () => {
   const steps = [
     ['→ Validating schema structure…', ''],
     [`→ Parsed: ${schemaName} · ${info.classes} classes · ${info.slots} slots`, ''],
-    ['→ Opening GitHub issue to trigger CI pipeline…', ''],
-    ['✓ Issue created — Actions will validate, ingest, align, and archive.', 'ok'],
+    tooLong
+      ? [(copied ? '→ Schema too large to prefill — full submission copied to your clipboard.'
+                 : '→ Schema too large to prefill — copy the schema into the issue body yourself.'), '']
+      : ['→ Opening GitHub issue to trigger CI pipeline…', ''],
+    tooLong
+      ? ['✓ Issue opened — paste (⌘/Ctrl-V), keep the title, then submit.', 'ok']
+      : ['✓ Issue created — Actions will validate, ingest, align, and archive.', 'ok'],
   ];
   steps.forEach(([text, cls], i) => {
     setTimeout(() => {
@@ -4482,7 +4501,7 @@ ingestBtn.addEventListener('click', () => {
       d.textContent = text;
       ingestLog.appendChild(d);
       ingestLog.scrollTop = ingestLog.scrollHeight;
-      if (i === steps.length - 1) window.open(url, '_blank');
+      if (i === steps.length - 1) window.open(openUrl, '_blank');
     }, i * 420);
   });
 });
