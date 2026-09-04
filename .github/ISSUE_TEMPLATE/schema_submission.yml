@@ -1,0 +1,75 @@
+name: Schema submission
+description: Submit a LinkML or JSON Schema to the NeuroGhost registry
+title: "schema-submission: "
+labels: ["schema-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a schema to the registry. On submit, a workflow validates it,
+        rebuilds the registry, and opens a **pull request** for review — nothing
+        lands until that PR is merged.
+
+        Finish the **title** above as `schema-submission: <short-name>`, and fill in
+        the fields below. Same fields as the web UI's Ingest page.
+  - type: input
+    id: name
+    attributes:
+      label: Schema name
+      description: Short identifier used as the filename, e.g. `dandi`.
+      placeholder: my-schema
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Format
+      description: How the schema below is written.
+      options:
+        - LinkML (YAML)
+        - JSON Schema
+    validations:
+      required: true
+  - type: textarea
+    id: schema
+    attributes:
+      label: Schema
+      description: Paste the full schema here (LinkML YAML or JSON Schema).
+      render: yaml
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "### Source / bundle metadata (optional) — the same info as the Ingest page"
+  - type: input
+    id: bundle_label
+    attributes:
+      label: Bundle
+      description: >-
+        The logical schema this file belongs to. Leave blank for a new bundle
+        named after the schema. Give several files the same value (e.g. `dandi`)
+        to group them into one bundle.
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: Human-readable schema title, e.g. "DANDI Schema" (auto-filled if the schema declares one).
+  - type: input
+    id: homepage
+    attributes:
+      label: Homepage
+      placeholder: https://…
+  - type: input
+    id: publisher
+    attributes:
+      label: Publisher
+  - type: input
+    id: contact
+    attributes:
+      label: Contact
+      placeholder: email or URL
+  - type: input
+    id: license
+    attributes:
+      label: License
+      placeholder: e.g. CC-BY-4.0

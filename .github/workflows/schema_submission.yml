@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: write
       issues: write
+      pull-requests: write
 
     steps:
       # -----------------------------------------------------------------------
@@ -54,23 +55,44 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Parse issue metadata
         id: meta
+        env:
+          ISSUE_BODY:   ${{ github.event.issue.body }}
+          ISSUE_TITLE:  ${{ github.event.issue.title }}
+          ISSUE_LABELS: ${{ toJson(github.event.issue.labels.*.name) }}
         run: |
-          TITLE="${{ github.event.issue.title }}"
-          SCHEMA_NAME="${TITLE#schema-submission:}"
-          SCHEMA_NAME=$(echo "$SCHEMA_NAME" | xargs | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-          echo "schema_name=$SCHEMA_NAME" >> $GITHUB_OUTPUT
+          python3 - << 'PYEOF'
+          import os, re
 
-          LABELS='${{ toJson(github.event.issue.labels.*.name) }}'
-          if echo "$LABELS" | grep -q "breaking"; then
-            echo "bump=major" >> $GITHUB_OUTPUT
-          else
-            echo "bump=minor" >> $GITHUB_OUTPUT
-          fi
+          body  = os.environ.get("ISSUE_BODY", "") or ""
+          title = os.environ.get("ISSUE_TITLE", "") or ""
+
+          def field(label):
+              m = re.search(r'^###\s+' + re.escape(label) + r'\s*\n(.*?)(?=\n###\s|\Z)',
+                            body, re.DOTALL | re.MULTILINE)
+              if not m:
+                  return ""
+              v = m.group(1).strip()
+              return "" if v == "_No response_" else v
+
+          # Name: prefer the issue-form "Schema name" field; fall back to the
+          # title suffix (the web-UI prefill path: "schema-submission: <name>").
+          name = field("Schema name") or title.split("schema-submission:", 1)[-1]
+          name = re.sub(r'[^a-z0-9]+', '-', name.strip().lower()).strip('-') or "schema"
+
+          bump = "major" if "breaking" in os.environ.get("ISSUE_LABELS", "").lower() else "minor"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"schema_name={name}\n")
+              out.write(f"bump={bump}\n")
+          print("schema_name:", name, "| bump:", bump)
+          PYEOF
 
       # -----------------------------------------------------------------------
-      # Write the submitted schema to registry_schemas/{name}.yml so it's picked up
-      # by pipeline.py alongside all previously committed schemas.
-      - name: Extract and write schema file
+      # Write the submitted schema to registry_schemas/{name}.yml (+ an optional
+      # {name}_source.yaml sidecar of bundle/source metadata) so pipeline.py picks
+      # them up. Reads the issue-form fields, with the web-UI prefill body as a
+      # fallback.
+      - name: Extract schema + metadata
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
           SCHEMA_NAME: ${{ steps.meta.outputs.schema_name }}
@@ -79,24 +101,38 @@ jobs:
           import os, re, sys, json
           import yaml
 
-          body = os.environ["ISSUE_BODY"]
+          body = os.environ.get("ISSUE_BODY", "") or ""
           name = os.environ["SCHEMA_NAME"]
 
+          def field(label):
+              m = re.search(r'^###\s+' + re.escape(label) + r'\s*\n(.*?)(?=\n###\s|\Z)',
+                            body, re.DOTALL | re.MULTILINE)
+              if not m:
+                  return ""
+              v = m.group(1).strip()
+              return "" if v == "_No response_" else v
+
+          # Schema content: the fenced code block (the issue-form textarea renders
+          # as ```yaml; the web-UI prefill fences with the detected language).
           fenced = re.search(r'```([\w-]*)\s*\n(.*?)```', body, re.DOTALL)
           if fenced:
-              lang    = (fenced.group(1) or "yaml").lower()
+              fence_lang = (fenced.group(1) or "").lower()
               content = fenced.group(2).strip()
           else:
-              lang    = "yaml"
-              content = body.strip()
+              fence_lang, content = "", body.strip()
 
-          json_schema_langs = {"json", "json-schema", "jsonschema"}
+          # Format: prefer the "Format" dropdown — the form's textarea always
+          # renders as ```yaml, so the fence can't distinguish JSON from LinkML;
+          # fall back to the fence language for the web-UI prefill path.
+          fmt = field("Format").lower()
+          json_langs = {"json", "json-schema", "jsonschema"}
+          is_json = ("json" in fmt) if fmt else (fence_lang in json_langs)
 
           os.makedirs("registry_schemas", exist_ok=True)
           out_path = f"registry_schemas/{name}.yml"
 
-          if lang in json_schema_langs:
-              print(f"Detected format: JSON Schema ({lang!r}) — converting…")
+          if is_json:
+              print("Format: JSON Schema — converting…")
               sys.path.insert(0, ".")
               from neuro_ghost.converters.from_jsonschema import convert as js2lm
               try:
@@ -107,24 +143,33 @@ jobs:
               with open(out_path, "w") as f:
                   yaml.dump(linkml_dict, f, default_flow_style=False,
                             allow_unicode=True, sort_keys=False)
-              print(f"Converted → {out_path} "
-                    f"({len(linkml_dict['classes'])} classes)")
+              print(f"Converted → {out_path} ({len(linkml_dict['classes'])} classes)")
           else:
-              print(f"Detected format: LinkML ({lang!r})")
+              print("Format: LinkML")
               with open(out_path, "w") as f:
                   f.write(content)
               print(f"Wrote {out_path}")
 
-          # Optional "### Source metadata" block from the issue → a
-          # <name>_source.yaml sidecar that parse_linkml() picks up next to the
-          # schema (title/homepage/publisher/contact, keyed by SchemaSource slot).
-          meta_m = re.search(r'###\s*Source metadata\s*\n+```[\w-]*\s*\n(.*?)```',
-                             body, re.DOTALL)
-          if meta_m and meta_m.group(1).strip():
-              sc_path = f"registry_schemas/{name}_source.yaml"
-              with open(sc_path, "w") as f:
-                  f.write(meta_m.group(1).strip() + "\n")
-              print(f"Wrote source-metadata sidecar {sc_path}")
+          # Source/bundle metadata sidecar from the form fields (keys = SchemaSource
+          # / SchemaBundle slot names), with the web-UI's "### Source metadata" yaml
+          # block as a fallback.
+          meta = {}
+          for key, label in [("bundle_label", "Bundle"), ("title", "Title"),
+                             ("homepage", "Homepage"), ("publisher", "Publisher"),
+                             ("contact", "Contact"), ("license", "License")]:
+              v = field(label)
+              if v:
+                  meta[key] = v
+          sm = re.search(r'###\s*Source metadata\s*\n+```[\w-]*\s*\n(.*?)```', body, re.DOTALL)
+          if sm:
+              old = yaml.safe_load(sm.group(1))
+              if isinstance(old, dict):
+                  for k, v in old.items():
+                      meta.setdefault(k, v)
+          if meta:
+              with open(f"registry_schemas/{name}_source.yaml", "w") as f:
+                  yaml.safe_dump(meta, f, sort_keys=False, allow_unicode=True)
+              print("Wrote sidecar:", list(meta))
           PYEOF
 
       # -----------------------------------------------------------------------
@@ -155,21 +200,39 @@ jobs:
             --agent "${{ github.event.issue.user.login }}"
 
       # -----------------------------------------------------------------------
-      - name: Commit registry + schema file
+      # Propose the ingested schema + rebuilt data as a PULL REQUEST (a review
+      # gate) rather than committing straight to main — additions to the general
+      # registry go through review.
+      - name: Open pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          NAME="${{ steps.meta.outputs.schema_name }}"
+          ISSUE="${{ github.event.issue.number }}"
+          BRANCH="schema-submission/${NAME}-issue-${ISSUE}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add \
-            registry_schemas/${{ steps.meta.outputs.schema_name }}.yml \
+            registry_schemas/${NAME}.yml \
             data/registry.json \
             data/versions/ \
             data/provenance.json
-          # The source-metadata sidecar is optional — add it only if written.
-          SIDECAR="registry_schemas/${{ steps.meta.outputs.schema_name }}_source.yaml"
+          SIDECAR="registry_schemas/${NAME}_source.yaml"
           [ -f "$SIDECAR" ] && git add "$SIDECAR" || true
-          git diff --cached --quiet || git commit -m \
-            "feat(registry): ingest ${{ steps.meta.outputs.schema_name }} (issue #${{ github.event.issue.number }})"
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes to propose (schema already in the registry)."
+            echo "pr_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "feat(registry): ingest ${NAME} (issue #${ISSUE})"
+          git push -u origin "$BRANCH"
+          PR_URL=$(gh pr create --base main --head "$BRANCH" \
+            --label schema-submission \
+            --title "Ingest schema: ${NAME} (issue #${ISSUE})" \
+            --body "Automated ingestion of \`${NAME}\` from issue #${ISSUE}. Review the schema and the rebuilt \`data/registry.json\` before merging into the registry. Closes #${ISSUE}")
+          echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
       - name: Comment success
@@ -177,24 +240,22 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const name     = "${{ steps.meta.outputs.schema_name }}";
-            const pagesUrl = "https://sensein.group/NeuroGhost/";
+            const name  = "${{ steps.meta.outputs.schema_name }}";
+            const prUrl = "${{ steps.pr.outputs.pr_url }}";
+            const body = prUrl
+              ? [
+                  `✅ **\`${name}\` validated and ingested — opened a PR for review.**`,
+                  ``,
+                  `${prUrl}`,
+                  ``,
+                  `Merging that PR adds the schema and the rebuilt registry, and closes this issue. Nothing lands in the registry until it's reviewed.`,
+                ].join("\n")
+              : [
+                  `ℹ️ **\`${name}\` is already in the registry** — validated, but there was nothing new to propose.`,
+                ].join("\n");
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: [
-                `✅ **\`${name}\` ingested successfully.**`,
-                ``,
-                `- All schemas rebuilt and aligned.`,
-                `- Provenance logged to \`data/provenance.json\`.`,
-                `- Archived snapshot in \`data/versions/\`.`,
-                ``,
-                `Browse: ${pagesUrl}`,
-              ].join("\n"),
-            });
-            await github.rest.issues.update({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, state: "closed",
+              issue_number: context.issue.number, body,
             });
 
       - name: Comment failure

@@ -3,6 +3,7 @@
 > **Status: Provisional** — This document tracks the satellite modules that
 > feed into or extend the NeuroGhost registry. It is a living spec; entries
 > are added as modules are formally onboarded.
+> **The page needs updates!**
 
 ---
 
