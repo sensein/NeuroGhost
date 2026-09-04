@@ -1,0 +1,27 @@
+name: prform
+description: Throwaway JSON Schema to test the issue-form ingestion path.
+id: https://registry.sensein.io/schema/prform
+version: 1.0.0
+imports:
+- linkml:types
+prefixes:
+  PrForm: https://example.org/PrForm
+  linkml: https://w3id.org/linkml/
+default_prefix: PrForm
+default_range: string
+slots:
+  identifier:
+    description: An identifier.
+  note:
+    description: A note.
+classes:
+  PrForm:
+    description: Throwaway JSON Schema to test the issue-form ingestion path.
+    slots:
+    - identifier
+    - note
+    slot_usage:
+      identifier:
+        description: An identifier.
+      note:
+        description: A note.
