@@ -146,6 +146,12 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .c-col-title{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
   color:var(--muted);font-weight:600;}
 .c-col-count{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+.c-mode-toggle{display:inline-flex;gap:2px;background:var(--bg-2,rgba(255,255,255,.04));
+  border:1px solid var(--border);border-radius:6px;padding:2px;}
+.c-mode-btn{background:none;border:none;cursor:pointer;border-radius:4px;padding:3px 9px;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;
+  color:var(--muted);}
+.c-mode-btn.active{background:var(--teal);color:#0a1017;}
 
 /* source filter */
 .c-src-list{overflow-y:auto;padding:8px 10px;}
@@ -961,7 +967,10 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
     </div>
     <div class="c-col">
       <div class="c-col-head">
-        <span class="c-col-title">Classes</span>
+        <div class="c-mode-toggle">
+          <button class="c-mode-btn active" data-mode="classes">Classes</button>
+          <button class="c-mode-btn" data-mode="properties">Properties</button>
+        </div>
         <span class="c-col-count" id="c-list-count">—</span>
       </div>
       <div class="c-search">
@@ -1672,7 +1681,10 @@ const CONCEPT = {
   sources:  null,          // full source list [{label, version, class_count}]
   enabled:  null,          // Set of enabled source labels
   query:    '',
+  mode:     'classes',     // 'classes' | 'properties'
   selected: null,          // hash_id of the currently-open class
+  selectedProp: null,      // hash_id of the currently-open property
+  properties: [],          // deduped properties (by hash_id) across all classes
   weights:  { iri: 40, name: 25, desc: 25, slot: 10 },
   initted:  false,
 };
@@ -1690,36 +1702,96 @@ async function initConcepts() {
   }
   CONCEPT.registry = d;
 
-  // Compute per-source class counts from the actual data (may differ from
-  // sources[].class_count when a class is attributed to multiple sources).
-  const counts = {};
-  d.classes.forEach(c => (c.sources || []).forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
+  // Properties are namespaced by class in the data (e.g. "Dandiset__id"). Group
+  // by the BARE name ("id") so the list shows the concept once, and aggregate
+  // the classes it occurs in, its sources, ranges, and definitions.
+  const propMap = new Map();
+  d.classes.forEach(c => (c.properties || []).forEach(p => {
+    const bare = barePropName(p.name);
+    let e = propMap.get(bare);
+    if (!e) { e = { name: bare, classes: new Set(), sources: new Set(), ranges: new Set(), defs: new Set(), iri: '' }; propMap.set(bare, e); }
+    e.classes.add(c.name);
+    (p.sources || []).forEach(s => e.sources.add(s));
+    if (p.value_range) e.ranges.add(p.value_range);
+    if (p.definition) e.defs.add(p.definition);
+    if (!e.iri && p.iri) e.iri = p.iri;
+  }));
+  CONCEPT.properties = [...propMap.values()].map(e => ({
+    name: e.name,
+    classes: [...e.classes], sources: [...e.sources],
+    ranges: [...e.ranges], defs: [...e.defs], iri: e.iri,
+  }));
+
+  // Source list order is stable (by class count); the per-source counts shown
+  // update with the active mode (see sourceCounts()).
+  const classCounts = {};
+  d.classes.forEach(c => (c.sources || []).forEach(s => { classCounts[s] = (classCounts[s] || 0) + 1; }));
   const declared = new Set(d.sources.map(s => s.label));
-  const observed = Object.keys(counts).filter(k => !declared.has(k))
-    .map(label => ({ label, version: null, class_count: counts[label] }));
+  const observed = Object.keys(classCounts).filter(k => !declared.has(k))
+    .map(label => ({ label, version: null, class_count: classCounts[label] }));
   CONCEPT.sources = [...d.sources, ...observed]
-    .sort((a, b) => (counts[b.label] || 0) - (counts[a.label] || 0));
+    .sort((a, b) => (classCounts[b.label] || 0) - (classCounts[a.label] || 0));
   CONCEPT.enabled = new Set(CONCEPT.sources.map(s => s.label));
 
-  renderSources(counts);
-  renderClassList();
+  renderList();
 
-  // wire search + toolbar (only once)
+  // Mode toggle (Classes / Properties)
+  document.querySelectorAll('.c-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode));
+  });
+  // search + source toolbar (wired once)
   document.getElementById('c-search-input').addEventListener('input', e => {
     CONCEPT.query = e.target.value.trim().toLowerCase();
-    renderClassList();
+    renderList();
   });
   document.getElementById('c-src-all').addEventListener('click', () => {
     CONCEPT.enabled = new Set(CONCEPT.sources.map(s => s.label));
-    renderSources(counts); renderClassList();
+    renderList();
   });
   document.getElementById('c-src-none').addEventListener('click', () => {
     CONCEPT.enabled = new Set();
-    renderSources(counts); renderClassList();
+    renderList();
   });
 }
 
-function renderSources(counts) {
+// ── mode-aware helpers (Classes / Properties) ──
+// Property names are namespaced "<Class>__<prop>"; strip to the bare prop name.
+function barePropName(name) {
+  const i = (name || '').lastIndexOf('__');
+  return i >= 0 ? name.slice(i + 2) : (name || '');
+}
+function currentItems() {
+  return CONCEPT.mode === 'properties' ? CONCEPT.properties : (CONCEPT.registry.classes || []);
+}
+function sourceCounts() {
+  const counts = {};
+  currentItems().forEach(it => (it.sources || []).forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
+  return counts;
+}
+function renderList() {
+  renderSources();
+  if (CONCEPT.mode === 'properties') renderPropertyList();
+  else renderClassList();
+}
+function conceptPlaceholder() {
+  const el = document.getElementById('c-detail');
+  el.className = 'c-detail-placeholder';
+  el.innerHTML = `<span>Select a ${CONCEPT.mode === 'properties' ? 'property' : 'class'} to see details.</span>`;
+}
+function setMode(mode) {
+  if (CONCEPT.mode === mode) return;
+  CONCEPT.mode = mode;
+  CONCEPT.selected = null; CONCEPT.selectedProp = null;
+  document.querySelectorAll('.c-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  const si = document.getElementById('c-search-input');
+  if (si) si.placeholder = mode === 'properties'
+    ? 'Filter properties by name or definition…' : 'Filter classes by name or definition…';
+  conceptPlaceholder();
+  renderList();
+}
+
+function renderSources() {
+  const counts = sourceCounts();
   const el = document.getElementById('c-src-list');
   el.innerHTML = CONCEPT.sources.map(s => {
     const on = CONCEPT.enabled.has(s.label);
@@ -1735,7 +1807,7 @@ function renderSources(counts) {
       const label = row.dataset.label;
       if (CONCEPT.enabled.has(label)) CONCEPT.enabled.delete(label);
       else CONCEPT.enabled.add(label);
-      renderSources(counts); renderClassList();
+      renderList();
     });
   });
 }
@@ -1784,6 +1856,74 @@ function renderClassList() {
       renderConceptDetail();
     });
   });
+}
+
+function propPassesFilter(p) {
+  const srcOk = (p.sources || []).some(s => CONCEPT.enabled.has(s));
+  if (!srcOk) return false;
+  if (!CONCEPT.query) return true;
+  const q = CONCEPT.query;
+  return (p.name || '').toLowerCase().includes(q)
+      || (p.defs || []).some(dfn => (dfn || '').toLowerCase().includes(q));
+}
+
+function renderPropertyList() {
+  const listEl = document.getElementById('c-class-list');
+  const countEl = document.getElementById('c-list-count');
+  const filtered = CONCEPT.properties.filter(propPassesFilter);
+  filtered.sort((a, b) => a.name.localeCompare(b.name));
+  countEl.textContent = `${filtered.length} / ${CONCEPT.properties.length}`;
+
+  if (!filtered.length) {
+    listEl.innerHTML = '<div class="c-empty">No properties match the current filter.</div>';
+    return;
+  }
+  const shown = filtered.slice(0, 500);
+  listEl.innerHTML = shown.map(p => `
+      <div class="c-cls-row${CONCEPT.selectedProp === p.name ? ' selected' : ''}" data-hash="${esc(p.name)}">
+        <div class="c-cls-main">
+          <div class="c-cls-name">${esc(p.name)}</div>
+          <div class="c-cls-def">${esc((p.defs[0] || '').slice(0, 120) || '—')}</div>
+        </div>
+        ${(p.sources || []).slice(0, 1).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}
+        <span class="c-align-badge">${p.classes.length}</span>
+      </div>`).join('') + (filtered.length > shown.length
+    ? `<div class="c-empty">${filtered.length - shown.length} more — refine the filter to see them.</div>`
+    : '');
+
+  listEl.querySelectorAll('.c-cls-row').forEach(row => {
+    row.addEventListener('click', () => {
+      CONCEPT.selectedProp = row.dataset.hash;
+      renderPropertyList();
+      renderPropertyDetail();
+    });
+  });
+}
+
+function renderPropertyDetail() {
+  const el = document.getElementById('c-detail');
+  const p  = CONCEPT.properties.find(x => x.name === CONCEPT.selectedProp);
+  if (!p) { conceptPlaceholder(); return; }
+  el.className = 'c-detail';
+  const iriHtml = p.iri
+    ? `<div class="c-dn-iri"><a href="${esc(p.iri)}" target="_blank" rel="noopener">${esc(p.iri)}</a></div>`
+    : '';
+  const classes = (p.classes || []).slice().sort((a, b) => a.localeCompare(b));
+  const defs    = p.defs || [];
+  const ranges  = (p.ranges || []).filter(Boolean);
+  el.innerHTML = `
+    <div class="c-dn">${esc(p.name)}</div>
+    ${iriHtml}
+    <div class="c-src-row">${(p.sources || []).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}</div>
+    <div class="c-def">${esc(defs[0] || '—')}${defs.length > 1 ? ` <span class="c-prop-more">(+${defs.length - 1} other definition${defs.length > 2 ? 's' : ''})</span>` : ''}</div>
+
+    <div class="c-section">Type${ranges.length > 1 ? 's' : ''}</div>
+    <div class="c-prop"><span class="c-prop-name">${ranges.length ? esc(ranges.join(', ')) : '—'}</span></div>
+
+    <div class="c-section">Used in (${classes.length} class${classes.length === 1 ? '' : 'es'})</div>
+    ${classes.slice(0, 80).map(n => `<div class="c-prop"><span class="c-prop-name">${esc(n)}</span></div>`).join('')}
+    ${classes.length > 80 ? `<div class="c-prop-more">+${classes.length - 80} more</div>` : ''}
+  `;
 }
 
 function conceptWeightedDistance(a) {
