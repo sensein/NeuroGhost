@@ -765,6 +765,12 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 
 /* ══ INGEST ══════════════════════════════════════════════════════════════ */
 #view-ingest{overflow-y:auto;}
+.ingest-note{background:var(--purple-soft);border:1px solid var(--purple-line);
+  color:var(--text-dim);border-radius:8px;padding:10px 13px;font-size:11.5px;line-height:1.55;}
+.ingest-note strong{color:var(--text);}
+.ingest-note em{font-style:italic;color:var(--text);}
+.ingest-note code{font-family:var(--mono);font-size:10.5px;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:0 4px;}
 .ingest-col{max-width:600px;width:100%;margin:0 auto;padding:28px 24px 44px;
   display:flex;flex-direction:column;gap:16px;}
 
@@ -1310,6 +1316,16 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 <!-- ── Ingest ──────────────────────────────────────────── -->
 <div id="view-ingest" class="view">
   <div class="ingest-col">
+    <div class="ingest-note">
+      <strong>Experimental — semi-manual for now.</strong> Submitting opens a
+      prefilled GitHub <em>issue</em> that a workflow then ingests, so it needs
+      your GitHub sign-in (and an SSO login for the <code>sensein</code> org).
+      A large schema exceeds GitHub's URL limit and is instead copied to your
+      clipboard to paste into the issue body. The reliable path is to add the
+      schema to <code>registry_schemas/</code> and run
+      <code>pipeline.py --fresh</code>.
+    </div>
+
     <!-- 1. upload / paste -->
     <div id="drop-zone" class="drop-zone">
       <div class="drop-center" id="drop-center">
