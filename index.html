@@ -1318,12 +1318,13 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   <div class="ingest-col">
     <div class="ingest-note">
       <strong>Experimental — semi-manual for now.</strong> Submitting opens a
-      prefilled GitHub <em>issue</em> that a workflow then ingests, so it needs
-      your GitHub sign-in (and an SSO login for the <code>sensein</code> org).
-      A large schema exceeds GitHub's URL limit and is instead copied to your
-      clipboard to paste into the issue body. The reliable path is to add the
-      schema to <code>registry_schemas/</code> and run
-      <code>pipeline.py --fresh</code>.
+      prefilled GitHub <em>issue form</em> (needs your GitHub sign-in, plus an SSO
+      login for the <code>sensein</code> org). You review and submit it; a workflow
+      then validates the schema, rebuilds the registry, and opens a
+      <strong>pull request for review</strong> — nothing lands until it's merged.
+      A large schema is copied to your clipboard to paste into the form's Schema
+      field. The most reliable path is still to add the schema to
+      <code>registry_schemas/</code> and run <code>pipeline.py --fresh</code>.
     </div>
 
     <!-- 1. upload / paste -->
@@ -1425,7 +1426,7 @@ const TAB_DESC = {
   transform:'Map one class’s fields onto another to translate records between schemas. Fields match by name and pipeline alignment; each row shows the target field and a confidence score.',
   query:    'Free-text search across every class, property, and IRI in the registry. Hits are ranked by relevance — click one to open its details.',
   compose:  'Build a custom LinkML schema: pick classes from the registry, toggle which slots to include, and export the result.',
-  ingest:   'Submit a new schema — LinkML YAML or JSON Schema. It opens a pre-filled GitHub issue that triggers ingestion, adding the schema and re-aligning the registry.',
+  ingest:   'Submit a new schema — LinkML YAML or JSON Schema. It opens a pre-filled GitHub issue form; on submit, a workflow validates and ingests it and opens a pull request for review.',
   sources:  'The schemas registered so far, with their version, class and property counts, and when each was last ingested. This is where a source’s metadata (homepage, publisher, …) surfaces as it gets populated.',
   meta:     'The registry’s own data model — its entity types (RegistryClass, RegistryProperty, RegistryRule, …) and how they relate. Generated from meta_model.yaml.',
 };
@@ -4448,29 +4449,6 @@ document.getElementById('paste-toggle').addEventListener('click', showPasteMode)
   } catch (e) {}
 })();
 
-// Optional source metadata (homepage/publisher/…) → a marked YAML block the
-// workflow writes to `<schema>_source.yaml` next to the schema. Empty → omitted.
-function sourceMetadataBlock() {
-  const bundleSel = document.getElementById('im-bundle');
-  const bundleNew = document.getElementById('im-bundle-new');
-  // An existing bundle → its label; "＋ New bundle…" → the typed name (blank =>
-  // omitted, so ingestion defaults the bundle to the schema's own name).
-  const bundle_label = (bundleSel && bundleSel.value !== '__new__')
-    ? bundleSel.value
-    : ((bundleNew || {}).value || '').trim();
-  const fields = {
-    bundle_label,
-    title:     (document.getElementById('im-title')     || {}).value,
-    homepage:  (document.getElementById('im-homepage')  || {}).value,
-    publisher: (document.getElementById('im-publisher') || {}).value,
-    contact:   (document.getElementById('im-contact')   || {}).value,
-  };
-  const lines = Object.entries(fields)
-    .filter(([, v]) => (v || '').trim())
-    .map(([k, v]) => `${k}: ${v.trim()}`);
-  return lines.length ? `\n\n### Source metadata\n\`\`\`yaml\n${lines.join('\n')}\n\`\`\`` : '';
-}
-
 ingestBtn.addEventListener('click', async () => {
   if (!yamlText) return;
   const info = parseSchemaInfo(yamlText, fileLang);
@@ -4551,9 +4529,9 @@ function parseYAML(raw) {
 }
 
 // Detect submission format from content: a JSON Schema is valid JSON (starts
-// with '{'); LinkML is YAML. The filename extension is a fallback hint. The
-// workflow converts JSON -> LinkML server-side (from_jsonschema); the UI only
-// needs to fence it correctly and preview it.
+// with '{'); LinkML is YAML. The filename extension is a fallback hint. Used to
+// preview the schema and hint which Format to pick in the submission form (the
+// workflow converts JSON -> LinkML server-side via from_jsonschema).
 function detectLang(text, name) {
   const t = (text || '').trim();
   if (t.startsWith('{')) return 'json';
