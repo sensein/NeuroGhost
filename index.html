@@ -1384,6 +1384,10 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 </div>
 
 <script>
+// Where schema-submission issues are created and linked. Point this at your own
+// fork to avoid an org's SAML-SSO re-login prompt when you're already signed in
+// to GitHub — your fork runs the same schema_submission workflow.
+const ISSUE_REPO = 'djarecka/NeuroGhost';
 // ────────────────────────────────────────────────────────
 // Theme toggle (light / dark) — persisted in localStorage; the saved theme is
 // already applied pre-paint by the inline script in <head>.
@@ -3804,7 +3808,7 @@ function renderProvDetail(e) {
 
   const derivedFrom = e.previous_version
     ? `v${e.previous_version}${e.trigger === 'issue' && e.issue_number
-        ? ` · <a href="https://github.com/sensein/NeuroGhost/issues/${esc(e.issue_number)}" target="_blank" rel="noopener">issue #${esc(e.issue_number)}</a>` : ''}`
+        ? ` · <a href="https://github.com/${ISSUE_REPO}/issues/${esc(e.issue_number)}" target="_blank" rel="noopener">issue #${esc(e.issue_number)}</a>` : ''}`
     : '<span class="dim">— genesis —</span>';
 
   const archiveHref = e.archive_path
@@ -3812,7 +3816,7 @@ function renderProvDetail(e) {
     : '<span class="dim">not archived</span>';
 
   const issueChunk = e.issue_number
-    ? `<a href="https://github.com/sensein/NeuroGhost/issues/${esc(e.issue_number)}" target="_blank" rel="noopener">#${esc(e.issue_number)}</a>`
+    ? `<a href="https://github.com/${ISSUE_REPO}/issues/${esc(e.issue_number)}" target="_blank" rel="noopener">#${esc(e.issue_number)}</a>`
     : '<span class="dim">—</span>';
 
   el.innerHTML = `
@@ -4464,7 +4468,7 @@ ingestBtn.addEventListener('click', async () => {
   const fullBody =
     `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0, 10)}\n\n` +
     `\`\`\`${fileLang}\n${yamlText}\n\`\`\`${sourceMetadataBlock()}`;
-  const prefillUrl = `https://github.com/sensein/NeuroGhost/issues/new?title=${title}&body=${encodeURIComponent(fullBody)}&labels=schema-submission`;
+  const prefillUrl = `https://github.com/${ISSUE_REPO}/issues/new?title=${title}&body=${encodeURIComponent(fullBody)}&labels=schema-submission`;
 
   // GitHub/browsers cap a prefilled-issue URL (~8 KB); a big schema overflows it
   // and gets silently cut. When that happens, copy the full submission to the
@@ -4476,7 +4480,7 @@ ingestBtn.addEventListener('click', async () => {
     const note = copied
       ? '_The full submission was copied to your clipboard — paste it here (⌘/Ctrl-V), keep the title, then submit._'
       : '_This schema is too large to prefill. Paste the whole schema as a `' + fileLang + '` fenced block here, keep the title, then submit._';
-    openUrl = `https://github.com/sensein/NeuroGhost/issues/new?title=${title}&body=${encodeURIComponent(note)}&labels=schema-submission`;
+    openUrl = `https://github.com/${ISSUE_REPO}/issues/new?title=${title}&body=${encodeURIComponent(note)}&labels=schema-submission`;
   }
 
   ingestLog.innerHTML = '';
