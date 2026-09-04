@@ -909,9 +909,10 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .src-link:hover{text-decoration:underline;}
 .src-parts{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
 .src-parts-h{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;}
-.src-part{display:flex;justify-content:space-between;gap:12px;font-size:11.5px;padding:2px 0;}
+.src-part{display:flex;flex-wrap:wrap;justify-content:space-between;gap:3px 12px;font-size:11.5px;padding:3px 0;}
 .src-part-name{font-family:var(--mono);color:var(--text);}
 .src-part-bits{color:var(--muted);font-family:var(--mono);font-size:10.5px;white-space:nowrap;}
+.src-part-src{flex-basis:100%;color:var(--muted);font-family:var(--mono);font-size:10.5px;word-break:break-all;}
 .src-hash{color:var(--text-dim);}
 </style>
 </head>
@@ -1355,7 +1356,7 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
         <input class="ingest-meta-input" id="im-bundle-new" type="text" placeholder="new bundle name (blank = schema name)" spellcheck="false" autocomplete="off"/>
       </div>
       <div class="ingest-meta-grid">
-        <input class="ingest-meta-input" id="im-title" type="text" placeholder="title" spellcheck="false" autocomplete="off"/>
+        <input class="ingest-meta-input" id="im-title" type="text" placeholder="bundle title (optional)" spellcheck="false" autocomplete="off"/>
         <input class="ingest-meta-input" id="im-homepage" type="text" placeholder="homepage (https://…)" spellcheck="false" autocomplete="off"/>
         <input class="ingest-meta-input" id="im-publisher" type="text" placeholder="publisher" spellcheck="false" autocomplete="off"/>
         <input class="ingest-meta-input" id="im-contact" type="text" placeholder="contact (email or URL)" spellcheck="false" autocomplete="off"/>
@@ -1485,15 +1486,9 @@ async function initSources() {
     const ver = bundle.version || bundle.source_version || '';
 
     const rows = [];
-    // Prefer the schema's own declared id (a real, navigable URL) over the
-    // synthetic registry source_iri; render it as a link when it's http(s).
-    const src = bundle.source_id || bundle.source_iri;
-    if (src) {
-      const isUrl = /^https?:\/\//i.test(src);
-      rows.push(['Source', isUrl
-        ? `<a class="src-link" href="${esc(src)}" target="_blank" rel="noopener">${esc(src)}</a>`
-        : esc(src)]);
-    }
+    // Shared, bundle-level metadata only — per-file provenance (each file's own
+    // Source link) is rendered per part in the Files section below.
+    if (bundle.description) rows.push(['Description', esc(bundle.description)]);
     if (bundle.homepage)  rows.push(['Homepage', `<a class="src-link" href="${esc(bundle.homepage)}" target="_blank" rel="noopener">${esc(bundle.homepage)}</a>`]);
     if (bundle.publisher) rows.push(['Publisher', esc(bundle.publisher)]);
     if (bundle.contact)   rows.push(['Contact', esc(bundle.contact)]);
@@ -1516,9 +1511,22 @@ async function initSources() {
           f.mime_type ? esc(String(f.mime_type).replace('application/', '')) : '',
           f.content_hash ? `<span class="src-hash">${esc(String(f.content_hash).slice(0, 10))}…</span>` : '',
         ].filter(Boolean).join(' · ');
+        // Per-file source: the physical file's own declared origin.
+        const sid = f.source_id || f.source_iri || '';
+        const srcBit = sid
+          ? (/^https?:\/\//i.test(sid)
+              ? `<a class="src-link" href="${esc(sid)}" target="_blank" rel="noopener">${esc(sid)}</a>`
+              : esc(sid))
+          : '';
         return `<div class="src-part"><span class="src-part-name">${esc(pl)}</span>` +
-               `${bits ? `<span class="src-part-bits">${bits}</span>` : ''}</div>`;
+               `${bits ? `<span class="src-part-bits">${bits}</span>` : ''}` +
+               `${srcBit ? `<span class="src-part-src">Source: ${srcBit}</span>` : ''}</div>`;
       }).join('') + `</div>`;
+
+    // Bundle display title: the explicit bundle title, else — for a bundle of a
+    // single file — that file's own title (so single-schema cards keep their name).
+    const displayTitle = bundle.title
+      || (parts.length === 1 ? ((srcByLabel.get(parts[0]) || {}).title || '') : '');
 
     const metaHtml =
       `<div class="src-meta">` +
@@ -1531,7 +1539,7 @@ async function initSources() {
       <div class="src-card src-expandable">
         <div class="src-card-head">
           <span class="src-name">${esc(bundle.label)}</span>
-          ${bundle.title ? `<span class="src-title">${esc(bundle.title)}</span>` : ''}
+          ${displayTitle ? `<span class="src-title">${esc(displayTitle)}</span>` : ''}
           ${parts.length > 1 ? `<span class="src-hub">${parts.length} files</span>` : ''}
           ${ver ? `<span class="src-ver">v${esc(ver)}</span>` : ''}
           <span class="src-caret" aria-hidden="true">▶</span>
@@ -4469,7 +4477,7 @@ ingestBtn.addEventListener('click', async () => {
   base.set('name', schemaName);
   const addIf = (k, v) => { if (v) base.set(k, v); };
   addIf('bundle_label', bundle_label);
-  addIf('schema_title', val('im-title'));
+  addIf('bundle_title', val('im-title'));
   addIf('homepage',  val('im-homepage'));
   addIf('publisher', val('im-publisher'));
   addIf('contact',   val('im-contact'));

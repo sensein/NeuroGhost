@@ -95,20 +95,39 @@ from source_metadata import load_source_sidecar
 from schema_hash import content_hash
 
 
-def _source_metadata(parsed: dict) -> dict:
-    """SchemaSource descriptive metadata, keyed by slot name: `title` and
-    `source_id` propagated from the schema's own `title:`/`id:`, overlaid with
-    its optional `<stem>_source.yaml` sidecar (publisher/contact/homepage/
-    source_iri/…, which may also override the propagated values)."""
+_BUNDLE_PREFIX = "bundle_"
+
+
+def _split_metadata(parsed: dict) -> tuple[dict, dict]:
+    """Split a schema's metadata into (per-file SchemaSource, shared SchemaBundle)
+    dicts, each keyed by slot name.
+
+    Per-file source metadata is *propagated* from the schema itself — its
+    `title:` / `description:` / `id:` (→ source_id) / `license:` — and overlaid
+    with the **bare** keys of its optional `<stem>_source.yaml` sidecar
+    (source_id/source_iri/source_version/homepage/…).
+
+    Bundle metadata comes only from the sidecar's `bundle_`-prefixed keys, with
+    the prefix stripped: `bundle_label`, `bundle_title` (→ title),
+    `bundle_homepage`, `bundle_publisher`, … So a bare `homepage:` describes the
+    file while `bundle_homepage:` describes the whole bundle."""
     meta = parsed.get("meta", {})
-    return {
+    sidecar = parsed.get("source_metadata") or {}
+    bundle_md, source_sidecar = {}, {}
+    for k, v in sidecar.items():
+        if k.startswith(_BUNDLE_PREFIX):
+            bundle_md[k[len(_BUNDLE_PREFIX):]] = v
+        else:
+            source_sidecar[k] = v
+    source_md = {
         "title": meta.get("title", ""),
         "description": meta.get("description", ""),
         "source_id": meta.get("id", ""),
         "license": meta.get("license", ""),
         "content_hash": meta.get("content_hash", ""),
-        **(parsed.get("source_metadata") or {}),
+        **source_sidecar,
     }
+    return source_md, bundle_md
 
 DB_PATH = "./registry.lbug"
 
@@ -868,9 +887,10 @@ def insert_schema(conn, parsed: dict, source_label: str, agent: str = "anonymous
     # SchemaSource must exist before any ProvenanceEntry is built, since
     # had_primary_source is a real FK to it — including in dry-run, which
     # gets a throwaway placeholder id instead of writing anything.
+    _src_md, _bundle_md = _split_metadata(parsed)
     schema_source_id = ensure_schema_source(
         conn, source_label, meta["version"], registry_version, dry_run=dry_run,
-        metadata=_source_metadata(parsed),
+        metadata=_src_md, bundle_metadata=_bundle_md,
     )
 
     properties, registry_classes, value_sets, permissible_values, rules, provenance_entries = build_registry_entities(
@@ -1096,10 +1116,11 @@ def cli(file, db, dry_run, verbose, verbose_readable, wipe,
             # RegistryClass/RegistryProperty writes happen here) and the
             # real conn for dedup lookups, so ids shown here match what a
             # subsequent non-dry-run insert_schema() would actually produce.
+            _p_src_md, _p_bundle_md = _split_metadata(parsed)
             preview_source_id = ensure_schema_source(
                 conn, source_label, parsed["meta"]["version"],
                 registry_version, dry_run=dry_run,
-                metadata=_source_metadata(parsed),
+                metadata=_p_src_md, bundle_metadata=_p_bundle_md,
             )
             p_props, p_classes, p_vs, p_pvs, p_rules, p_provs = build_registry_entities(
                 parsed, preview_source_id, agent, issue, registry_version, conn=conn,

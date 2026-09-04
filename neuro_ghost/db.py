@@ -214,13 +214,16 @@ def ensure_schema_bundle(conn, label: str, version: str,
     `bundle_label`, defaulting to the file's own `label` for a single-file
     schema. Look the bundle up by that name: if it exists, this file joins it;
     if not, it is created. So a multi-file schema declares one `bundle_label`
-    (e.g. "dandi") and every file carrying it lands in the same bundle. All the
-    schema-level descriptive metadata — title, description, publisher, contact,
-    homepage, license, source_id/iri/version — lives here once, not repeated on
-    each constituent SchemaSource. Returns the bundle id.
+    (e.g. "dandi") and every file carrying it lands in the same bundle. Only the
+    metadata shared across the files — title, description, publisher, contact,
+    homepage, license — lives here; per-file provenance (source_id/iri/version,
+    each file's own title/description/homepage) stays on the SchemaSource.
+    `metadata` here is the bundle slice (sidecar `bundle_`-prefixed keys, prefix
+    stripped, so `bundle_label`->`label`, `bundle_title`->`title`). Returns the
+    bundle id.
     """
     md = metadata or {}
-    bundle_label = md.get("bundle_label") or label
+    bundle_label = md.get("label") or label
     r = conn.execute("MATCH (b:SchemaBundle {label: $k}) RETURN b.id LIMIT 1", {"k": bundle_label})
     if r.has_next():
         return r.get_next()[0]
@@ -230,16 +233,12 @@ def ensure_schema_bundle(conn, label: str, version: str,
     conn.execute("""
         CREATE (:SchemaBundle {
             id: $id, label: $label, title: $title, description: $description,
-            source_id: $source_id, source_iri: $source_iri, source_version: $source_version,
             publisher: $publisher, contact: $contact, homepage: $homepage,
             license: $license, created_at: $t
         })
     """, {
         "id": node_id, "label": bundle_label,
         "title": md.get("title", ""), "description": md.get("description", ""),
-        "source_id": md.get("source_id", ""),
-        "source_iri": md.get("source_iri") or f"{REG}bundle/{node_id}",
-        "source_version": md.get("source_version") or version,
         "publisher": md.get("publisher", ""), "contact": md.get("contact", ""),
         "homepage": md.get("homepage", ""), "license": md.get("license", ""),
         "t": now_iso(),
@@ -248,14 +247,16 @@ def ensure_schema_bundle(conn, label: str, version: str,
 
 
 def ensure_schema_source(conn, source_label: str, version: str, registry_version: str,
-                         dry_run: bool = False, metadata: dict | None = None) -> str:
+                         dry_run: bool = False, metadata: dict | None = None,
+                         bundle_metadata: dict | None = None) -> str:
     """
     One SchemaSource node (a physical schema file/module) per source label,
-    reused across ingests, `part_of` the SchemaBundle it belongs to. The bundle
-    holds the schema-level descriptive metadata; the source holds only per-file
-    facts (label, content_hash, mime_type, ingest created_at/registry_version,
-    and an optional per-file source_version). Shared by ingest_linkml.py and
-    seed.py.
+    reused across ingests, `part_of` the SchemaBundle it belongs to. The source
+    holds per-file facts and per-file provenance (label, content_hash,
+    mime_type, ingest created_at/registry_version, its own source_id/source_iri/
+    source_version, and its own title/description/homepage); the bundle holds the
+    metadata shared across files (`bundle_metadata`). Shared by ingest_linkml.py
+    and seed.py.
 
     Must run before any ProvenanceEntry is built, since
     ProvenanceEntry.had_primary_source is a real FK to it — including in
@@ -269,18 +270,25 @@ def ensure_schema_source(conn, source_label: str, version: str, registry_version
     if r.has_next():
         return r.get_next()[0]
     md = metadata or {}
-    bundle_id = ensure_schema_bundle(conn, source_label, version, md, dry_run=dry_run)
+    bundle_id = ensure_schema_bundle(conn, source_label, version,
+                                     bundle_metadata or {}, dry_run=dry_run)
     if dry_run:
         return f"dry-run-placeholder:{source_label}"
     node_id = make_id()
     conn.execute("""
         CREATE (:SchemaSource {
             id: $id, label: $label, part_of: $part_of,
+            title: $title, description: $description, homepage: $homepage,
+            source_id: $source_id, source_iri: $source_iri,
             source_version: $source_version, mime_type: $mime_type,
             content_hash: $content_hash, created_at: $t, registry_version: $rv
         })
     """, {
         "id": node_id, "label": source_label, "part_of": bundle_id,
+        "title": md.get("title", ""), "description": md.get("description", ""),
+        "homepage": md.get("homepage", ""),
+        "source_id": md.get("source_id", ""),
+        "source_iri": md.get("source_iri") or f"{REG}source/{node_id}",
         "source_version": md.get("source_version") or version,
         "mime_type": md.get("mime_type") or "application/yaml",
         "content_hash": md.get("content_hash", ""),

@@ -1,0 +1,5 @@
+bundle_label: dandi
+bundle_title: DANDI Schema
+bundle_homepage: https://www.dandiarchive.org/
+source_id: https://github.com/dandi/schema
+source_version: 0.8.0

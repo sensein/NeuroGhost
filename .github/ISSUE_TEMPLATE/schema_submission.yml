@@ -58,10 +58,10 @@ body:
         named after the schema. Give several files the same value (e.g. `dandi`)
         to group them into one bundle.
   - type: input
-    id: schema_title
+    id: bundle_title
     attributes:
-      label: Title
-      description: Human-readable schema title, e.g. "DANDI Schema" (auto-filled if the schema declares one).
+      label: Bundle title
+      description: Optional human-readable name for the bundle, e.g. "DANDI Schema" (auto-filled if the schema declares a title).
   - type: input
     id: homepage
     attributes:

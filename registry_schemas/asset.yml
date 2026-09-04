@@ -1,6 +1,6 @@
-name: asset-meta
+name: asset
 description: Metadata used to describe an asset on the server.
-id: https://registry.sensein.io/schema/asset-meta
+id: https://registry.sensein.io/schema/asset
 version: 1.0.0
 imports:
 - linkml:types

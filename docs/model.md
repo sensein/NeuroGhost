@@ -117,19 +117,21 @@ SchemaBundle {
     string label
     string license
     string publisher
-    uriorcurie source_id
-    uriorcurie source_iri
-    string source_version
     string title
 }
 SchemaSource {
     string id
+    string description
     string content_hash
     datetime created_at
+    uri homepage
     string label
     string mime_type
     string registry_version
+    uriorcurie source_id
+    uriorcurie source_iri
     string source_version
+    string title
 }
 SchemaVersionSnapshot {
     string id

@@ -79,13 +79,21 @@ def export_snapshot(conn, registry_version: str) -> dict:
     src_rows = conn.execute("""
         MATCH (s:SchemaSource)
         OPTIONAL MATCH (b:SchemaBundle) WHERE b.id = s.part_of
-        RETURN s.label, b.label, s.source_version, s.mime_type,
+        RETURN s.label, b.label, s.title, s.description, s.homepage,
+               s.source_id, s.source_iri, s.source_version, s.mime_type,
                s.content_hash, s.created_at, s.registry_version
     """).get_all()
     sources = []
-    for (label, bundle_label, ver, mime_type, content_hash, created_at, reg_ver) in src_rows:
+    src_versions: dict[str, set] = {}
+    for (label, bundle_label, title, desc, homepage, source_id, source_iri,
+         ver, mime_type, content_hash, created_at, reg_ver) in src_rows:
+        if bundle_label:
+            src_versions.setdefault(bundle_label, set()).add(ver or "")
         sources.append({
             "label": label, "bundle": bundle_label or "", "version": ver or "1.0.0",
+            "title": title or "", "description": desc or "", "homepage": homepage or "",
+            # Per-file provenance: where this physical file came from.
+            "source_id": source_id or "", "source_iri": source_iri or "",
             "class_count": _class_count_where("s.label = $v", {"v": label}),
             "mime_type": mime_type or "", "created_at": created_at or "",
             "registry_version": reg_ver or "",
@@ -94,21 +102,24 @@ def export_snapshot(conn, registry_version: str) -> dict:
             "content_hash": content_hash or "",
         })
 
-    # ---- bundles (logical schemas; the descriptive metadata lives here) ----
+    # ---- bundles (logical schemas; the metadata SHARED across files lives here;
+    #      per-file provenance is on the sources above) -----------------------
     bnd_rows = conn.execute("""
         MATCH (b:SchemaBundle)
-        RETURN b.id, b.label, b.title, b.description, b.source_id, b.source_iri,
-               b.source_version, b.publisher, b.contact, b.homepage, b.license, b.created_at
+        RETURN b.id, b.label, b.title, b.description,
+               b.publisher, b.contact, b.homepage, b.license, b.created_at
     """).get_all()
     bundles = []
-    for (bid, label, title, desc, source_id, source_iri, ver,
+    for (bid, label, title, desc,
          publisher, contact, homepage, lic, created_at) in bnd_rows:
         parts = sorted(r[0] for r in conn.execute(
             "MATCH (s:SchemaSource) WHERE s.part_of = $id RETURN s.label", {"id": bid}).get_all())
+        # A bundle version to show in the header only when its files agree on one.
+        vers = {v for v in src_versions.get(label, set()) if v}
         bundles.append({
             "label": label, "title": title or "", "description": desc or "",
-            "source_id": source_id or "", "source_iri": source_iri or "",
-            "version": ver or "1.0.0", "publisher": publisher or "", "contact": contact or "",
+            "version": (vers.pop() if len(vers) == 1 else ""),
+            "publisher": publisher or "", "contact": contact or "",
             "homepage": homepage or "", "license": lic or "", "created_at": created_at or "",
             "parts": parts,
             "class_count": _class_count_where("s.part_of = $id", {"id": bid}),

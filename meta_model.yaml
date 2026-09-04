@@ -307,16 +307,23 @@ classes:
 
       Identity uses id (a UUID, as everywhere) because this is a mutable
       administrative record, not a content-addressed entity. A SchemaSource is
-      one physical file/module; the schema-level descriptive metadata (title,
-      publisher, contact, homepage, license, the declared source_id/iri) lives
-      once on the SchemaBundle this source is `part_of`, not repeated here.
-      What stays on the source is what is genuinely per-file: its `label`,
-      `content_hash`, `mime_type`, ingest `created_at`/`registry_version`, and
-      an optional per-file `source_version` override.
+      one physical file/module. What lives here is what is genuinely per-file:
+      its `label`, `content_hash`, `mime_type`, ingest
+      `created_at`/`registry_version`, and its own provenance — the declared
+      `source_id`/`source_iri`, `source_version`, and its own `title` /
+      `description` / `homepage`. Bundle-level metadata shared across the files
+      (bundle title/description/homepage plus publisher, contact, license) lives
+      once on the SchemaBundle this source is `part_of`, set via `bundle_`-
+      prefixed keys in the sidecar.
     slots:
       - id
       - label
       - part_of
+      - title
+      - description
+      - homepage
+      - source_id
+      - source_iri
       - source_version
       - mime_type
       - content_hash
@@ -327,25 +334,27 @@ classes:
   SchemaBundle:
     description: >-
       A logical schema, grouping the one-or-more SchemaSource files it is
-      ingested from (e.g. DANDI = dandiset.json + asset.json). Schema-level
-      descriptive metadata — title, publisher, contact, homepage, license, and
-      the schema's own declared source_id / source_iri / source_version — lives
-      here once, rather than being repeated on every constituent file. A
-      single-file schema is simply a bundle with exactly one part.
+      ingested from (e.g. DANDI = dandiset.json + asset.json). Bundle-level
+      descriptive metadata that is shared across the files — title, description,
+      publisher, contact, homepage, license — lives here once, rather than being
+      repeated on every constituent file. Per-file provenance (each file's own
+      source_id / source_iri / source_version, and its own title / description /
+      homepage) stays on the SchemaSource, so a multi-file schema records where
+      each file came from. A single-file schema is simply a bundle with exactly
+      one part.
 
-      Identity uses id (a UUID) — a mutable administrative record, like
-      SchemaSource. On (re-)ingestion a bundle is resolved-or-created by its
-      declared `source_id` (falling back to `label`), so every file that
-      declares the same schema id joins the same bundle. `parts` is the inverse
-      of SchemaSource.part_of.
+      In the `<stem>_source.yaml` sidecar, a key prefixed `bundle_` (e.g.
+      `bundle_title`, `bundle_homepage`) sets the bundle slot of that name; a
+      bare key sets the SchemaSource slot. Identity uses id (a UUID) — a mutable
+      administrative record, like SchemaSource. On (re-)ingestion a bundle is
+      resolved-or-created by its **name** — `bundle_label`, falling back to the
+      file's `label` — so every file carrying the same `bundle_label` joins the
+      same bundle. `parts` is the inverse of SchemaSource.part_of.
     slots:
       - id
       - label
       - title
       - description
-      - source_id
-      - source_iri
-      - source_version
       - publisher
       - contact
       - homepage
@@ -887,8 +896,11 @@ slots:
   title:
     range: string
     description: >-
-      Human-readable full name of the schema (e.g. "Brain Imaging Data
-      Structure"), distinct from the short `label` used as its identifier.
+      Human-readable name. On a SchemaSource it is the file's own declared
+      `title:`; on a SchemaBundle it is the optional display name for the whole
+      bundle (e.g. "DANDI Schema"), set in the sidecar as `bundle_title` and
+      falling back to `bundle_label` (the short predictable grouping key) in the
+      UI when blank.
 
   publisher:
     range: string
