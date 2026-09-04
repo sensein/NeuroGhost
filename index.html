@@ -1384,10 +1384,10 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 </div>
 
 <script>
-// Where schema-submission issues are created and linked. Point this at your own
-// fork to avoid an org's SAML-SSO re-login prompt when you're already signed in
-// to GitHub — your fork runs the same schema_submission workflow.
-const ISSUE_REPO = 'djarecka/NeuroGhost';
+// Where schema-submission issues are created and linked. Upstream is canonical;
+// point this at your own fork instead if you want to avoid an org's SAML-SSO
+// re-login prompt (the fork runs the same schema_submission workflow).
+const ISSUE_REPO = 'sensein/NeuroGhost';
 // ────────────────────────────────────────────────────────
 // Theme toggle (light / dark) — persisted in localStorage; the saved theme is
 // already applied pre-paint by the inline script in <head>.
