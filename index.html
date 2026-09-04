@@ -1956,7 +1956,7 @@ function renderConceptDetail() {
   const propsHtml = props.length
     ? props.slice(0, 20).map(p => `
         <div class="c-prop">
-          <span class="c-prop-name">${esc(p.name)}</span>
+          <span class="c-prop-name">${esc(barePropName(p.name))}</span>
         </div>`).join('')
       + (props.length > 20 ? `<div class="c-prop-more">+${props.length - 20} more</div>` : '')
     : '<div class="c-none">No own properties.</div>';
@@ -2185,8 +2185,10 @@ function computeDiff(srcA, srcB) {
 }
 
 function propDelta(a, b) {
-  const aNames = new Set((a.properties || []).map(p => (p.name || '').toLowerCase()).filter(Boolean));
-  const bNames = new Set((b.properties || []).map(p => (p.name || '').toLowerCase()).filter(Boolean));
+  // Compare by BARE property name — names are namespaced "<Class>__<prop>", so
+  // comparing the raw names would never find a shared slot between two classes.
+  const aNames = new Set((a.properties || []).map(p => barePropName(p.name).toLowerCase()).filter(Boolean));
+  const bNames = new Set((b.properties || []).map(p => barePropName(p.name).toLowerCase()).filter(Boolean));
   const shared = [...aNames].filter(n => bNames.has(n)).sort();
   const removed = [...aNames].filter(n => !bNames.has(n)).sort();  // in A, not in B
   const added   = [...bNames].filter(n => !aNames.has(n)).sort();  // in B, not in A
@@ -2958,11 +2960,13 @@ function computeTransform() {
 
   const srcProps = src.properties || [];
   const tgtProps = tgt.properties || [];
-  const tgtByLower = new Map(tgtProps.map(p => [(p.name || '').toLowerCase(), p]));
+  // Match on BARE property names — the raw names are namespaced
+  // "<Class>__<prop>", so matching them would never line up across classes.
+  const tgtByLower = new Map(tgtProps.map(p => [barePropName(p.name).toLowerCase(), p]));
 
   const usedTgt = new Set();
   const mappings = srcProps.map(p => {
-    const lower = (p.name || '').toLowerCase();
+    const lower = barePropName(p.name).toLowerCase();
     // 1. exact-name match
     const exact = tgtByLower.get(lower);
     if (exact && !usedTgt.has(exact.name)) {
@@ -3036,13 +3040,13 @@ function renderTransform() {
               :                          '<span class="tf-tag unmapped">unmapped</span>';
     const conf = m.kind === 'unmapped' ? '—' : m.confidence.toFixed(2);
     const tgtCell = m.tgt
-      ? `<div class="tf-slot">${esc(m.tgt.name)}</div>` +
+      ? `<div class="tf-slot">${esc(barePropName(m.tgt.name))}</div>` +
         (m.tgt.definition ? `<div class="tf-slot-def">${esc(m.tgt.definition)}</div>` : '')
       : `<div class="tf-none-target">— no target field —</div>`;
     return `
       <tr class="${m.kind === 'unmapped' ? 'tf-row-unmapped' : ''}">
         <td>
-          <div class="tf-slot">${esc(m.src.name)}</div>
+          <div class="tf-slot">${esc(barePropName(m.src.name))}</div>
           ${m.src.definition ? `<div class="tf-slot-def">${esc(m.src.definition)}</div>` : ''}
         </td>
         <td class="tf-arrow-cell">→</td>
@@ -3056,7 +3060,7 @@ function renderTransform() {
     ? `
       <div class="tf-section">Target-only fields (${r.unusedTgt.length})</div>
       <div class="tf-target-hint">
-        ${r.unusedTgt.map(p => esc(p.name)).join(' · ')}
+        ${r.unusedTgt.map(p => esc(barePropName(p.name))).join(' · ')}
       </div>`
     : '';
 
@@ -3281,7 +3285,7 @@ function renderQueryResults() {
         <div class="q-hit${selected}" data-key="${esc(key)}">
           <span class="q-hit-kind prop">SLOT</span>
           <div class="q-hit-main">
-            <div class="q-hit-name">${qHighlight(h.prop.name, QUERY.q)}</div>
+            <div class="q-hit-name">${qHighlight(barePropName(h.prop.name), QUERY.q)}</div>
             ${h.prop.definition ? `<div class="q-hit-sub">${qHighlight(h.prop.definition, QUERY.q)}</div>` : ''}
           </div>
           <div class="q-hit-side">
@@ -3352,7 +3356,7 @@ function renderQueryDetail(hit) {
     `<span class="c-src-tag">${esc(s)}</span>`).join(' ');
   const props = cls.properties || [];
   const slotsHtml = props.length
-    ? `<div>${props.map(p => `<span class="q-d-slot-chip${p.name === highlightSlot ? ' matched' : ''}">${esc(p.name)}</span>`).join(' ')}</div>`
+    ? `<div>${props.map(p => `<span class="q-d-slot-chip${p.name === highlightSlot ? ' matched' : ''}">${esc(barePropName(p.name))}</span>`).join(' ')}</div>`
     : '<div class="c-none">No own properties.</div>';
 
   el.innerHTML = `
@@ -3661,7 +3665,7 @@ function renderComposePicked() {
     const slotChips = props.length
       ? props.map(p => {
           const off = excluded.has(p.name);
-          return `<span class="cp-slot-chip${off ? ' off' : ''}" data-slot="${esc(p.name)}" title="${esc(p.definition || '')}">${esc(p.name)}</span>`;
+          return `<span class="cp-slot-chip${off ? ' off' : ''}" data-slot="${esc(p.name)}" title="${esc(p.name)}${p.definition ? ' — ' + esc(p.definition) : ''}">${esc(barePropName(p.name))}</span>`;
         }).join('')
       : '<div class="cp-no-slots">No own properties on this class.</div>';
 
