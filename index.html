@@ -759,12 +759,14 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .cp-toast.show{opacity:1;}
 
 /* ══ INGEST ══════════════════════════════════════════════════════════════ */
-#view-ingest{overflow:hidden;}
-.ingest-inner{display:flex;width:100%;height:100%;}
+#view-ingest{overflow-y:auto;}
+.ingest-col{max-width:600px;width:100%;margin:0 auto;padding:28px 24px 44px;
+  display:flex;flex-direction:column;gap:16px;}
 
-.drop-zone{flex:0 0 50%;border-right:1px solid var(--border);
+.drop-zone{min-height:150px;border:1px dashed var(--border);border-radius:12px;
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;transition:background .15s;position:relative;overflow:hidden;}
+  cursor:pointer;transition:background .15s,border-color .15s;position:relative;overflow:hidden;}
+.drop-zone:hover{border-color:var(--teal-line);}
 .drop-zone.drag-over{background:var(--teal-soft);}
 .drop-zone.has-file{align-items:flex-start;padding:22px 24px;cursor:default;background:var(--bg-elev);}
 .drop-center{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;pointer-events:none;}
@@ -821,20 +823,21 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .paste-toggle:hover{color:var(--text);}
 
 /* Preview */
-.preview-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-elev);}
-.preview-empty{flex:1;display:flex;align-items:center;justify-content:center;
-  flex-direction:column;gap:10px;color:var(--muted);font-size:12px;text-align:center;padding:24px;}
-.preview-empty svg{width:32px;height:32px;opacity:.2;}
-.preview-head{padding:11px 16px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
-.preview-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;}
-.yaml-scroll{flex:1;overflow:auto;padding:14px 18px;}
+/* collapsible preview */
+.preview-toggle{display:flex;align-items:center;gap:7px;background:none;border:none;cursor:pointer;
+  color:var(--text-dim);font-size:12px;font-family:var(--sans);padding:0;text-align:left;}
+.preview-toggle:disabled{color:var(--muted);cursor:default;opacity:.55;}
+.preview-toggle .caret{transition:transform .15s;font-size:9px;color:var(--muted);}
+.preview-toggle.open .caret{transform:rotate(90deg);}
+.yaml-scroll{max-height:300px;overflow:auto;margin-top:9px;padding:12px 14px;
+  border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);}
 .yaml-pre{font-family:var(--mono);font-size:11.5px;line-height:1.75;white-space:pre;}
 .y-key{color:var(--teal);}.y-str{color:var(--yellow);}.y-cmt{color:var(--muted);font-style:italic;}.y-cls{color:var(--purple);}.y-bool{color:var(--green);}
-.preview-foot{padding:13px 16px;border-top:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;}
+/* submit row */
+.ingest-submit{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding-top:14px;border-top:1px solid var(--border);}
 .foot-meta{font-size:11.5px;color:var(--muted);}
-.ingest-meta{border-top:1px solid var(--border);padding:12px 16px;flex-shrink:0;background:var(--bg-elev);}
+.ingest-meta{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
 .ingest-meta-head{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:9px;}
 .ingest-meta-opt{text-transform:none;letter-spacing:0;font-weight:400;}
 .ingest-meta-opt code{font-family:var(--mono);font-size:10px;color:var(--text-dim);}
@@ -1286,7 +1289,8 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 
 <!-- ── Ingest ──────────────────────────────────────────── -->
 <div id="view-ingest" class="view">
-  <div class="ingest-inner">
+  <div class="ingest-col">
+    <!-- 1. upload / paste -->
     <div id="drop-zone" class="drop-zone">
       <div class="drop-center" id="drop-center">
         <div class="drop-icon-wrap">
@@ -1303,38 +1307,39 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
       </div>
       <input type="file" id="file-input" accept=".yml,.yaml,.json" style="display:none">
     </div>
-    <div class="preview-pane" id="preview-pane">
-      <div class="preview-head">
-        <span class="preview-label">Preview &amp; submit</span>
+
+    <!-- 2. source metadata -->
+    <div class="ingest-meta" id="ingest-meta">
+      <div class="ingest-meta-head">Source metadata <span class="ingest-meta-opt">— optional, saved as <code>&lt;schema&gt;_source.yaml</code></span></div>
+      <div class="ingest-meta-grid">
+        <input class="ingest-meta-input" id="im-title" type="text" placeholder="title" spellcheck="false" autocomplete="off"/>
+        <input class="ingest-meta-input" id="im-homepage" type="text" placeholder="homepage (https://…)" spellcheck="false" autocomplete="off"/>
+        <input class="ingest-meta-input" id="im-publisher" type="text" placeholder="publisher" spellcheck="false" autocomplete="off"/>
+        <input class="ingest-meta-input" id="im-contact" type="text" placeholder="contact (email or URL)" spellcheck="false" autocomplete="off"/>
       </div>
-      <div id="preview-body" class="preview-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <span>Drop or paste a schema on the left to preview it</span>
-      </div>
-      <div class="ingest-meta" id="ingest-meta">
-        <div class="ingest-meta-head">Source metadata <span class="ingest-meta-opt">— optional, saved as <code>&lt;schema&gt;_source.yaml</code></span></div>
-        <div class="ingest-meta-grid">
-          <input class="ingest-meta-input" id="im-title" type="text" placeholder="title" spellcheck="false" autocomplete="off"/>
-          <input class="ingest-meta-input" id="im-homepage" type="text" placeholder="homepage (https://…)" spellcheck="false" autocomplete="off"/>
-          <input class="ingest-meta-input" id="im-publisher" type="text" placeholder="publisher" spellcheck="false" autocomplete="off"/>
-          <input class="ingest-meta-input" id="im-contact" type="text" placeholder="contact (email or URL)" spellcheck="false" autocomplete="off"/>
-        </div>
-      </div>
-      <div class="preview-foot">
-        <div class="foot-meta" id="foot-meta">No file loaded</div>
-        <button class="ingest-btn" id="ingest-btn" disabled>
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M13 10v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2"/>
-            <path d="M8 2v8"/><polyline points="5 7 8 10 11 7"/>
-          </svg>
-          Open ingestion issue
-        </button>
-      </div>
-      <div class="ingest-log" id="ingest-log"></div>
     </div>
+
+    <!-- 3. collapsible preview -->
+    <div class="ingest-preview">
+      <button class="preview-toggle" id="preview-toggle" type="button" disabled>
+        <span class="caret">▶</span><span id="preview-toggle-label">Preview</span>
+      </button>
+      <div id="preview-body" class="yaml-scroll" style="display:none"></div>
+    </div>
+
+    <!-- 4. submit -->
+    <div class="ingest-submit">
+      <span class="foot-meta" id="foot-meta">No file loaded</span>
+      <button class="ingest-btn" id="ingest-btn" disabled>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M13 10v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2"/>
+          <path d="M8 2v8"/><polyline points="5 7 8 10 11 7"/>
+        </svg>
+        Open ingestion issue
+      </button>
+    </div>
+
+    <div class="ingest-log" id="ingest-log"></div>
   </div>
 </div>
 
@@ -4127,14 +4132,22 @@ function showComposeToast(text) {
 // ────────────────────────────────────────────────────────
 // Ingest — drag-drop + preview + GitHub issue
 // ────────────────────────────────────────────────────────
-const dropZone   = document.getElementById('drop-zone');
-const fileInput  = document.getElementById('file-input');
-const previewPane = document.getElementById('preview-pane');
-const previewBody = document.getElementById('preview-body');
-const footMeta   = document.getElementById('foot-meta');
-const ingestBtn  = document.getElementById('ingest-btn');
-const ingestLog  = document.getElementById('ingest-log');
+const dropZone      = document.getElementById('drop-zone');
+const fileInput     = document.getElementById('file-input');
+const previewBody   = document.getElementById('preview-body');
+const previewToggle = document.getElementById('preview-toggle');
+const footMeta      = document.getElementById('foot-meta');
+const ingestBtn     = document.getElementById('ingest-btn');
+const ingestLog     = document.getElementById('ingest-log');
 let yamlText = '', fileName = '', fileLang = 'yaml', schemaName = 'unknown';
+
+// Collapsible preview toggle
+previewToggle.addEventListener('click', () => {
+  if (previewToggle.disabled) return;
+  const open = previewBody.style.display === 'none';
+  previewBody.style.display = open ? 'block' : 'none';
+  previewToggle.classList.toggle('open', open);
+});
 
 dropZone.addEventListener('click', e => {
   if (dropZone.classList.contains('has-file') || dropZone.classList.contains('paste-mode')) return;
@@ -4190,8 +4203,10 @@ function applyYAMLText(text, displayName, sizeBytes) {
   document.getElementById('clear-btn').addEventListener('click', resetIngest);
   document.getElementById('reset-btn').addEventListener('click', resetIngest);
 
-  previewBody.className = 'yaml-scroll';
   previewBody.innerHTML = `<pre class="yaml-pre">${fileLang === 'json' ? esc(yamlText) : highlightYAML(yamlText)}</pre>`;
+  previewToggle.disabled = false;
+  document.getElementById('preview-toggle-label').textContent =
+    `Preview · ${info.classes} classes · ${info.slots} slots`;
   footMeta.innerHTML = `<span style="color:var(--text-dim)">${esc(info.name)}</span> &middot; <span style="color:var(--muted)">${info.classes} classes</span>`;
   ingestBtn.disabled = false;
   ingestLog.classList.remove('open');
@@ -4203,13 +4218,11 @@ function resetIngest() {
   dropZone.classList.remove('has-file', 'paste-mode');
   document.getElementById('drop-center').innerHTML = defaultDropHTML();
   document.getElementById('paste-toggle').addEventListener('click', showPasteMode);
-  previewBody.className = 'preview-empty';
-  previewBody.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-    </svg>
-    <span>Drop or paste a schema on the left to preview it</span>`;
+  previewBody.innerHTML = '';
+  previewBody.style.display = 'none';
+  previewToggle.disabled = true;
+  previewToggle.classList.remove('open');
+  document.getElementById('preview-toggle-label').textContent = 'Preview';
   footMeta.innerHTML = 'No file loaded';
   ingestBtn.disabled = true;
   ingestLog.classList.remove('open');
