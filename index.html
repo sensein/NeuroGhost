@@ -880,8 +880,13 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .src-stat{display:flex;flex-direction:column;gap:1px;}
 .src-stat-v{font-size:19px;font-weight:600;font-family:var(--mono);color:var(--text);}
 .src-stat-l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.src-card.src-expandable{cursor:pointer;transition:border-color .12s;}
+.src-card.src-expandable:hover{border-color:var(--muted);}
+.src-caret{margin-left:auto;color:var(--muted);font-size:9px;line-height:1;align-self:center;transition:transform .15s ease;}
+.src-card.open .src-caret{transform:rotate(90deg);}
 .src-meta{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);
-  display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--text-dim);}
+  display:none;flex-direction:column;gap:5px;font-size:11.5px;color:var(--text-dim);}
+.src-card.open .src-meta{display:flex;}
 .src-meta-row{display:flex;gap:10px;}
 .src-meta-k{color:var(--muted);min-width:96px;flex-shrink:0;}
 .src-meta-v{min-width:0;overflow:hidden;text-overflow:ellipsis;}
@@ -1397,7 +1402,7 @@ async function initSources() {
   _sourcesInitted = true;
 
   let prov = [];
-  try { const r = await fetch('./data/provenance.json'); if (r.ok) prov = await r.json(); } catch (e) {}
+  try { const r = await fetch('./data/provenance.json', {cache: 'no-cache'}); if (r.ok) prov = await r.json(); } catch (e) {}
 
   // Per-source class + (distinct) property counts, covering declared and
   // "observed" sources (a label attributed to content but not in sources[]).
@@ -1405,7 +1410,7 @@ async function initSources() {
   d.classes.forEach(c => {
     (c.sources || []).forEach(s => { classCount[s] = (classCount[s] || 0) + 1; });
     (c.properties || []).forEach(p => (p.sources || []).forEach(s => {
-      (propSets[s] = propSets[s] || new Set()).add(p.hash_id);
+      (propSets[s] = propSets[s] || new Set()).add(p.id);
     }));
   });
   const declared = new Map((d.sources || []).map(s => [s.label, s]));
@@ -1430,12 +1435,18 @@ async function initSources() {
     const ing    = lastIngest[label];
 
     const rows = [];
-    const iri = s.source_iri || s.source_id;
-    if (iri)         rows.push(['Source IRI', esc(iri)]);
+    // Prefer the schema's own declared id (a real, navigable URL) over the
+    // synthetic registry source_iri; render it as a link when it's http(s).
+    const src = s.source_id || s.source_iri;
+    if (src) {
+      const isUrl = /^https?:\/\//i.test(src);
+      rows.push(['Source', isUrl
+        ? `<a class="src-link" href="${esc(src)}" target="_blank" rel="noopener">${esc(src)}</a>`
+        : esc(src)]);
+    }
     if (s.homepage)  rows.push(['Homepage', `<a class="src-link" href="${esc(s.homepage)}" target="_blank" rel="noopener">${esc(s.homepage)}</a>`]);
     if (s.publisher) rows.push(['Publisher', esc(s.publisher)]);
     if (s.contact)   rows.push(['Contact', esc(s.contact)]);
-    if (s.mime_type) rows.push(['Format', esc(s.mime_type)]);
     if (ing) {
       const when = (ing.timestamp || '').slice(0, 10);
       const bits = [ing.registry_version ? `registry v${esc(ing.registry_version)}` : '', when, ing.agent ? esc(ing.agent) : '',
@@ -1448,12 +1459,13 @@ async function initSources() {
       : '';
 
     return `
-      <div class="src-card">
+      <div class="src-card${rows.length ? ' src-expandable' : ''}">
         <div class="src-card-head">
           <span class="src-name">${esc(label)}</span>
           ${s.title ? `<span class="src-title">${esc(s.title)}</span>` : ''}
           ${s.is_hub ? `<span class="src-hub">hub</span>` : ''}
           ${ver ? `<span class="src-ver">v${esc(ver)}</span>` : ''}
+          ${rows.length ? `<span class="src-caret" aria-hidden="true">▶</span>` : ''}
         </div>
         <div class="src-stats">
           <div class="src-stat"><span class="src-stat-v">${nClass}</span><span class="src-stat-l">classes</span></div>
@@ -1464,6 +1476,15 @@ async function initSources() {
   }).join('');
 
   listEl.innerHTML = `<div class="src-list-inner">${cards}</div>`;
+
+  // Expandable cards: click a card to toggle its detail rows (but let a link
+  // inside the detail — e.g. Homepage — open normally without toggling).
+  listEl.querySelectorAll('.src-card.src-expandable').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      card.classList.toggle('open');
+    });
+  });
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -1490,7 +1511,7 @@ document.querySelectorAll('.tab').forEach(btn => {
 // ────────────────────────────────────────────────────────
 const registryPromise = (async () => {
   try {
-    const r = await fetch('./data/registry.json');
+    const r = await fetch('./data/registry.json', {cache: 'no-cache'});
     if (!r.ok) throw new Error();
     return await r.json();
   } catch { return null; }
@@ -1555,7 +1576,7 @@ let _metamodelLoaded = false;
 async function loadMetamodel() {
   if (_metamodelLoaded) return;
   try {
-    const r = await fetch('./data/metamodel.json');
+    const r = await fetch('./data/metamodel.json', {cache: 'no-cache'});
     if (!r.ok) throw new Error(r.status);
     const mm = await r.json();
     CLASSES = mm.classes.map(c => ({ ...c, tag: TAG[c.id] || '' }));
@@ -1900,9 +1921,9 @@ const CONCEPT = {
   enabled:  null,          // Set of enabled source labels
   query:    '',
   mode:     'classes',     // 'classes' | 'properties'
-  selected: null,          // hash_id of the currently-open class
-  selectedProp: null,      // hash_id of the currently-open property
-  properties: [],          // deduped properties (by hash_id) across all classes
+  selected: null,          // id of the currently-open class
+  selectedProp: null,      // id of the currently-open property
+  properties: [],          // deduped properties (by id) across all classes
   weights:  { iri: 40, name: 25, desc: 25, slot: 10 },
   initted:  false,
 };
@@ -2055,7 +2076,7 @@ function renderClassList() {
   listEl.innerHTML = shown.map(c => {
     const nAlign = (c.alignments || []).length;
     return `
-      <div class="c-cls-row${c.is_abstract ? ' abstract' : ''}${CONCEPT.selected === c.hash_id ? ' selected' : ''}" data-hash="${esc(c.hash_id)}">
+      <div class="c-cls-row${c.is_abstract ? ' abstract' : ''}${CONCEPT.selected === c.id ? ' selected' : ''}" data-hash="${esc(c.id)}">
         <div class="c-cls-main">
           <div class="c-cls-name">${esc(c.name)}</div>
           <div class="c-cls-def">${esc((c.definition || '').slice(0, 120) || '—')}</div>
@@ -2158,7 +2179,7 @@ function conceptWeightedDistance(a) {
 
 function renderConceptDetail() {
   const el = document.getElementById('c-detail');
-  const c  = CONCEPT.registry.classes.find(x => x.hash_id === CONCEPT.selected);
+  const c  = CONCEPT.registry.classes.find(x => x.id === CONCEPT.selected);
   if (!c) {
     el.className = 'c-detail-placeholder';
     el.innerHTML = '<span>Select a class to see its definition, properties, and alignments.</span>';
@@ -2186,12 +2207,12 @@ function renderConceptDetail() {
     ? aligns.map(a => {
         const dLive = conceptWeightedDistance(a);
         const stored = (a.distance ?? 0).toFixed(3);
-        const target = CONCEPT.registry.classes.find(x => x.hash_id === a.target_hash_id);
+        const target = CONCEPT.registry.classes.find(x => x.id === a.target_id);
         const clickable = !!target;
         return `
           <div class="c-align">
             <div class="c-align-head">
-              <span class="c-align-name${clickable ? ' clickable' : ''}" data-hash="${esc(a.target_hash_id || '')}">${esc(a.target_name || a.target_iri || '?')}</span>
+              <span class="c-align-name${clickable ? ' clickable' : ''}" data-hash="${esc(a.target_id || '')}">${esc(a.target_name || a.target_iri || '?')}</span>
               <span class="c-align-dist" style="color:${distColor(dLive)}">${dLive.toFixed(3)}</span>
             </div>
             <div class="c-align-meta">
@@ -2298,7 +2319,7 @@ async function initDiff() {
     return;
   }
   DIFF.registry = d;
-  DIFF.clsById = new Map(d.classes.map(c => [c.hash_id, c]));
+  DIFF.clsById = new Map(d.classes.map(c => [c.id, c]));
 
   // Collect source labels + counts (declared + observed)
   const counts = {};
@@ -2356,22 +2377,22 @@ function computeDiff(srcA, srcB) {
   // 1. exact-name match
   inA.forEach(a => {
     const b = byNameB.get((a.name || '').toLowerCase());
-    if (b && !usedB.has(b.hash_id)) {
+    if (b && !usedB.has(b.id)) {
       matched.push({ a, b, via: 'name' });
-      usedB.add(b.hash_id);
-      matchedA.add(a.hash_id);
+      usedB.add(b.id);
+      matchedA.add(a.id);
     }
   });
 
   // 2. alignment-edge match (A → B via its recorded alignments)
   inA.forEach(a => {
-    if (matchedA.has(a.hash_id)) return;
+    if (matchedA.has(a.id)) return;
     for (const al of (a.alignments || [])) {
-      const target = DIFF.clsById.get(al.target_hash_id);
-      if (target && (target.sources || []).includes(srcB) && !usedB.has(target.hash_id)) {
+      const target = DIFF.clsById.get(al.target_id);
+      if (target && (target.sources || []).includes(srcB) && !usedB.has(target.id)) {
         matched.push({ a, b: target, via: 'alignment', distance: al.distance });
-        usedB.add(target.hash_id);
-        matchedA.add(a.hash_id);
+        usedB.add(target.id);
+        matchedA.add(a.id);
         break;
       }
     }
@@ -2379,21 +2400,21 @@ function computeDiff(srcA, srcB) {
 
   // 3. alignment-edge match in the reverse direction (B → A)
   inB.forEach(b => {
-    if (usedB.has(b.hash_id)) return;
+    if (usedB.has(b.id)) return;
     for (const al of (b.alignments || [])) {
-      const target = DIFF.clsById.get(al.target_hash_id);
-      if (target && (target.sources || []).includes(srcA) && !matchedA.has(target.hash_id)) {
+      const target = DIFF.clsById.get(al.target_id);
+      if (target && (target.sources || []).includes(srcA) && !matchedA.has(target.id)) {
         matched.push({ a: target, b, via: 'alignment', distance: al.distance });
-        usedB.add(b.hash_id);
-        matchedA.add(target.hash_id);
+        usedB.add(b.id);
+        matchedA.add(target.id);
         break;
       }
     }
   });
 
-  const onlyA = inA.filter(a => !matchedA.has(a.hash_id))
+  const onlyA = inA.filter(a => !matchedA.has(a.id))
     .sort((x, y) => x.name.localeCompare(y.name));
-  const onlyB = inB.filter(b => !usedB.has(b.hash_id))
+  const onlyB = inB.filter(b => !usedB.has(b.id))
     .sort((x, y) => x.name.localeCompare(y.name));
   matched.sort((x, y) => x.a.name.localeCompare(y.a.name));
 
@@ -2444,7 +2465,7 @@ function renderDiffBody() {
     }
     body.innerHTML = r.matched.map((m, i) => {
       const d = propDelta(m.a, m.b);
-      const key = `${m.a.hash_id}~${m.b.hash_id}`;
+      const key = `${m.a.id}~${m.b.id}`;
       const expanded = DIFF.expanded.has(key);
       const distTag = m.via === 'alignment' && m.distance != null
         ? ` · dist ${m.distance.toFixed(2)}` : '';
@@ -2585,7 +2606,7 @@ async function initGraphSchema() {
     return;
   }
   GRAPH.registry = d;
-  const clsById = new Map(d.classes.map(c => [c.hash_id, c]));
+  const clsById = new Map(d.classes.map(c => [c.id, c]));
   GRAPH.clsById = clsById;
 
   // Detect all methods present in the data
@@ -2713,11 +2734,11 @@ function buildGraph() {
   registry.classes.forEach(c => {
     (c.alignments || []).forEach(a => {
       if (!GRAPH.methods.has(a.method)) return;
-      const t = clsById.get(a.target_hash_id);
+      const t = clsById.get(a.target_id);
       if (!t) return;
       if (!passesSource(c) || !passesSource(t)) return;
       rawEdges.push({
-        sourceId: c.hash_id, targetId: t.hash_id,
+        sourceId: c.id, targetId: t.id,
         distance: a.distance ?? 0.5, method: a.method,
       });
     });
@@ -2728,7 +2749,7 @@ function buildGraph() {
   if (GRAPH.scope === 'aligned') {
     const ids = new Set();
     rawEdges.forEach(e => { ids.add(e.sourceId); ids.add(e.targetId); });
-    nodeClasses = registry.classes.filter(c => ids.has(c.hash_id));
+    nodeClasses = registry.classes.filter(c => ids.has(c.id));
   } else {
     nodeClasses = registry.classes.filter(passesSource);
   }
@@ -2736,12 +2757,12 @@ function buildGraph() {
   // Preserve positions for nodes that survive a rebuild
   const oldById = new Map((GRAPH.nodes || []).map(n => [n.id, n]));
   GRAPH.nodes = nodeClasses.map((c, i) => {
-    const prev = oldById.get(c.hash_id);
+    const prev = oldById.get(c.id);
     // Seed positions on a jittered circle
     const angle = (i / nodeClasses.length) * Math.PI * 2;
     const r = Math.min(W, H) * 0.30;
     return {
-      id:  c.hash_id, cls: c,
+      id:  c.id, cls: c,
       x:   prev ? prev.x : cx + Math.cos(angle) * r + (Math.random() - 0.5) * 20,
       y:   prev ? prev.y : cy + Math.sin(angle) * r + (Math.random() - 0.5) * 20,
       vx:  prev ? prev.vx : 0, vy: prev ? prev.vy : 0,
@@ -2935,13 +2956,13 @@ function renderGraphDetail(cls) {
 
   // Alignments FROM this class + also reverse edges to it
   const outgoing = (cls.alignments || []).map(a => ({
-    other: GRAPH.clsById.get(a.target_hash_id),
+    other: GRAPH.clsById.get(a.target_id),
     distance: a.distance, method: a.method, dir: '→',
   })).filter(x => x.other);
   const incoming = [];
   GRAPH.registry.classes.forEach(c => {
     (c.alignments || []).forEach(a => {
-      if (a.target_hash_id === cls.hash_id) {
+      if (a.target_id === cls.id) {
         incoming.push({ other: c, distance: a.distance, method: a.method, dir: '←' });
       }
     });
@@ -2955,7 +2976,7 @@ function renderGraphDetail(cls) {
     <div class="g-p-def">${esc(cls.definition || '—')}</div>
     <div class="g-p-section">Alignments (${aligns.length})</div>
     ${aligns.length ? aligns.map(a => `
-      <div class="g-p-align" data-jump="${esc(a.other.hash_id)}">
+      <div class="g-p-align" data-jump="${esc(a.other.id)}">
         <div class="g-p-align-head">
           <span class="g-p-align-name">${a.dir} ${esc(a.other.name)}</span>
           <span class="g-p-align-dist" style="color:${distColor(a.distance)}">${(a.distance ?? 0).toFixed(3)}</span>
@@ -3057,7 +3078,7 @@ const TF = {
   clsById: null,
   bySchema: null,           // Map<schema, class[]>
   sources: [],
-  srcSchema: null, srcClass: null,   // hash_ids
+  srcSchema: null, srcClass: null,   // ids
   tgtSchema: null, tgtClass: null,
 };
 
@@ -3072,7 +3093,7 @@ async function initTransform() {
     return;
   }
   TF.registry = d;
-  TF.clsById = new Map(d.classes.map(c => [c.hash_id, c]));
+  TF.clsById = new Map(d.classes.map(c => [c.id, c]));
 
   const counts = {};
   d.classes.forEach(c => (c.sources || []).forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
@@ -3091,11 +3112,11 @@ async function initTransform() {
   const firstAligned = d.classes.find(c => (c.alignments || []).length);
   if (firstAligned) {
     TF.srcSchema = firstAligned.sources[0];
-    TF.srcClass  = firstAligned.hash_id;
-    const target = TF.clsById.get(firstAligned.alignments[0].target_hash_id);
+    TF.srcClass  = firstAligned.id;
+    const target = TF.clsById.get(firstAligned.alignments[0].target_id);
     if (target) {
       TF.tgtSchema = target.sources[0];
-      TF.tgtClass  = target.hash_id;
+      TF.tgtClass  = target.id;
     }
   } else {
     TF.srcSchema = TF.sources[0];
@@ -3139,7 +3160,7 @@ function refreshClassPicker(side) {
   const sel = document.getElementById(side === 'src' ? 'tf-src-class' : 'tf-tgt-class');
   const classes = TF.bySchema.get(schema) || [];
   sel.innerHTML = '<option value="">— select a class —</option>' + classes.map(c =>
-    `<option value="${esc(c.hash_id)}">${esc(c.name)}</option>`
+    `<option value="${esc(c.id)}">${esc(c.name)}</option>`
   ).join('');
   const selected = side === 'src' ? TF.srcClass : TF.tgtClass;
   if (selected) sel.value = selected;
@@ -3149,7 +3170,7 @@ function autoPickTarget() {
   if (!TF.srcClass) return;
   const src = TF.clsById.get(TF.srcClass);
   const aligns = (src.alignments || [])
-    .map(a => ({ a, t: TF.clsById.get(a.target_hash_id) }))
+    .map(a => ({ a, t: TF.clsById.get(a.target_id) }))
     .filter(x => x.t);
   if (!aligns.length) return;
 
@@ -3161,7 +3182,7 @@ function autoPickTarget() {
     document.getElementById('tf-tgt-schema').value = TF.tgtSchema;
     refreshClassPicker('tgt');
   }
-  TF.tgtClass = pick.t.hash_id;
+  TF.tgtClass = pick.t.id;
   document.getElementById('tf-tgt-class').value = TF.tgtClass;
 }
 
@@ -3172,8 +3193,8 @@ function computeTransform() {
   if (!src || !tgt) return null;
 
   // Class-level alignment (if any) between src and tgt, either direction
-  const fwd = (src.alignments || []).find(a => a.target_hash_id === tgt.hash_id);
-  const rev = (tgt.alignments || []).find(a => a.target_hash_id === src.hash_id);
+  const fwd = (src.alignments || []).find(a => a.target_id === tgt.id);
+  const rev = (tgt.alignments || []).find(a => a.target_id === src.id);
   const classAlign = fwd || rev || null;
 
   const srcProps = src.properties || [];
@@ -3462,8 +3483,8 @@ function runQuery() {
 }
 
 function hitKey(h) {
-  if (h.kind === 'class') return 'c:' + h.cls.hash_id;
-  if (h.kind === 'prop')  return 'p:' + h.cls.hash_id + '::' + h.prop.name;
+  if (h.kind === 'class') return 'c:' + h.cls.id;
+  if (h.kind === 'prop')  return 'p:' + h.cls.id + '::' + h.prop.name;
   if (h.kind === 'iri')   return 'i:' + h.iri;
   return '?';
 }
@@ -3551,7 +3572,7 @@ function renderQueryDetail(hit) {
         <div class="q-d-section">Classes with this IRI</div>
         <div class="q-d-list">
           ${hit.classes.map(c => `
-            <div class="q-d-cls-link" data-hash="${esc(c.hash_id)}">
+            <div class="q-d-cls-link" data-hash="${esc(c.id)}">
               <span>${esc(c.name)}</span>
               <span class="c-src-tag">${esc((c.sources || [])[0] || '')}</span>
             </div>`).join('')}
@@ -3559,7 +3580,7 @@ function renderQueryDetail(hit) {
       </div>`;
     el.querySelectorAll('.q-d-cls-link').forEach(a => {
       a.addEventListener('click', () => {
-        const cls = QUERY.registry.classes.find(c => c.hash_id === a.dataset.hash);
+        const cls = QUERY.registry.classes.find(c => c.id === a.dataset.hash);
         if (cls) renderQueryDetail({ kind: 'class', cls, source: (cls.sources || [])[0] });
       });
     });
@@ -3599,7 +3620,7 @@ async function initProv() {
 
   const list = document.getElementById('pv-list');
   try {
-    const r = await fetch('./data/provenance.json');
+    const r = await fetch('./data/provenance.json', {cache: 'no-cache'});
     if (!r.ok) throw new Error();
     const raw = await r.json();
     // Newest first
@@ -3760,8 +3781,8 @@ const COMPOSE = {
   sources: [], srcCounts: {},
   enabled: null,           // Set of enabled source labels
   query: '',
-  picked: new Map(),       // hash_id → { cls, excluded: Set<slotName> }
-  expanded: new Set(),     // hash_ids currently showing their slot picker
+  picked: new Map(),       // id → { cls, excluded: Set<slotName> }
+  expanded: new Set(),     // ids currently showing their slot picker
   meta: null,              // { name, id, prefix, description }
 };
 
@@ -3834,9 +3855,9 @@ function renderComposeList() {
 
   const shown = filtered.slice(0, 400);
   el.innerHTML = shown.map(c => {
-    const isPicked = COMPOSE.picked.has(c.hash_id);
+    const isPicked = COMPOSE.picked.has(c.id);
     return `
-      <div class="cp-cls-row${c.is_abstract ? ' abstract' : ''}${isPicked ? ' picked' : ''}" data-hash="${esc(c.hash_id)}">
+      <div class="cp-cls-row${c.is_abstract ? ' abstract' : ''}${isPicked ? ' picked' : ''}" data-hash="${esc(c.id)}">
         <span class="cp-cls-name">${esc(c.name)}</span>
         <span class="cp-cls-src">${esc((c.sources || [])[0] || '')}</span>
         <button class="cp-cls-btn">${isPicked ? 'Remove' : 'Add +'}</button>
@@ -3849,7 +3870,7 @@ function renderComposeList() {
     row.querySelector('.cp-cls-btn').addEventListener('click', e => {
       e.stopPropagation();
       const hash = row.dataset.hash;
-      const cls = COMPOSE.registry.classes.find(c => c.hash_id === hash);
+      const cls = COMPOSE.registry.classes.find(c => c.id === hash);
       if (!cls) return;
       if (COMPOSE.picked.has(hash)) {
         COMPOSE.picked.delete(hash);
@@ -3879,7 +3900,7 @@ function renderComposePicked() {
     const props = cls.properties || [];
     const kept = props.filter(p => !excluded.has(p.name)).length;
     const src = (cls.sources || [])[0] || '';
-    const expanded = COMPOSE.expanded.has(cls.hash_id);
+    const expanded = COMPOSE.expanded.has(cls.id);
     const slotChips = props.length
       ? props.map(p => {
           const off = excluded.has(p.name);
@@ -3888,7 +3909,7 @@ function renderComposePicked() {
       : '<div class="cp-no-slots">No own properties on this class.</div>';
 
     return `
-      <div class="cp-picked-row${cls.is_abstract ? ' abstract' : ''}${expanded ? ' expanded' : ''}" data-hash="${esc(cls.hash_id)}">
+      <div class="cp-picked-row${cls.is_abstract ? ' abstract' : ''}${expanded ? ' expanded' : ''}" data-hash="${esc(cls.id)}">
         <div class="cp-picked-top">
           <button class="cp-expand-btn${expanded ? ' open' : ''}" ${props.length ? '' : 'disabled'} aria-label="Toggle slot picker">▶</button>
           <div class="cp-picked-main">

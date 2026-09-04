@@ -1,0 +1,6 @@
+# Source metadata for dandi.yml — keyed by SchemaSource slot name.
+# title and source_id are propagated automatically from the schema's own
+# title:/id:; these supply what the schema itself doesn't carry.
+homepage: https://dandiarchive.org/
+publisher: DANDI Archive
+contact: help@dandiarchive.org

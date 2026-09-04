@@ -242,11 +242,12 @@ def build_registry_entities(
         fields = dict(
             name=name,
             description=info["comment"] or "",
-            class_uri=info["iri"] or None,
-            abstract=False,
-            is_a=parent.id if parent else None,
+            concept_uri=info["iri"] or None,
+            is_abstract=False,
+            is_mixin=False,
+            parent_class=parent.id if parent else None,
             properties=prop_ids,
-            mixins=[],
+            class_mixins=[],
             skos_mappings=[],
         )
         rc_sha = compute_content_hash_for(RegistryClass, fields)
