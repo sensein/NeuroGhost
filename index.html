@@ -848,6 +848,34 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .ll{color:var(--text-dim);line-height:1.6;}
 .ll.ok{color:var(--green);}
 .ll.err{color:var(--red);}
+
+/* ── Sources ── */
+#view-sources{overflow:hidden;}
+.src-inner{display:flex;flex-direction:column;width:100%;height:100%;}
+.src-head{padding:14px 24px;border-bottom:1px solid var(--border);display:flex;
+  align-items:center;justify-content:space-between;flex-shrink:0;}
+.src-head-title{font-size:13px;font-weight:600;}
+.src-head-count{font-family:var(--mono);font-size:11px;color:var(--muted);}
+.src-list{overflow-y:auto;padding:20px 0;flex:1;}
+.src-list-inner{max-width:860px;margin:0 auto;padding:0 24px;display:flex;flex-direction:column;gap:14px;}
+.src-card{border:1px solid var(--border);border-radius:10px;padding:16px 18px;background:var(--surface);}
+.src-card-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.src-name{font-size:15px;font-weight:600;font-family:var(--mono);color:var(--text);}
+.src-title{color:var(--text-dim);font-size:12.5px;}
+.src-hub{background:var(--purple-soft);color:var(--purple);border:1px solid var(--purple-line);
+  border-radius:5px;padding:1px 7px;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+.src-ver{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted);}
+.src-stats{display:flex;gap:26px;margin-top:12px;}
+.src-stat{display:flex;flex-direction:column;gap:1px;}
+.src-stat-v{font-size:19px;font-weight:600;font-family:var(--mono);color:var(--text);}
+.src-stat-l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.src-meta{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);
+  display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--text-dim);}
+.src-meta-row{display:flex;gap:10px;}
+.src-meta-k{color:var(--muted);min-width:96px;flex-shrink:0;}
+.src-meta-v{min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.src-link{color:var(--teal);text-decoration:none;word-break:break-all;}
+.src-link:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
@@ -918,6 +946,14 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
         <path d="M3 13h10"/>
       </svg>
       Ingest
+    </button>
+    <button class="tab" data-view="sources">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <ellipse cx="8" cy="4" rx="5" ry="2.2"/>
+        <path d="M3 4v4c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2V4"/>
+        <path d="M3 8v4c0 1.2 2.2 2.2 5 2.2s5-1 5-2.2V8"/>
+      </svg>
+      Sources
     </button>
     <button class="tab" data-view="meta">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1285,6 +1321,19 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   </div>
 </div>
 
+<!-- ── Sources ─────────────────────────────────────────── -->
+<div id="view-sources" class="view">
+  <div class="src-inner">
+    <div class="src-head">
+      <span class="src-head-title">Schema sources</span>
+      <span class="src-head-count" id="src-head-count">—</span>
+    </div>
+    <div class="src-list" id="src-list">
+      <div class="c-empty">Loading sources…</div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ────────────────────────────────────────────────────────
 // Theme toggle (light / dark) — persisted in localStorage; the saved theme is
@@ -1308,11 +1357,91 @@ const TAB_DESC = {
   query:    'Free-text search across every class, property, and IRI in the registry. Hits are ranked by relevance — click one to open its details.',
   compose:  'Build a custom LinkML schema: pick classes from the registry, toggle which slots to include, and export the result.',
   ingest:   'Submit a new schema — LinkML YAML or JSON Schema. It opens a pre-filled GitHub issue that triggers ingestion, adding the schema and re-aligning the registry.',
+  sources:  'The schemas registered so far, with their version, class and property counts, and when each was last ingested. This is where a source’s metadata (homepage, publisher, …) surfaces as it gets populated.',
   meta:     'The registry’s own data model — its entity types (RegistryClass, RegistryProperty, RegistryRule, …) and how they relate. Generated from meta_model.yaml.',
 };
 function setTabDesc(target) {
   const el = document.getElementById('tab-desc');
   if (el) el.textContent = TAB_DESC[target] || '';
+}
+
+// ── Sources tab ──
+let _sourcesInitted = false;
+async function initSources() {
+  if (_sourcesInitted) return;
+  const listEl = document.getElementById('src-list');
+  const d = await registryPromise;
+  if (!d) { listEl.innerHTML = '<div class="c-empty">Could not load <code>data/registry.json</code>.</div>'; return; }
+  _sourcesInitted = true;
+
+  let prov = [];
+  try { const r = await fetch('./data/provenance.json'); if (r.ok) prov = await r.json(); } catch (e) {}
+
+  // Per-source class + (distinct) property counts, covering declared and
+  // "observed" sources (a label attributed to content but not in sources[]).
+  const classCount = {}, propSets = {};
+  d.classes.forEach(c => {
+    (c.sources || []).forEach(s => { classCount[s] = (classCount[s] || 0) + 1; });
+    (c.properties || []).forEach(p => (p.sources || []).forEach(s => {
+      (propSets[s] = propSets[s] || new Set()).add(p.hash_id);
+    }));
+  });
+  const declared = new Map((d.sources || []).map(s => [s.label, s]));
+  const labels = [...new Set([...Object.keys(classCount), ...declared.keys()])]
+    .sort((a, b) => (classCount[b] || 0) - (classCount[a] || 0));
+
+  // Most-recent ingestion event per source (provenance.json).
+  const lastIngest = {};
+  prov.forEach(e => {
+    const s = e.schema_ingested;
+    if (s && (!lastIngest[s] || (e.timestamp || '') > (lastIngest[s].timestamp || ''))) lastIngest[s] = e;
+  });
+
+  document.getElementById('src-head-count').textContent =
+    `${labels.length} source${labels.length === 1 ? '' : 's'}`;
+
+  const cards = labels.map(label => {
+    const s = declared.get(label) || {};
+    const nClass = classCount[label] || s.class_count || 0;
+    const nProp  = (propSets[label] || new Set()).size;
+    const ver    = s.source_version || s.version || '';
+    const ing    = lastIngest[label];
+
+    const rows = [];
+    const iri = s.source_iri || s.source_id;
+    if (iri)         rows.push(['Source IRI', esc(iri)]);
+    if (s.homepage)  rows.push(['Homepage', `<a class="src-link" href="${esc(s.homepage)}" target="_blank" rel="noopener">${esc(s.homepage)}</a>`]);
+    if (s.publisher) rows.push(['Publisher', esc(s.publisher)]);
+    if (s.contact)   rows.push(['Contact', esc(s.contact)]);
+    if (s.mime_type) rows.push(['Format', esc(s.mime_type)]);
+    if (ing) {
+      const when = (ing.timestamp || '').slice(0, 10);
+      const bits = [ing.registry_version ? `registry v${esc(ing.registry_version)}` : '', when, ing.agent ? esc(ing.agent) : '',
+        ing.issue_number ? `issue #${esc(ing.issue_number)}` : ''].filter(Boolean);
+      rows.push(['Last ingested', bits.join(' · ')]);
+    }
+    const metaHtml = rows.length
+      ? `<div class="src-meta">${rows.map(([k, v]) =>
+          `<div class="src-meta-row"><span class="src-meta-k">${k}</span><span class="src-meta-v">${v}</span></div>`).join('')}</div>`
+      : '';
+
+    return `
+      <div class="src-card">
+        <div class="src-card-head">
+          <span class="src-name">${esc(label)}</span>
+          ${s.title ? `<span class="src-title">${esc(s.title)}</span>` : ''}
+          ${s.is_hub ? `<span class="src-hub">hub</span>` : ''}
+          ${ver ? `<span class="src-ver">v${esc(ver)}</span>` : ''}
+        </div>
+        <div class="src-stats">
+          <div class="src-stat"><span class="src-stat-v">${nClass}</span><span class="src-stat-l">classes</span></div>
+          <div class="src-stat"><span class="src-stat-v">${nProp}</span><span class="src-stat-l">properties</span></div>
+        </div>
+        ${metaHtml}
+      </div>`;
+  }).join('');
+
+  listEl.innerHTML = `<div class="src-list-inner">${cards}</div>`;
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -1330,6 +1459,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     else if (target === 'transform') initTransform();
     else if (target === 'query') initQuery();
     else if (target === 'compose') initCompose();
+    else if (target === 'sources') initSources();
   });
 });
 
