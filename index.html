@@ -6,6 +6,10 @@
 <title>NeuroGhost</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  // Apply the saved theme before first paint to avoid a flash of the wrong theme.
+  try { if (localStorage.getItem('ng-theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}
+</script>
 <style>
 :root{
   --bg:#0b0d13;--bg-elev:#10131c;--surface:#151926;--surface-2:#1b2030;
@@ -16,6 +20,16 @@
   --mono:"JetBrains Mono",ui-monospace,monospace;
   --sans:"Inter",-apple-system,sans-serif;
 }
+/* Light theme — set data-theme="light" on <html> (toggle in the header). Only
+   the palette is redefined; every rule reads these variables. */
+:root[data-theme="light"]{
+  --bg:#f7f8fb;--bg-elev:#ffffff;--surface:#eef1f6;--surface-2:#e3e7ef;
+  --border:#d5dae6;--text:#141824;--text-dim:#3f465c;--muted:#71789a;
+  --teal:#0d9488;--teal-soft:rgba(13,148,136,.12);--teal-line:rgba(13,148,136,.35);
+  --purple:#7c3aed;--purple-soft:rgba(124,58,237,.12);--purple-line:rgba(124,58,237,.35);
+  --yellow:#b45309;--green:#059669;--red:#dc2626;
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb{background:#c3c9d6;}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased;}
@@ -44,6 +58,15 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:6px;white-space:nowrap;}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--green);
   box-shadow:0 0 0 3px rgba(52,211,153,.15);}
+#theme-toggle{margin-left:12px;flex-shrink:0;background:none;border:none;
+  color:var(--muted);cursor:pointer;padding:6px;border-radius:6px;
+  display:inline-flex;align-items:center;transition:all .15s;}
+#theme-toggle:hover{color:var(--text-dim);background:var(--surface);}
+#theme-toggle svg{width:15px;height:15px;}
+/* Show the icon of the mode you'd switch TO: sun in dark, moon in light. */
+#theme-toggle .theme-icon-moon{display:none;}
+:root[data-theme="light"] #theme-toggle .theme-icon-sun{display:none;}
+:root[data-theme="light"] #theme-toggle .theme-icon-moon{display:inline;}
 
 /* ── View shell ── */
 #tab-desc{height:44px;box-sizing:border-box;padding:6px 20px;
@@ -911,6 +934,15 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
     <span class="dot"></span>
     <span id="status-text">loading…</span>
   </div>
+  <button id="theme-toggle" title="Toggle light / dark theme" aria-label="Toggle theme">
+    <svg class="theme-icon-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M13.5 9.5A5.5 5.5 0 016.5 2.5a5.5 5.5 0 107 7z"/>
+    </svg>
+    <svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="8" cy="8" r="3.2"/>
+      <path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M13 3l-1.1 1.1M4.1 11.9L3 13"/>
+    </svg>
+  </button>
 </header>
 
 <!-- one-line description of the active tab (set by setTabDesc) -->
@@ -1254,6 +1286,16 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 </div>
 
 <script>
+// ────────────────────────────────────────────────────────
+// Theme toggle (light / dark) — persisted in localStorage; the saved theme is
+// already applied pre-paint by the inline script in <head>.
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const root = document.documentElement;
+  const light = root.getAttribute('data-theme') !== 'light';
+  root.setAttribute('data-theme', light ? 'light' : 'dark');
+  try { localStorage.setItem('ng-theme', light ? 'light' : 'dark'); } catch (e) {}
+});
+
 // ────────────────────────────────────────────────────────
 // Tab switching
 // ────────────────────────────────────────────────────────
