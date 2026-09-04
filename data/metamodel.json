@@ -120,21 +120,36 @@
       "abstract": false,
       "slots": [
         "id",
-        "source_id",
         "label",
-        "title",
-        "publisher",
-        "contact",
-        "homepage",
-        "is_hub",
-        "source_iri",
+        "part_of",
         "source_version",
         "mime_type",
+        "content_hash",
         "created_at",
         "registry_version",
         "attestations"
       ],
       "desc": "Registry record for a schema source (one node per ingested schema label)."
+    },
+    {
+      "id": "SchemaBundle",
+      "abstract": false,
+      "slots": [
+        "id",
+        "label",
+        "title",
+        "description",
+        "source_id",
+        "source_iri",
+        "source_version",
+        "publisher",
+        "contact",
+        "homepage",
+        "license",
+        "created_at",
+        "parts"
+      ],
+      "desc": "A logical schema, grouping the one-or-more SchemaSource files it is ingested from (e.g."
     },
     {
       "id": "SchemaVersionSnapshot",

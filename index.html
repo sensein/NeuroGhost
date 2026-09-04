@@ -1636,6 +1636,7 @@ const NAMED_EDGES = [
   {from:'RegistryValueSet', to:'PermissibleValue',       type:'rel', label:'HAS_PERMISSIBLE_VALUE'},
   {from:'Mapping',          to:'MappingProvenanceEntry', type:'rel', label:'HAS_PROVENANCE'},
   {from:'RegistrySchema',   to:'SchemaSource',           type:'rel', label:'SOURCED_FROM'},
+  {from:'SchemaSource',     to:'SchemaBundle',           type:'rel', label:'PART_OF'},
   {from:'SchemaSource',     to:'SchemaVersionSnapshot',  type:'rel', label:'HAS_SNAPSHOT'},
 ];
 
@@ -1673,6 +1674,7 @@ const POS = {
   'Transform':              [34, 60],
   'MappingProvenanceEntry': [77, 60],
   'SchemaSource':           [92, 60],
+  'SchemaBundle':           [78, 80],
   'SchemaVersionSnapshot':  [92, 80],
 };
 
