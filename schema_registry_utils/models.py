@@ -630,7 +630,7 @@ class SchemaSource(ConfiguredBaseModel):
 
 class SchemaBundle(ConfiguredBaseModel):
     """
-    A logical schema, grouping the one-or-more SchemaSource files it is ingested from (e.g. DANDI = dandiset.json + asset.json). Schema-level descriptive metadata — title, publisher, contact, homepage, license, and the schema's own declared source_id / source_iri / source_version — lives here once, rather than being repeated on every constituent file. A single-file schema is simply a bundle with exactly one part.
+    A logical schema, grouping the one-or-more SchemaSource files it is ingested from (e.g. DANDI = dandiset.json + asset.json). Schema-level descriptive metadata — bundle_title, publisher, contact, homepage, license, and the schema's own declared source_id / source_iri / source_version — lives here once, rather than being repeated on every constituent file. A single-file schema is simply a bundle with exactly one part.
     Identity uses id (a UUID) — a mutable administrative record, like SchemaSource. On (re-)ingestion a bundle is resolved-or-created by its declared `source_id` (falling back to `label`), so every file that declares the same schema id joins the same bundle. `parts` is the inverse of SchemaSource.part_of.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://example.org/schema-registry-utils/meta-model'})
@@ -644,7 +644,7 @@ class SchemaBundle(ConfiguredBaseModel):
                        'SchemaVersionSnapshot',
                        'RegistrySchema']} })
     label: str = Field(default=..., description="""Short identifier label for this schema source (e.g. \"bids\", \"nwb\").""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaSource', 'SchemaBundle']} })
-    title: Optional[str] = Field(default=None, description="""Human-readable full name of the schema (e.g. \"Brain Imaging Data Structure\"), distinct from the short `label` used as its identifier.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
+    bundle_title: Optional[str] = Field(default=None, description="""Optional human-readable name for the bundle (e.g. \"DANDI Schema\"), distinct from `bundle_label`, the short predictable identifier used to group files. Falls back to the schema's own declared `title:` if unset, and the UI shows `bundle_label` when it is blank.""", json_schema_extra = { "linkml_meta": {'domain_of': ['SchemaBundle']} })
     description: str = Field(default=..., description="""Human-readable description of this entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['RegistryEntity', 'Transform', 'SchemaBundle', 'RegistrySchema'],
          'in_subset': ['HashSubset'],
          'slot_uri': 'skos:definition'} })

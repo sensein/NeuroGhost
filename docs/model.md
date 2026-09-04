@@ -111,6 +111,7 @@ RegistryValueSet {
 SchemaBundle {
     string id
     string description
+    string bundle_title
     string contact
     datetime created_at
     uri homepage
@@ -120,7 +121,6 @@ SchemaBundle {
     uriorcurie source_id
     uriorcurie source_iri
     string source_version
-    string title
 }
 SchemaSource {
     string id

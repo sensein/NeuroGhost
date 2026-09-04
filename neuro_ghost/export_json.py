@@ -97,16 +97,16 @@ def export_snapshot(conn, registry_version: str) -> dict:
     # ---- bundles (logical schemas; the descriptive metadata lives here) ----
     bnd_rows = conn.execute("""
         MATCH (b:SchemaBundle)
-        RETURN b.id, b.label, b.title, b.description, b.source_id, b.source_iri,
+        RETURN b.id, b.label, b.bundle_title, b.description, b.source_id, b.source_iri,
                b.source_version, b.publisher, b.contact, b.homepage, b.license, b.created_at
     """).get_all()
     bundles = []
-    for (bid, label, title, desc, source_id, source_iri, ver,
+    for (bid, label, bundle_title, desc, source_id, source_iri, ver,
          publisher, contact, homepage, lic, created_at) in bnd_rows:
         parts = sorted(r[0] for r in conn.execute(
             "MATCH (s:SchemaSource) WHERE s.part_of = $id RETURN s.label", {"id": bid}).get_all())
         bundles.append({
-            "label": label, "title": title or "", "description": desc or "",
+            "label": label, "bundle_title": bundle_title or "", "description": desc or "",
             "source_id": source_id or "", "source_iri": source_iri or "",
             "version": ver or "1.0.0", "publisher": publisher or "", "contact": contact or "",
             "homepage": homepage or "", "license": lic or "", "created_at": created_at or "",

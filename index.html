@@ -1355,7 +1355,7 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
         <input class="ingest-meta-input" id="im-bundle-new" type="text" placeholder="new bundle name (blank = schema name)" spellcheck="false" autocomplete="off"/>
       </div>
       <div class="ingest-meta-grid">
-        <input class="ingest-meta-input" id="im-title" type="text" placeholder="title" spellcheck="false" autocomplete="off"/>
+        <input class="ingest-meta-input" id="im-title" type="text" placeholder="bundle title (optional)" spellcheck="false" autocomplete="off"/>
         <input class="ingest-meta-input" id="im-homepage" type="text" placeholder="homepage (https://…)" spellcheck="false" autocomplete="off"/>
         <input class="ingest-meta-input" id="im-publisher" type="text" placeholder="publisher" spellcheck="false" autocomplete="off"/>
         <input class="ingest-meta-input" id="im-contact" type="text" placeholder="contact (email or URL)" spellcheck="false" autocomplete="off"/>
@@ -1531,7 +1531,7 @@ async function initSources() {
       <div class="src-card src-expandable">
         <div class="src-card-head">
           <span class="src-name">${esc(bundle.label)}</span>
-          ${bundle.title ? `<span class="src-title">${esc(bundle.title)}</span>` : ''}
+          ${bundle.bundle_title ? `<span class="src-title">${esc(bundle.bundle_title)}</span>` : ''}
           ${parts.length > 1 ? `<span class="src-hub">${parts.length} files</span>` : ''}
           ${ver ? `<span class="src-ver">v${esc(ver)}</span>` : ''}
           <span class="src-caret" aria-hidden="true">▶</span>
@@ -4469,7 +4469,7 @@ ingestBtn.addEventListener('click', async () => {
   base.set('name', schemaName);
   const addIf = (k, v) => { if (v) base.set(k, v); };
   addIf('bundle_label', bundle_label);
-  addIf('schema_title', val('im-title'));
+  addIf('bundle_title', val('im-title'));
   addIf('homepage',  val('im-homepage'));
   addIf('publisher', val('im-publisher'));
   addIf('contact',   val('im-contact'));

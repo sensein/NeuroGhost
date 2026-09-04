@@ -207,7 +207,7 @@ def test_schema_source_propagates_and_overlays_metadata(conn, tmp_schema):
     insert_schema(conn, parse_linkml(schema), "myschema", agent="tester")
     row = conn.execute(
         "MATCH (b:SchemaBundle {label: 'myschema'}) "
-        "RETURN b.title, b.source_id, b.homepage, b.publisher"
+        "RETURN b.bundle_title, b.source_id, b.homepage, b.publisher"
     ).get_next()
     assert row[0] == "My Example Schema"             # propagated title
     assert row[1] == "https://example.org/myschema"  # propagated source_id (schema id:)
@@ -238,7 +238,7 @@ def test_schema_bundle_without_sidecar_is_blank(conn, tmp_schema):
     schema = _schema(tmp_schema, "bare")
     insert_schema(conn, parse_linkml(schema), "bare", agent="tester")
     row = conn.execute(
-        "MATCH (b:SchemaBundle {label: 'bare'}) RETURN b.title, b.homepage, b.source_id, b.source_iri"
+        "MATCH (b:SchemaBundle {label: 'bare'}) RETURN b.bundle_title, b.homepage, b.source_id, b.source_iri"
     ).get_next()
     assert row[0] == ""                                 # no title:
     assert row[1] == ""                                 # no sidecar
@@ -256,7 +256,7 @@ def test_export_snapshot_includes_bundle_metadata(conn, tmp_schema):
     insert_schema(conn, parse_linkml(schema), "es", agent="tester")
     snap = export_snapshot(conn, "1.0.0")
     bnd = next(b for b in snap["bundles"] if b["label"] == "es")
-    assert bnd["title"] == "ES Schema"
+    assert bnd["bundle_title"] == "ES Schema"
     assert bnd["homepage"] == "https://es.example/"
     assert bnd["source_id"] == "https://example.org/es"
     assert bnd["parts"] == ["es"]

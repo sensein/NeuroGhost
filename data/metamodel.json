@@ -137,7 +137,7 @@
       "slots": [
         "id",
         "label",
-        "title",
+        "bundle_title",
         "description",
         "source_id",
         "source_iri",

@@ -96,13 +96,14 @@ from schema_hash import content_hash
 
 
 def _source_metadata(parsed: dict) -> dict:
-    """SchemaSource descriptive metadata, keyed by slot name: `title` and
-    `source_id` propagated from the schema's own `title:`/`id:`, overlaid with
-    its optional `<stem>_source.yaml` sidecar (publisher/contact/homepage/
-    source_iri/…, which may also override the propagated values)."""
+    """SchemaBundle descriptive metadata, keyed by slot name: `bundle_title`
+    (from the schema's own `title:`) and `source_id` (from its `id:`) are
+    propagated, overlaid with its optional `<stem>_source.yaml` sidecar
+    (bundle_title/publisher/contact/homepage/source_iri/…, which may also
+    override the propagated values)."""
     meta = parsed.get("meta", {})
     return {
-        "title": meta.get("title", ""),
+        "bundle_title": meta.get("title", ""),
         "description": meta.get("description", ""),
         "source_id": meta.get("id", ""),
         "license": meta.get("license", ""),

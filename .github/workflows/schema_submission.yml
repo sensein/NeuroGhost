@@ -154,7 +154,7 @@ jobs:
           # / SchemaBundle slot names), with the web-UI's "### Source metadata" yaml
           # block as a fallback.
           meta = {}
-          for key, label in [("bundle_label", "Bundle"), ("title", "Title"),
+          for key, label in [("bundle_label", "Bundle"), ("bundle_title", "Bundle title"),
                              ("homepage", "Homepage"), ("publisher", "Publisher"),
                              ("contact", "Contact"), ("license", "License")]:
               v = field(label)

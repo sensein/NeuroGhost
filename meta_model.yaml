@@ -328,7 +328,7 @@ classes:
     description: >-
       A logical schema, grouping the one-or-more SchemaSource files it is
       ingested from (e.g. DANDI = dandiset.json + asset.json). Schema-level
-      descriptive metadata — title, publisher, contact, homepage, license, and
+      descriptive metadata — bundle_title, publisher, contact, homepage, license, and
       the schema's own declared source_id / source_iri / source_version — lives
       here once, rather than being repeated on every constituent file. A
       single-file schema is simply a bundle with exactly one part.
@@ -341,7 +341,7 @@ classes:
     slots:
       - id
       - label
-      - title
+      - bundle_title
       - description
       - source_id
       - source_iri
@@ -884,11 +884,13 @@ slots:
     required: true
     description: Short identifier label for this schema source (e.g. "bids", "nwb").
 
-  title:
+  bundle_title:
     range: string
     description: >-
-      Human-readable full name of the schema (e.g. "Brain Imaging Data
-      Structure"), distinct from the short `label` used as its identifier.
+      Optional human-readable name for the bundle (e.g. "DANDI Schema"),
+      distinct from `bundle_label`, the short predictable identifier used to
+      group files. Falls back to the schema's own declared `title:` if unset,
+      and the UI shows `bundle_label` when it is blank.
 
   publisher:
     range: string

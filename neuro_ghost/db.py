@@ -215,7 +215,7 @@ def ensure_schema_bundle(conn, label: str, version: str,
     schema. Look the bundle up by that name: if it exists, this file joins it;
     if not, it is created. So a multi-file schema declares one `bundle_label`
     (e.g. "dandi") and every file carrying it lands in the same bundle. All the
-    schema-level descriptive metadata — title, description, publisher, contact,
+    schema-level descriptive metadata — bundle_title, description, publisher, contact,
     homepage, license, source_id/iri/version — lives here once, not repeated on
     each constituent SchemaSource. Returns the bundle id.
     """
@@ -229,14 +229,14 @@ def ensure_schema_bundle(conn, label: str, version: str,
     node_id = make_id()
     conn.execute("""
         CREATE (:SchemaBundle {
-            id: $id, label: $label, title: $title, description: $description,
+            id: $id, label: $label, bundle_title: $bundle_title, description: $description,
             source_id: $source_id, source_iri: $source_iri, source_version: $source_version,
             publisher: $publisher, contact: $contact, homepage: $homepage,
             license: $license, created_at: $t
         })
     """, {
         "id": node_id, "label": bundle_label,
-        "title": md.get("title", ""), "description": md.get("description", ""),
+        "bundle_title": md.get("bundle_title", ""), "description": md.get("description", ""),
         "source_id": md.get("source_id", ""),
         "source_iri": md.get("source_iri") or f"{REG}bundle/{node_id}",
         "source_version": md.get("source_version") or version,
