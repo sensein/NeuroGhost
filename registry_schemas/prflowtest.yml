@@ -1,0 +1,14 @@
+id: https://example.org/prflowtest
+name: prflowtest
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_range: string
+imports:
+  - linkml:types
+classes:
+  PrFlowTest:
+    description: Throwaway schema to test the PR-based ingestion flow.
+    attributes:
+      note:
+        description: A note.
+        range: string
