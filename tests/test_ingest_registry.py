@@ -198,20 +198,28 @@ def _schema(tmp_schema, name, *, title=None, sidecar=None):
 
 
 def test_schema_source_propagates_and_overlays_metadata(conn, tmp_schema):
-    """title/source_iri are PROPAGATED from the schema's own title:/id:; the
-    optional <stem>_source.yaml sidecar supplies homepage/publisher/contact."""
+    """Schema-level metadata lives on the SchemaBundle: title/source_id are
+    PROPAGATED from the schema's own title:/id:; the optional <stem>_source.yaml
+    sidecar supplies homepage/publisher/contact."""
     schema = _schema(tmp_schema, "myschema", title="My Example Schema",
                      sidecar={"homepage": "https://example.org/",
                               "publisher": "Example Org"})
     insert_schema(conn, parse_linkml(schema), "myschema", agent="tester")
     row = conn.execute(
-        "MATCH (s:SchemaSource {label: 'myschema'}) "
-        "RETURN s.title, s.source_id, s.homepage, s.publisher"
+        "MATCH (b:SchemaBundle {label: 'myschema'}) "
+        "RETURN b.title, b.source_id, b.homepage, b.publisher"
     ).get_next()
     assert row[0] == "My Example Schema"             # propagated title
     assert row[1] == "https://example.org/myschema"  # propagated source_id (schema id:)
     assert row[2] == "https://example.org/"          # sidecar homepage
     assert row[3] == "Example Org"                    # sidecar publisher
+
+    # the SchemaSource file itself is part_of that bundle
+    part_of = conn.execute(
+        "MATCH (s:SchemaSource {label: 'myschema'}) RETURN s.part_of").get_next()[0]
+    bundle_id = conn.execute(
+        "MATCH (b:SchemaBundle {label: 'myschema'}) RETURN b.id").get_next()[0]
+    assert part_of == bundle_id
 
 
 def test_sidecar_accepts_both_yaml_and_yml(tmp_path):
@@ -224,33 +232,36 @@ def test_sidecar_accepts_both_yaml_and_yml(tmp_path):
     assert load_source_sidecar(tmp_path / "s.yml") == {"homepage": "https://s/"}
 
 
-def test_schema_source_without_sidecar_is_blank(conn, tmp_schema):
-    """No sidecar and no title: → blank supplemental fields; source_iri still
-    propagates from the schema's id:."""
+def test_schema_bundle_without_sidecar_is_blank(conn, tmp_schema):
+    """No sidecar and no title: → blank supplemental bundle fields; source_iri
+    still propagates from the schema's id:."""
     schema = _schema(tmp_schema, "bare")
     insert_schema(conn, parse_linkml(schema), "bare", agent="tester")
     row = conn.execute(
-        "MATCH (s:SchemaSource {label: 'bare'}) RETURN s.title, s.homepage, s.source_id, s.source_iri"
+        "MATCH (b:SchemaBundle {label: 'bare'}) RETURN b.title, b.homepage, b.source_id, b.source_iri"
     ).get_next()
     assert row[0] == ""                                 # no title:
     assert row[1] == ""                                 # no sidecar
     assert row[2] == "https://example.org/bare"         # source_id from schema id:
-    assert row[3].startswith("https://registry.sensein.io/source/")  # synthetic source_iri
+    assert row[3].startswith("https://registry.sensein.io/bundle/")  # synthetic source_iri
 
 
-def test_export_snapshot_includes_source_metadata(conn, tmp_schema):
-    """export_snapshot() surfaces the metadata in sources[] — and this doubles
-    as a regression test that export runs at all (it previously crashed in
-    _attesting_sources on an undefined name)."""
+def test_export_snapshot_includes_bundle_metadata(conn, tmp_schema):
+    """export_snapshot() surfaces the schema-level metadata in bundles[] (and the
+    file in sources[], part_of that bundle) — also a regression test that export
+    runs at all."""
     from export_json import export_snapshot
     schema = _schema(tmp_schema, "es", title="ES Schema",
                      sidecar={"homepage": "https://es.example/"})
     insert_schema(conn, parse_linkml(schema), "es", agent="tester")
     snap = export_snapshot(conn, "1.0.0")
+    bnd = next(b for b in snap["bundles"] if b["label"] == "es")
+    assert bnd["title"] == "ES Schema"
+    assert bnd["homepage"] == "https://es.example/"
+    assert bnd["source_id"] == "https://example.org/es"
+    assert bnd["parts"] == ["es"]
     src = next(s for s in snap["sources"] if s["label"] == "es")
-    assert src["title"] == "ES Schema"
-    assert src["homepage"] == "https://es.example/"
-    assert src["source_id"] == "https://example.org/es"
+    assert src["bundle"] == "es"
 
 
 def test_schema_source_records_and_exports_content_hash(conn):
@@ -320,3 +331,44 @@ def test_repeated_class_in_a_different_schema_dedups_but_is_not_rejected(conn):
     assert {"Sample", "OnlyInA", "OnlyInB"} <= names
     src_labels = {r[0] for r in conn.execute("MATCH (s:SchemaSource) RETURN s.label").get_all()}
     assert src_labels == {"shared_a", "shared_b"}
+
+
+def test_multiple_files_sharing_a_bundle_name_join_one_bundle(conn, tmp_schema):
+    """Two files that declare the same `bundle_label` (via their sidecar) join a
+    single SchemaBundle as separate parts — the multi-file case (DANDI =
+    dandiset + asset). The bundle name is the predictable, submitter-chosen key:
+    the first file creates it, the second resolves and joins it. Identical
+    classes across the files still dedup."""
+    import yaml as _yaml
+
+    def make(name, classes):
+        path = tmp_schema(name, {
+            "id": f"https://example.org/{name}", "name": name, "title": "DANDI",
+            "prefixes": {"linkml": "https://w3id.org/linkml/"},
+            "default_range": "string", "imports": ["linkml:types"],
+            "classes": classes,
+        })
+        (path.parent / f"{name}_source.yaml").write_text(_yaml.safe_dump({"bundle_label": "dandi"}))
+        return path
+
+    contact = {"ContactPoint": {"attributes": {"email": {"range": "string"}}}}
+    p1 = make("dandiset", {"Dandiset": {"attributes": {"identifier": {"range": "string"}}}, **contact})
+    p2 = make("asset", {"Asset": {"attributes": {"path": {"range": "string"}}}, **contact})
+    insert_schema(conn, parse_linkml(p1), "dandiset", agent="t")
+    insert_schema(conn, parse_linkml(p2), "asset", agent="t")
+
+    # exactly one bundle, named "dandi" (the shared bundle_label)
+    bundles = conn.execute("MATCH (b:SchemaBundle) RETURN b.id, b.label").get_all()
+    assert len(bundles) == 1
+    bid, blabel = bundles[0]
+    assert blabel == "dandi"
+
+    # both files are their own SchemaSource, both part_of the one bundle
+    parts = {r[0] for r in conn.execute("MATCH (s:SchemaSource) RETURN s.label").get_all()}
+    assert parts == {"dandiset", "asset"}
+    part_ofs = {r[0] for r in conn.execute("MATCH (s:SchemaSource) RETURN s.part_of").get_all()}
+    assert part_ofs == {bid}
+
+    # the identical ContactPoint class collapses to one node across the two files
+    cp = conn.execute("MATCH (c:RegistryClass {name: 'ContactPoint'}) RETURN count(c)").get_next()[0]
+    assert cp == 1

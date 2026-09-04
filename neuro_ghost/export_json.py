@@ -68,32 +68,50 @@ def _property_unit(conn, prop_id: str) -> str:
 
 
 def export_snapshot(conn, registry_version: str) -> dict:
-    # ---- sources -----------------------------------------------------------
+    def _class_count_where(clause: str, params: dict) -> int:
+        return conn.execute(f"""
+            MATCH (n:RegistryClass)-[:HAS_PROVENANCE]->(:ProvenanceEntry)-[:HAD_PRIMARY_SOURCE]->(s:SchemaSource)
+            WHERE {clause}
+            RETURN count(DISTINCT n)
+        """, params).get_next()[0]
+
+    # ---- sources (physical files, each part_of a bundle) -------------------
     src_rows = conn.execute("""
         MATCH (s:SchemaSource)
-        RETURN s.id, s.label, s.source_version, s.title, s.publisher, s.contact,
-               s.homepage, s.source_iri, s.source_id, s.mime_type,
-               s.created_at, s.registry_version, s.content_hash
+        OPTIONAL MATCH (b:SchemaBundle) WHERE b.id = s.part_of
+        RETURN s.label, b.label, s.source_version, s.mime_type,
+               s.content_hash, s.created_at, s.registry_version
     """).get_all()
-
     sources = []
-    for (_id, label, ver, title, publisher, contact, homepage,
-         source_iri, source_id, mime_type, created_at, reg_ver, content_hash) in src_rows:
-        count = conn.execute("""
-            MATCH (n:RegistryClass)-[:HAS_PROVENANCE]->(:ProvenanceEntry)-[:HAD_PRIMARY_SOURCE]->(:SchemaSource {label: $src})
-            RETURN count(DISTINCT n)
-        """, {"src": label}).get_next()[0]
+    for (label, bundle_label, ver, mime_type, content_hash, created_at, reg_ver) in src_rows:
         sources.append({
-            "label": label, "version": ver or "1.0.0", "class_count": count,
-            # Descriptive metadata (curated per source; blank when unknown).
-            "title": title or "", "publisher": publisher or "",
-            "contact": contact or "", "homepage": homepage or "",
-            "source_iri": source_iri or "", "source_id": source_id or "",
+            "label": label, "bundle": bundle_label or "", "version": ver or "1.0.0",
+            "class_count": _class_count_where("s.label = $v", {"v": label}),
             "mime_type": mime_type or "", "created_at": created_at or "",
             "registry_version": reg_ver or "",
             # File-level fingerprint so the UI can pre-check a dropped/pasted
             # schema against sources already in the registry (see schema_hash.py).
             "content_hash": content_hash or "",
+        })
+
+    # ---- bundles (logical schemas; the descriptive metadata lives here) ----
+    bnd_rows = conn.execute("""
+        MATCH (b:SchemaBundle)
+        RETURN b.id, b.label, b.title, b.description, b.source_id, b.source_iri,
+               b.source_version, b.publisher, b.contact, b.homepage, b.license, b.created_at
+    """).get_all()
+    bundles = []
+    for (bid, label, title, desc, source_id, source_iri, ver,
+         publisher, contact, homepage, lic, created_at) in bnd_rows:
+        parts = sorted(r[0] for r in conn.execute(
+            "MATCH (s:SchemaSource) WHERE s.part_of = $id RETURN s.label", {"id": bid}).get_all())
+        bundles.append({
+            "label": label, "title": title or "", "description": desc or "",
+            "source_id": source_id or "", "source_iri": source_iri or "",
+            "version": ver or "1.0.0", "publisher": publisher or "", "contact": contact or "",
+            "homepage": homepage or "", "license": lic or "", "created_at": created_at or "",
+            "parts": parts,
+            "class_count": _class_count_where("s.part_of = $id", {"id": bid}),
         })
 
     # ---- classes -----------------------------------------------------------
@@ -175,6 +193,7 @@ def export_snapshot(conn, registry_version: str) -> dict:
     return {
         "registry_version": registry_version,
         "generated_at":     now_iso(),
+        "bundles":          bundles,
         "sources":          sources,
         "classes":          classes,
     }

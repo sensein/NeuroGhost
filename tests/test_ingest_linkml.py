@@ -46,6 +46,7 @@ def test_parse_linkml_extracts_exactly_the_expected_dict():
             "title": "",
             "version": "1.0.0",
             "description": "A schema exercising every element parse_linkml must extract.",
+            "license": "",
         },
         "prefixes": {
             "linkml": "https://w3id.org/linkml/",

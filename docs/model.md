@@ -108,21 +108,28 @@ RegistryValueSet {
     uriorcurie concept_uri
     string sha256_hash
 }
-SchemaSource {
+SchemaBundle {
     string id
+    string description
     string contact
-    string content_hash
     datetime created_at
     uri homepage
-    boolean is_hub
     string label
-    string mime_type
+    string license
     string publisher
-    string registry_version
     uriorcurie source_id
     uriorcurie source_iri
     string source_version
     string title
+}
+SchemaSource {
+    string id
+    string content_hash
+    datetime created_at
+    string label
+    string mime_type
+    string registry_version
+    string source_version
 }
 SchemaVersionSnapshot {
     string id
@@ -169,6 +176,8 @@ RegistrySchema ||--}o RegistryValueSet : "registry_value_sets"
 RegistryValueSet ||--}o Mapping : "skos_mappings"
 RegistryValueSet ||--}o PermissibleValue : "permissible_values"
 RegistryValueSet ||--}| ProvenanceEntry : "provenance"
+SchemaBundle ||--}o SchemaSource : "parts"
+SchemaSource ||--|o SchemaBundle : "part_of"
 SchemaSource ||--}o ProvenanceEntry : "attestations"
 
 ```

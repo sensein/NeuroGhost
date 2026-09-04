@@ -103,7 +103,9 @@ def _source_metadata(parsed: dict) -> dict:
     meta = parsed.get("meta", {})
     return {
         "title": meta.get("title", ""),
+        "description": meta.get("description", ""),
         "source_id": meta.get("id", ""),
+        "license": meta.get("license", ""),
         "content_hash": meta.get("content_hash", ""),
         **(parsed.get("source_metadata") or {}),
     }
@@ -301,6 +303,7 @@ def _parse_schemaview(sv, path: Path) -> dict[str, Any]:
         "title":       sv.schema.title or "",
         "version":     str(sv.schema.version or "1.0.0"),
         "description": sv.schema.description or "",
+        "license":     sv.schema.license or "",
         # File-level fingerprint of the raw source text (canonicalised) — lets
         # ingestion reject a schema that is already in the registry, and lets
         # the UI pre-check a dropped/pasted file. See schema_hash.py.

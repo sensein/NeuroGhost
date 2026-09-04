@@ -306,27 +306,52 @@ classes:
       fields don't need to be captured on the input side.
 
       Identity uses id (a UUID, as everywhere) because this is a mutable
-      administrative record, not a content-addressed entity. `source_id` is
-      the persistent IRI the source schema declared as its own `id:` —
-      distinct from `id` so that re-ingestion under a different registry
-      UUID (or across registries) still resolves to the same source-of-truth
-      identifier.
+      administrative record, not a content-addressed entity. A SchemaSource is
+      one physical file/module; the schema-level descriptive metadata (title,
+      publisher, contact, homepage, license, the declared source_id/iri) lives
+      once on the SchemaBundle this source is `part_of`, not repeated here.
+      What stays on the source is what is genuinely per-file: its `label`,
+      `content_hash`, `mime_type`, ingest `created_at`/`registry_version`, and
+      an optional per-file `source_version` override.
     slots:
       - id
-      - source_id
       - label
-      - title
-      - publisher
-      - contact
-      - homepage
-      - is_hub
-      - source_iri
+      - part_of
       - source_version
       - mime_type
       - content_hash
       - created_at
       - registry_version
       - attestations
+
+  SchemaBundle:
+    description: >-
+      A logical schema, grouping the one-or-more SchemaSource files it is
+      ingested from (e.g. DANDI = dandiset.json + asset.json). Schema-level
+      descriptive metadata — title, publisher, contact, homepage, license, and
+      the schema's own declared source_id / source_iri / source_version — lives
+      here once, rather than being repeated on every constituent file. A
+      single-file schema is simply a bundle with exactly one part.
+
+      Identity uses id (a UUID) — a mutable administrative record, like
+      SchemaSource. On (re-)ingestion a bundle is resolved-or-created by its
+      declared `source_id` (falling back to `label`), so every file that
+      declares the same schema id joins the same bundle. `parts` is the inverse
+      of SchemaSource.part_of.
+    slots:
+      - id
+      - label
+      - title
+      - description
+      - source_id
+      - source_iri
+      - source_version
+      - publisher
+      - contact
+      - homepage
+      - license
+      - created_at
+      - parts
 
   SchemaVersionSnapshot:
     description: >-
@@ -877,14 +902,26 @@ slots:
     range: uri
     description: Documentation or landing page for this schema.
 
-  is_hub:
-    range: boolean
-    ifabsent: 'false'
+  part_of:
+    range: SchemaBundle
+    inverse: parts
     description: >-
-      True if this schema is (part of) the registry's core/bridge
-      vocabulary that other schemas are matched against, rather than
-      matching every schema pairwise. Not auto-derived — set deliberately,
-      since which schema serves as the hub is a curatorial decision.
+      The SchemaBundle (logical schema) this source file belongs to, stored as
+      an id FK. Every SchemaSource is part of exactly one bundle; a single-file
+      schema's bundle has just this one part.
+
+  parts:
+    range: SchemaSource
+    multivalued: true
+    inverse: part_of
+    description: >-
+      The SchemaSource files that make up this bundle. Inverse of
+      SchemaSource.part_of.
+
+  license:
+    range: string
+    description: >-
+      License of the schema, as an SPDX identifier or name (e.g. "CC-BY-4.0").
 
   source_iri:
     range: uriorcurie
