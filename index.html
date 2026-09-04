@@ -4490,6 +4490,7 @@ ingestBtn.addEventListener('click', async () => {
   base.set('format', formatLabel);
   const addIf = (k, v) => { if (v) base.set(k, v); };
   addIf('bundle_label', bundle_label);
+  addIf('schema_title', val('im-title'));
   addIf('homepage',  val('im-homepage'));
   addIf('publisher', val('im-publisher'));
   addIf('contact',   val('im-contact'));
