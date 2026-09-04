@@ -192,6 +192,11 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .c-src-item.on .c-src-tick::before{content:'';width:6px;height:6px;background:#0a1017;border-radius:1px;}
 .c-src-name{flex:1;font-family:var(--mono);font-size:11.5px;}
 .c-src-count{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+.c-bundle-head{padding-top:8px;}
+.c-bundle-head .c-src-name{font-weight:600;}
+.c-src-child{padding-left:28px;padding-top:4px;padding-bottom:4px;}
+.c-src-child .c-src-name{color:var(--text-dim);font-size:11px;}
+.c-src-item.partial .c-src-tick{background:var(--teal);border-color:var(--teal);opacity:.4;}
 .c-src-toolbar{display:flex;gap:6px;padding:0 10px 8px;border-bottom:1px solid var(--border);margin-bottom:6px;}
 .c-mini-btn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);
   padding:3px 8px;font-size:10.5px;font-family:var(--sans);cursor:pointer;flex:1;}
@@ -841,6 +846,10 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .ingest-meta-head{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:9px;}
 .ingest-meta-opt{text-transform:none;letter-spacing:0;font-weight:400;}
 .ingest-meta-opt code{font-family:var(--mono);font-size:10px;color:var(--text-dim);}
+.ingest-meta-bundle{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
+.ingest-bundle-lbl{font-size:11px;color:var(--muted);flex-shrink:0;}
+#im-bundle{flex:0 0 auto;min-width:150px;}
+#im-bundle-new{flex:1;}
 .ingest-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
 .ingest-meta-input{background:var(--surface);border:1px solid var(--border);border-radius:6px;
   padding:6px 9px;color:var(--text);font-size:11.5px;font-family:var(--sans);}
@@ -892,6 +901,12 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 .src-meta-v{min-width:0;overflow:hidden;text-overflow:ellipsis;}
 .src-link{color:var(--teal);text-decoration:none;word-break:break-all;}
 .src-link:hover{text-decoration:underline;}
+.src-parts{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+.src-parts-h{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;}
+.src-part{display:flex;justify-content:space-between;gap:12px;font-size:11.5px;padding:2px 0;}
+.src-part-name{font-family:var(--mono);color:var(--text);}
+.src-part-bits{color:var(--muted);font-family:var(--mono);font-size:10.5px;white-space:nowrap;}
+.src-hash{color:var(--text-dim);}
 </style>
 </head>
 <body>
@@ -1316,6 +1331,13 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
     <!-- 2. source metadata -->
     <div class="ingest-meta" id="ingest-meta">
       <div class="ingest-meta-head">Source metadata <span class="ingest-meta-opt">— optional, saved as <code>&lt;schema&gt;_source.yaml</code></span></div>
+      <div class="ingest-meta-bundle">
+        <span class="ingest-bundle-lbl">Bundle</span>
+        <select class="ingest-meta-input" id="im-bundle" title="The logical schema this file belongs to">
+          <option value="__new__">＋ New bundle…</option>
+        </select>
+        <input class="ingest-meta-input" id="im-bundle-new" type="text" placeholder="new bundle name (blank = schema name)" spellcheck="false" autocomplete="off"/>
+      </div>
       <div class="ingest-meta-grid">
         <input class="ingest-meta-input" id="im-title" type="text" placeholder="title" spellcheck="false" autocomplete="off"/>
         <input class="ingest-meta-input" id="im-homepage" type="text" placeholder="homepage (https://…)" spellcheck="false" autocomplete="off"/>
@@ -1404,8 +1426,8 @@ async function initSources() {
   let prov = [];
   try { const r = await fetch('./data/provenance.json', {cache: 'no-cache'}); if (r.ok) prov = await r.json(); } catch (e) {}
 
-  // Per-source class + (distinct) property counts, covering declared and
-  // "observed" sources (a label attributed to content but not in sources[]).
+  // Per-source-file class + distinct-property counts, keyed by SchemaSource
+  // label (a class/property's `sources` list holds the file labels).
   const classCount = {}, propSets = {};
   d.classes.forEach(c => {
     (c.sources || []).forEach(s => { classCount[s] = (classCount[s] || 0) + 1; });
@@ -1413,59 +1435,86 @@ async function initSources() {
       (propSets[s] = propSets[s] || new Set()).add(p.id);
     }));
   });
-  const declared = new Map((d.sources || []).map(s => [s.label, s]));
-  const labels = [...new Set([...Object.keys(classCount), ...declared.keys()])]
-    .sort((a, b) => (classCount[b] || 0) - (classCount[a] || 0));
 
-  // Most-recent ingestion event per source (provenance.json).
+  // Bundle-centric: each card is a logical schema (SchemaBundle); its `parts`
+  // are the file-sources it was ingested from, and the descriptive metadata
+  // lives on the bundle. Fall back to one-bundle-per-source for a pre-bundle
+  // (old-shape) snapshot that has no bundles[].
+  let bundleList = (d.bundles && d.bundles.length)
+    ? d.bundles.slice()
+    : (d.sources || []).map(s => ({ ...s, parts: [s.label] }));
+  const srcByLabel = new Map((d.sources || []).map(s => [s.label, s]));
+
   const lastIngest = {};
   prov.forEach(e => {
     const s = e.schema_ingested;
     if (s && (!lastIngest[s] || (e.timestamp || '') > (lastIngest[s].timestamp || ''))) lastIngest[s] = e;
   });
 
+  bundleList.sort((a, b) => (b.class_count || 0) - (a.class_count || 0));
   document.getElementById('src-head-count').textContent =
-    `${labels.length} source${labels.length === 1 ? '' : 's'}`;
+    `${bundleList.length} schema${bundleList.length === 1 ? '' : 's'}`;
 
-  const cards = labels.map(label => {
-    const s = declared.get(label) || {};
-    const nClass = classCount[label] || s.class_count || 0;
-    const nProp  = (propSets[label] || new Set()).size;
-    const ver    = s.source_version || s.version || '';
-    const ing    = lastIngest[label];
+  const cards = bundleList.map(bundle => {
+    const parts = (bundle.parts && bundle.parts.length) ? bundle.parts : [bundle.label];
+    const nClass = bundle.class_count != null ? bundle.class_count
+                 : parts.reduce((n, p) => n + (classCount[p] || 0), 0);
+    const propSet = new Set();
+    parts.forEach(p => (propSets[p] || new Set()).forEach(x => propSet.add(x)));
+    const nProp = propSet.size;
+    const ver = bundle.version || bundle.source_version || '';
 
     const rows = [];
     // Prefer the schema's own declared id (a real, navigable URL) over the
     // synthetic registry source_iri; render it as a link when it's http(s).
-    const src = s.source_id || s.source_iri;
+    const src = bundle.source_id || bundle.source_iri;
     if (src) {
       const isUrl = /^https?:\/\//i.test(src);
       rows.push(['Source', isUrl
         ? `<a class="src-link" href="${esc(src)}" target="_blank" rel="noopener">${esc(src)}</a>`
         : esc(src)]);
     }
-    if (s.homepage)  rows.push(['Homepage', `<a class="src-link" href="${esc(s.homepage)}" target="_blank" rel="noopener">${esc(s.homepage)}</a>`]);
-    if (s.publisher) rows.push(['Publisher', esc(s.publisher)]);
-    if (s.contact)   rows.push(['Contact', esc(s.contact)]);
+    if (bundle.homepage)  rows.push(['Homepage', `<a class="src-link" href="${esc(bundle.homepage)}" target="_blank" rel="noopener">${esc(bundle.homepage)}</a>`]);
+    if (bundle.publisher) rows.push(['Publisher', esc(bundle.publisher)]);
+    if (bundle.contact)   rows.push(['Contact', esc(bundle.contact)]);
+    if (bundle.license)   rows.push(['License', esc(bundle.license)]);
+    const ing = lastIngest[bundle.label] || parts.map(p => lastIngest[p]).find(Boolean);
     if (ing) {
       const when = (ing.timestamp || '').slice(0, 10);
       const bits = [ing.registry_version ? `registry v${esc(ing.registry_version)}` : '', when, ing.agent ? esc(ing.agent) : '',
         ing.issue_number ? `issue #${esc(ing.issue_number)}` : ''].filter(Boolean);
       rows.push(['Last ingested', bits.join(' · ')]);
     }
-    const metaHtml = rows.length
-      ? `<div class="src-meta">${rows.map(([k, v]) =>
-          `<div class="src-meta-row"><span class="src-meta-k">${k}</span><span class="src-meta-v">${v}</span></div>`).join('')}</div>`
-      : '';
+
+    // The bundle's files (SchemaSource parts), each with its own content_hash.
+    const partsHtml =
+      `<div class="src-parts"><div class="src-parts-h">Files (${parts.length})</div>` +
+      parts.map(pl => {
+        const f = srcByLabel.get(pl) || {};
+        const bits = [
+          f.version ? `v${esc(f.version)}` : '',
+          f.mime_type ? esc(String(f.mime_type).replace('application/', '')) : '',
+          f.content_hash ? `<span class="src-hash">${esc(String(f.content_hash).slice(0, 10))}…</span>` : '',
+        ].filter(Boolean).join(' · ');
+        return `<div class="src-part"><span class="src-part-name">${esc(pl)}</span>` +
+               `${bits ? `<span class="src-part-bits">${bits}</span>` : ''}</div>`;
+      }).join('') + `</div>`;
+
+    const metaHtml =
+      `<div class="src-meta">` +
+      rows.map(([k, v]) =>
+        `<div class="src-meta-row"><span class="src-meta-k">${k}</span><span class="src-meta-v">${v}</span></div>`).join('') +
+      partsHtml +
+      `</div>`;
 
     return `
-      <div class="src-card${rows.length ? ' src-expandable' : ''}">
+      <div class="src-card src-expandable">
         <div class="src-card-head">
-          <span class="src-name">${esc(label)}</span>
-          ${s.title ? `<span class="src-title">${esc(s.title)}</span>` : ''}
-          ${s.is_hub ? `<span class="src-hub">hub</span>` : ''}
+          <span class="src-name">${esc(bundle.label)}</span>
+          ${bundle.title ? `<span class="src-title">${esc(bundle.title)}</span>` : ''}
+          ${parts.length > 1 ? `<span class="src-hub">${parts.length} files</span>` : ''}
           ${ver ? `<span class="src-ver">v${esc(ver)}</span>` : ''}
-          ${rows.length ? `<span class="src-caret" aria-hidden="true">▶</span>` : ''}
+          <span class="src-caret" aria-hidden="true">▶</span>
         </div>
         <div class="src-stats">
           <div class="src-stat"><span class="src-stat-v">${nClass}</span><span class="src-stat-l">classes</span></div>
@@ -1477,8 +1526,8 @@ async function initSources() {
 
   listEl.innerHTML = `<div class="src-list-inner">${cards}</div>`;
 
-  // Expandable cards: click a card to toggle its detail rows (but let a link
-  // inside the detail — e.g. Homepage — open normally without toggling).
+  // Expandable cards: click a card to toggle its detail (but let a link inside
+  // the detail — e.g. Homepage — open normally without toggling).
   listEl.querySelectorAll('.src-card.src-expandable').forEach(card => {
     card.addEventListener('click', (e) => {
       if (e.target.closest('a')) return;
@@ -1929,6 +1978,13 @@ const CONCEPT = {
 };
 const CONCEPT_DEFAULT_WEIGHTS = { ...CONCEPT.weights };
 
+// A concept's `sources` are file labels; collapse them to their bundles
+// (logical schemas), deduped, for display.
+function conceptBundles(sources) {
+  const m = CONCEPT.srcToBundle || new Map();
+  return [...new Set((sources || []).map(s => m.get(s) || s))];
+}
+
 async function initConcepts() {
   if (CONCEPT.initted) return;
   CONCEPT.initted = true;
@@ -1940,6 +1996,9 @@ async function initConcepts() {
     return;
   }
   CONCEPT.registry = d;
+  // Map each source-file label to its bundle (logical schema), so concept
+  // detail shows the schema/bundle a concept comes from, not the internal file.
+  CONCEPT.srcToBundle = new Map((d.sources || []).map(s => [s.label, s.bundle || s.label]));
 
   // Properties are namespaced by class in the data (e.g. "Dandiset__id"). Group
   // by the BARE name ("id") so the list shows the concept once, and aggregate
@@ -2030,19 +2089,60 @@ function setMode(mode) {
 }
 
 function renderSources() {
-  const counts = sourceCounts();
+  const counts = sourceCounts();                 // concepts per source-file label
+  const s2b = CONCEPT.srcToBundle || new Map();
+
+  // distinct concept count per bundle (a concept shared by two files of the
+  // same bundle counts once for that bundle)
+  const bundleCounts = {};
+  currentItems().forEach(it => {
+    new Set((it.sources || []).map(s => s2b.get(s) || s))
+      .forEach(b => { bundleCounts[b] = (bundleCounts[b] || 0) + 1; });
+  });
+
+  // group the source files under their bundle, preserving CONCEPT.sources order
+  const groups = new Map();
+  CONCEPT.sources.forEach(s => {
+    const b = s2b.get(s.label) || s.label;
+    (groups.get(b) || groups.set(b, []).get(b)).push(s);
+  });
+
   const el = document.getElementById('c-src-list');
-  el.innerHTML = CONCEPT.sources.map(s => {
-    const on = CONCEPT.enabled.has(s.label);
-    return `
-      <div class="c-src-item${on ? ' on' : ''}" data-label="${esc(s.label)}">
+  el.innerHTML = [...groups].map(([bundle, schemas]) => {
+    const on  = schemas.filter(s => CONCEPT.enabled.has(s.label)).length;
+    const cls = on === schemas.length ? ' on' : (on ? ' partial' : '');
+    const head = `
+      <div class="c-src-item c-bundle-head${cls}" data-bundle="${esc(bundle)}">
+        <span class="c-src-tick"></span>
+        <span class="c-src-name">${esc(bundle)}</span>
+        <span class="c-src-count">${bundleCounts[bundle] || 0}</span>
+      </div>`;
+    // Only show the nested file rows when they add information: more than one
+    // file, or a single file whose name differs from the bundle name. A
+    // single-file bundle named after its file collapses to just the one row.
+    const showChildren = schemas.length > 1 || schemas[0].label !== bundle;
+    const children = showChildren ? schemas.map(s => `
+      <div class="c-src-item c-src-child${CONCEPT.enabled.has(s.label) ? ' on' : ''}" data-label="${esc(s.label)}">
         <span class="c-src-tick"></span>
         <span class="c-src-name">${esc(s.label)}</span>
         <span class="c-src-count">${counts[s.label] || 0}</span>
-      </div>`;
+      </div>`).join('') : '';
+    return head + children;
   }).join('');
-  el.querySelectorAll('.c-src-item').forEach(row => {
+
+  // bundle header toggles all its schema files together
+  el.querySelectorAll('.c-bundle-head').forEach(row => {
     row.addEventListener('click', () => {
+      const labels = (groups.get(row.dataset.bundle) || []).map(s => s.label);
+      const allOn = labels.every(l => CONCEPT.enabled.has(l));
+      labels.forEach(l => allOn ? CONCEPT.enabled.delete(l) : CONCEPT.enabled.add(l));
+      renderList();
+    });
+  });
+  // a schema row toggles just itself
+  el.querySelectorAll('.c-src-child').forEach(row => {
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
       const label = row.dataset.label;
       if (CONCEPT.enabled.has(label)) CONCEPT.enabled.delete(label);
       else CONCEPT.enabled.add(label);
@@ -2153,7 +2253,7 @@ function renderPropertyDetail() {
   el.innerHTML = `
     <div class="c-dn">${esc(p.name)}</div>
     ${iriHtml}
-    <div class="c-src-row">${(p.sources || []).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}</div>
+    <div class="c-src-row">${conceptBundles(p.sources).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}</div>
     <div class="c-def">${esc(defs[0] || '—')}${defs.length > 1 ? ` <span class="c-prop-more">(+${defs.length - 1} other definition${defs.length > 2 ? 's' : ''})</span>` : ''}</div>
 
     <div class="c-section">Type${ranges.length > 1 ? 's' : ''}</div>
@@ -2248,7 +2348,7 @@ function renderConceptDetail() {
   el.innerHTML = `
     <div class="c-dn${c.is_abstract ? ' abstract' : ''}">${esc(c.name)}</div>
     ${iriHtml}
-    <div class="c-src-row">${(c.sources || []).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}</div>
+    <div class="c-src-row">${conceptBundles(c.sources).map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}</div>
     <div class="c-def">${esc(c.definition || '—')}</div>
 
     <div class="c-section">Properties (${props.length})</div>
@@ -4252,6 +4352,10 @@ function resetIngest() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const bsel = document.getElementById('im-bundle');
+  if (bsel) bsel.value = '__new__';
+  const bnew = document.getElementById('im-bundle-new');
+  if (bnew) { bnew.value = ''; bnew.style.display = ''; }
 }
 
 function defaultDropHTML() {
@@ -4305,10 +4409,37 @@ function showPasteMode(e) {
 document.getElementById('drop-center').innerHTML = defaultDropHTML();
 document.getElementById('paste-toggle').addEventListener('click', showPasteMode);
 
+// Bundle picker: choose an existing bundle (populated from the registry) or
+// "＋ New bundle…" and type a name. Feeds bundle_label into the submission.
+(async function initBundlePicker() {
+  const sel = document.getElementById('im-bundle');
+  const newInput = document.getElementById('im-bundle-new');
+  if (!sel || !newInput) return;
+  const toggleNew = () => { newInput.style.display = (sel.value === '__new__') ? '' : 'none'; };
+  sel.addEventListener('change', toggleNew);
+  toggleNew();
+  try {
+    const d = await registryPromise;
+    [...new Set(((d && d.bundles) || []).map(b => b.label))].sort().forEach(label => {
+      const opt = document.createElement('option');
+      opt.value = label; opt.textContent = label;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+})();
+
 // Optional source metadata (homepage/publisher/…) → a marked YAML block the
 // workflow writes to `<schema>_source.yaml` next to the schema. Empty → omitted.
 function sourceMetadataBlock() {
+  const bundleSel = document.getElementById('im-bundle');
+  const bundleNew = document.getElementById('im-bundle-new');
+  // An existing bundle → its label; "＋ New bundle…" → the typed name (blank =>
+  // omitted, so ingestion defaults the bundle to the schema's own name).
+  const bundle_label = (bundleSel && bundleSel.value !== '__new__')
+    ? bundleSel.value
+    : ((bundleNew || {}).value || '').trim();
   const fields = {
+    bundle_label,
     title:     (document.getElementById('im-title')     || {}).value,
     homepage:  (document.getElementById('im-homepage')  || {}).value,
     publisher: (document.getElementById('im-publisher') || {}).value,
