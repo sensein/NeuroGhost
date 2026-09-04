@@ -1,0 +1,1233 @@
+name: asset-meta
+description: Metadata used to describe an asset on the server.
+id: https://registry.sensein.io/schema/asset-meta
+version: 1.0.0
+imports:
+- linkml:types
+prefixes:
+  Asset: https://example.org/Asset
+  linkml: https://w3id.org/linkml/
+default_prefix: Asset
+default_range: string
+enums:
+  schemaKey_options:
+    permissible_values:
+      Activity: {}
+      Project: {}
+      Session: {}
+      PublishActivity: {}
+  AccessType:
+    description: An enumeration of access status options
+    permissible_values:
+      dandi:OpenAccess: {}
+      dandi:EmbargoedAccess: {}
+  DigestType:
+    description: An enumeration of checksum types
+    permissible_values:
+      dandi:md5: {}
+      dandi:sha1: {}
+      dandi:sha2-256: {}
+      dandi:sha3-256: {}
+      dandi:blake2b-256: {}
+      dandi:blake3: {}
+      dandi:dandi-etag: {}
+      dandi:dandi-zarr-checksum: {}
+  IdentifierType:
+    description: An enumeration of identifiers
+    permissible_values:
+      dandi:doi: {}
+      dandi:orcid: {}
+      dandi:ror: {}
+      dandi:dandi: {}
+      dandi:rrid: {}
+  LicenseType:
+    permissible_values:
+      spdx:CC-BY-4.0: {}
+      spdx:CC0-1.0: {}
+  ParticipantRelationType:
+    description: An enumeration of participant relations
+    permissible_values:
+      dandi:isChildOf: {}
+      dandi:isParentOf: {}
+      dandi:isSiblingOf: {}
+      dandi:isMonozygoticTwinOf: {}
+      dandi:isDizygoticTwinOf: {}
+  RelationType:
+    description: An enumeration of resource relations
+    permissible_values:
+      dcite:IsCitedBy: {}
+      dcite:Cites: {}
+      dcite:IsSupplementTo: {}
+      dcite:IsSupplementedBy: {}
+      dcite:IsContinuedBy: {}
+      dcite:Continues: {}
+      dcite:Describes: {}
+      dcite:IsDescribedBy: {}
+      dcite:HasMetadata: {}
+      dcite:IsMetadataFor: {}
+      dcite:HasVersion: {}
+      dcite:IsVersionOf: {}
+      dcite:IsNewVersionOf: {}
+      dcite:IsPreviousVersionOf: {}
+      dcite:IsPartOf: {}
+      dcite:HasPart: {}
+      dcite:IsReferencedBy: {}
+      dcite:References: {}
+      dcite:IsDocumentedBy: {}
+      dcite:Documents: {}
+      dcite:IsCompiledBy: {}
+      dcite:Compiles: {}
+      dcite:IsVariantFormOf: {}
+      dcite:IsOriginalFormOf: {}
+      dcite:IsIdenticalTo: {}
+      dcite:IsReviewedBy: {}
+      dcite:Reviews: {}
+      dcite:IsDerivedFrom: {}
+      dcite:IsSourceOf: {}
+      dcite:IsRequiredBy: {}
+      dcite:Requires: {}
+      dcite:Obsoletes: {}
+      dcite:IsObsoletedBy: {}
+      dcite:IsPublishedIn: {}
+  ResourceType:
+    description: An enumeration of resource types
+    permissible_values:
+      dcite:Audiovisual: {}
+      dcite:Book: {}
+      dcite:BookChapter: {}
+      dcite:Collection: {}
+      dcite:ComputationalNotebook: {}
+      dcite:ConferencePaper: {}
+      dcite:ConferenceProceeding: {}
+      dcite:DataPaper: {}
+      dcite:Dataset: {}
+      dcite:Dissertation: {}
+      dcite:Event: {}
+      dcite:Image: {}
+      dcite:Instrument: {}
+      dcite:InteractiveResource: {}
+      dcite:Journal: {}
+      dcite:JournalArticle: {}
+      dcite:Model: {}
+      dcite:OutputManagementPlan: {}
+      dcite:PeerReview: {}
+      dcite:PhysicalObject: {}
+      dcite:Preprint: {}
+      dcite:Report: {}
+      dcite:Service: {}
+      dcite:Software: {}
+      dcite:Sound: {}
+      dcite:Standard: {}
+      dcite:StudyRegistration: {}
+      dcite:Text: {}
+      dcite:Workflow: {}
+      dcite:Other: {}
+  RoleType:
+    description: An enumeration of roles
+    permissible_values:
+      dcite:Author: {}
+      dcite:Conceptualization: {}
+      dcite:ContactPerson: {}
+      dcite:DataCollector: {}
+      dcite:DataCurator: {}
+      dcite:DataManager: {}
+      dcite:FormalAnalysis: {}
+      dcite:FundingAcquisition: {}
+      dcite:Investigation: {}
+      dcite:Maintainer: {}
+      dcite:Methodology: {}
+      dcite:Producer: {}
+      dcite:ProjectLeader: {}
+      dcite:ProjectManager: {}
+      dcite:ProjectMember: {}
+      dcite:ProjectAdministration: {}
+      dcite:Researcher: {}
+      dcite:Resources: {}
+      dcite:Software: {}
+      dcite:Supervision: {}
+      dcite:Validation: {}
+      dcite:Visualization: {}
+      dcite:Funder: {}
+      dcite:Sponsor: {}
+      dcite:StudyParticipant: {}
+      dcite:Affiliation: {}
+      dcite:EthicsApproval: {}
+      dcite:Other: {}
+slots:
+  id:
+    description: Uniform resource identifier.
+    required: true
+  schemaKey:
+    required: true
+  status:
+    description: The access status of the item.
+    range: AccessType
+    required: true
+  contactPoint:
+    range: ContactPoint
+    multivalued: true
+  description:
+    description: A description of the item.
+  embargoedUntil:
+    description: Date on which embargo ends.
+    range: date
+  identifier:
+    range: uri
+    required: true
+    pattern: ^RRID:.*
+  name:
+    description: The name of the item.
+    pattern: ^[\s\S]{0,150}$
+  startDate:
+    range: datetime
+  endDate:
+    range: datetime
+  wasAssociatedWith:
+    multivalued: true
+  used:
+    range: Equipment
+    multivalued: true
+  url:
+    description: permalink to the item
+    range: uri
+    pattern: ^[\s\S]{1,1000}$
+  alleleSymbol: {}
+  alleleType: {}
+  sampleType:
+    description: Identifier for the sample characteristics (e.g., from OBI, Encode).
+    range: SampleType
+    required: true
+  assayType:
+    range: AssayType
+    multivalued: true
+  anatomy:
+    range: Anatomy
+    multivalued: true
+  wasDerivedFrom:
+    range: BioSample
+    multivalued: true
+  wasAttributedTo:
+    range: Participant
+    multivalued: true
+  sameAs:
+    multivalued: true
+  hasMember:
+    multivalued: true
+  email: {}
+  dxdate:
+    multivalued: true
+  locus:
+    description: Locus at which information was extracted.
+    range: Locus
+    required: true
+  alleles:
+    range: Allele
+    required: true
+    multivalued: true
+  wasGeneratedBy:
+    multivalued: true
+    any_of:
+    - range: Session
+    - range: Project
+    - range: Activity
+  locusType: {}
+  roleName:
+    range: RoleType
+    multivalued: true
+  includeInCitation:
+    description: A flag to indicate whether a contributor should be included when
+      generating a citation for the item.
+    range: boolean
+  awardNumber:
+    description: Identifier associated with a sponsored or gift award.
+  altName:
+    multivalued: true
+  strain:
+    description: Identifier for the strain of the participant or subject.
+    range: StrainType
+  cellLine:
+    description: Cell line associated with the participant or subject.
+  vendor:
+    range: Organization
+  age:
+    description: A representation of age using ISO 8601 duration. This should include
+      a valueReference if anything other than date of birth is used.
+    range: PropertyValue
+  sex:
+    description: Identifier for sex of the participant or subject if available. (e.g.
+      from OBI)
+    range: SexType
+  genotype:
+    description: Genotype descriptor of participant or subject if available
+  species:
+    description: An identifier indicating the taxonomic classification of the participant
+      or subject.
+    range: SpeciesType
+  disorder:
+    range: Disorder
+    multivalued: true
+  relatedParticipant:
+    range: RelatedParticipant
+    multivalued: true
+  affiliation:
+    range: Affiliation
+    multivalued: true
+  maxValue:
+    range: float
+  minValue:
+    range: float
+  unitText: {}
+  value:
+    description: The value associated with this property.
+    required: true
+  valueReference:
+    range: PropertyValue
+  propertyID:
+    description: A commonly used identifier for the characteristic represented by
+      the property. For example, a known prefix like DOI or a full URL.
+    any_of:
+    - range: IdentifierType
+    - range: string
+  relation:
+    description: 'Indicates how the resource is related to the dataset. This relation
+      should satisfy: dandiset <relation> resource.'
+    range: RelationType
+    required: true
+  repository:
+    description: location of the item
+    range: uri
+    pattern: ^[\s\S]{1,1000}$
+  resourceType:
+    description: The type of resource.
+    range: ResourceType
+  version:
+    required: true
+  schemaVersion: {}
+  contributor:
+    multivalued: true
+  about:
+    multivalued: true
+  studyTarget:
+    multivalued: true
+  license:
+    range: LicenseType
+    multivalued: true
+  protocol:
+    multivalued: true
+  ethicsApproval:
+    range: EthicsApproval
+    multivalued: true
+  keywords:
+    multivalued: true
+  acknowledgement:
+    description: Any acknowledgments not covered by contributors or external resources.
+  access:
+    range: AccessRequirements
+    multivalued: true
+  relatedResource:
+    range: Resource
+    multivalued: true
+  contentSize:
+    range: integer
+    required: true
+  encodingFormat:
+    required: true
+  digest:
+    required: true
+  path:
+    required: true
+  dateModified:
+    range: datetime
+  blobDateModified:
+    range: datetime
+  dataType:
+    range: uri
+    pattern: ^[\s\S]{1,1000}$
+  approach:
+    range: ApproachType
+    multivalued: true
+  measurementTechnique:
+    range: MeasurementTechniqueType
+    multivalued: true
+  variableMeasured:
+    range: PropertyValue
+    multivalued: true
+  contentUrl:
+    required: true
+    multivalued: true
+  publishedBy:
+    description: The URL should contain the provenance of the publishing process.
+    any_of:
+    - range: string
+    - range: PublishActivity
+  datePublished:
+    range: datetime
+classes:
+  AccessRequirements:
+    description: Information about access options for the dataset
+    slots:
+    - id
+    - schemaKey
+    - status
+    - contactPoint
+    - description
+    - embargoedUntil
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      status:
+        description: The access status of the item.
+        range: AccessType
+        required: true
+      contactPoint:
+        description: Who or where to look for information about access.
+        range: ContactPoint
+      description:
+        description: Information about access requirements when embargoed or restricted
+      embargoedUntil:
+        description: Date on which embargo ends.
+        range: date
+  Activity:
+    description: Information about the Project activity
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - description
+    - startDate
+    - endDate
+    - wasAssociatedWith
+    - used
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        range: schemaKey_options
+        required: true
+      identifier: {}
+      name:
+        description: The name of the activity.
+        required: true
+      description:
+        description: The description of the activity.
+      startDate: {}
+      endDate: {}
+      wasAssociatedWith:
+        multivalued: true
+      used:
+        range: Equipment
+        multivalued: true
+  Affiliation:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: Use an ror.org identifier for institutions.
+      name:
+        description: Name of organization
+        required: true
+  Agent:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - url
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: Identifier for an agent.
+      name:
+        required: true
+      url: {}
+  Allele:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - alleleSymbol
+    - alleleType
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: Identifier for genotyping allele.
+        required: true
+      alleleSymbol: {}
+      alleleType: {}
+  Anatomy:
+    description: UBERON or other identifier for anatomical part studied
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  ApproachType:
+    description: Identifier for approach used
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  AssayType:
+    description: OBI based identifier for the assay(s) used
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  BioSample:
+    description: Description of the sample that was studied
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - sampleType
+    - assayType
+    - anatomy
+    - wasDerivedFrom
+    - wasAttributedTo
+    - sameAs
+    - hasMember
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        required: true
+      sampleType:
+        description: Identifier for the sample characteristics (e.g., from OBI, Encode).
+        range: SampleType
+        required: true
+      assayType:
+        range: AssayType
+        multivalued: true
+      anatomy:
+        range: Anatomy
+        multivalued: true
+      wasDerivedFrom:
+        range: BioSample
+        multivalued: true
+      wasAttributedTo:
+        range: Participant
+        multivalued: true
+      sameAs:
+        multivalued: true
+      hasMember:
+        multivalued: true
+  ContactPoint:
+    slots:
+    - id
+    - schemaKey
+    - email
+    - url
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      email:
+        description: Email address of contact.
+      url:
+        description: A Web page to find information on how to contact.
+  Disorder:
+    description: Biolink, SNOMED, or other identifier for disorder studied
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - dxdate
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+      dxdate:
+        multivalued: true
+  Equipment:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - description
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier: {}
+      name:
+        description: A name for the equipment.
+        required: true
+      description:
+        description: The description of the equipment.
+  EthicsApproval:
+    description: Information about ethics committee approval for project
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - contactPoint
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: Approved Protocol identifier, often a number or alphanumeric
+          string.
+        required: true
+      contactPoint:
+        description: Information about the ethics approval committee.
+        range: ContactPoint
+  GenericType:
+    description: An object to capture any type for about
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  GenotypeInfo:
+    slots:
+    - id
+    - schemaKey
+    - locus
+    - alleles
+    - wasGeneratedBy
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      locus:
+        description: Locus at which information was extracted.
+        range: Locus
+        required: true
+      alleles:
+        range: Allele
+        required: true
+        multivalued: true
+      wasGeneratedBy:
+        range: Session
+        multivalued: true
+  Locus:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - locusType
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: Identifier for genotyping locus.
+        required: true
+      locusType: {}
+  MeasurementTechniqueType:
+    description: Identifier for measurement technique used
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  Organization:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - email
+    - url
+    - roleName
+    - includeInCitation
+    - awardNumber
+    - contactPoint
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: Use an ror.org identifier for institutions.
+      name: {}
+      email: {}
+      url: {}
+      roleName:
+        range: RoleType
+        multivalued: true
+      includeInCitation:
+        description: A flag to indicate whether a contributor should be included when
+          generating a citation for the item
+        range: boolean
+      awardNumber:
+        description: Identifier associated with a sponsored or gift award.
+      contactPoint:
+        range: ContactPoint
+        multivalued: true
+  Participant:
+    description: 'Description about the Participant or Subject studied.
+
+
+      The Participant or Subject can be any individual or synthesized Agent. The
+
+      properties of the Participant or Subject refers to information at the timepoint
+
+      when the Participant or Subject engaged in the production of data being described.'
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - altName
+    - strain
+    - cellLine
+    - vendor
+    - age
+    - sex
+    - genotype
+    - species
+    - disorder
+    - relatedParticipant
+    - sameAs
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        required: true
+      altName:
+        multivalued: true
+      strain:
+        description: Identifier for the strain of the participant or subject.
+        range: StrainType
+      cellLine:
+        description: Cell line associated with the participant or subject.
+      vendor:
+        range: Organization
+      age:
+        description: A representation of age using ISO 8601 duration. This should
+          include a valueReference if anything other than date of birth is used.
+        range: PropertyValue
+      sex:
+        description: Identifier for sex of the participant or subject if available.
+          (e.g. from OBI)
+        range: SexType
+      genotype:
+        description: Genotype descriptor of participant or subject if available
+      species:
+        description: An identifier indicating the taxonomic classification of the
+          participant or subject.
+        range: SpeciesType
+      disorder:
+        range: Disorder
+        multivalued: true
+      relatedParticipant:
+        range: RelatedParticipant
+        multivalued: true
+      sameAs:
+        multivalued: true
+  Person:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - email
+    - url
+    - roleName
+    - includeInCitation
+    - awardNumber
+    - affiliation
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: An ORCID (orcid.org) identifier for an individual.
+      name:
+        description: 'Use the format: familyname, given names ...'
+        required: true
+      email: {}
+      url: {}
+      roleName:
+        range: RoleType
+        multivalued: true
+      includeInCitation:
+        description: A flag to indicate whether a contributor should be included when
+          generating a citation for the item.
+        range: boolean
+      awardNumber:
+        description: Identifier associated with a sponsored or gift award.
+      affiliation:
+        range: Affiliation
+        multivalued: true
+  Project:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - description
+    - startDate
+    - endDate
+    - wasAssociatedWith
+    - used
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier: {}
+      name:
+        description: The name of the project that generated this Dandiset or asset.
+        required: true
+      description:
+        description: A brief description of the project.
+      startDate: {}
+      endDate: {}
+      wasAssociatedWith:
+        multivalued: true
+      used:
+        range: Equipment
+        multivalued: true
+  PropertyValue:
+    slots:
+    - id
+    - schemaKey
+    - maxValue
+    - minValue
+    - unitText
+    - value
+    - valueReference
+    - propertyID
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      maxValue:
+        range: float
+      minValue:
+        range: float
+      unitText: {}
+      value:
+        description: The value associated with this property.
+        required: true
+      valueReference:
+        range: PropertyValue
+      propertyID:
+        description: A commonly used identifier for the characteristic represented
+          by the property. For example, a known prefix like DOI or a full URL.
+        any_of:
+        - range: IdentifierType
+        - range: string
+  PublishActivity:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - description
+    - startDate
+    - endDate
+    - wasAssociatedWith
+    - used
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier: {}
+      name:
+        description: The name of the activity.
+        required: true
+      description:
+        description: The description of the activity.
+      startDate: {}
+      endDate: {}
+      wasAssociatedWith:
+        multivalued: true
+      used:
+        range: Equipment
+        multivalued: true
+  RelatedParticipant:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - url
+    - relation
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier: {}
+      name: {}
+      url: {}
+      relation:
+        description: 'Indicates how the current participant or subject is related
+          to the other participant or subject. This relation should satisfy: Participant/Subject
+          <relation> relatedParticipant/Subject.'
+        range: ParticipantRelationType
+        required: true
+  Resource:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - url
+    - repository
+    - relation
+    - resourceType
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier: {}
+      name: {}
+      url: {}
+      repository:
+        description: Name of the repository in which the resource is housed.
+      relation:
+        description: 'Indicates how the resource is related to the dataset. This relation
+          should satisfy: dandiset <relation> resource.'
+        range: RelationType
+        required: true
+      resourceType:
+        description: The type of resource.
+        range: ResourceType
+  SampleType:
+    description: OBI based identifier for the sample type used
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  Session:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - description
+    - startDate
+    - endDate
+    - wasAssociatedWith
+    - used
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier: {}
+      name:
+        description: The name of the logical session associated with the asset.
+        required: true
+      description:
+        description: A brief description of the session.
+      startDate:
+        range: datetime
+      endDate:
+        range: datetime
+      wasAssociatedWith:
+        multivalued: true
+      used:
+        range: Equipment
+        multivalued: true
+  SexType:
+    description: Identifier for the sex of the sample
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  Software:
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    - version
+    - url
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: RRID of the software from scicrunch.org.
+      name:
+        required: true
+      version:
+        required: true
+      url:
+        description: Web page for the software.
+  SpeciesType:
+    description: Identifier for species of the sample
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  StrainType:
+    description: Identifier for the strain of the sample
+    slots:
+    - id
+    - schemaKey
+    - identifier
+    - name
+    slot_usage:
+      id:
+        description: Uniform resource identifier
+      schemaKey:
+        required: true
+      identifier:
+        description: The identifier can be any url or a compact URI, preferably supported
+          by identifiers.org.
+      name:
+        description: The name of the item.
+  Asset:
+    description: Metadata used to describe an asset on the server.
+    slots:
+    - id
+    - schemaKey
+    - schemaVersion
+    - name
+    - description
+    - contributor
+    - about
+    - studyTarget
+    - license
+    - protocol
+    - ethicsApproval
+    - keywords
+    - acknowledgement
+    - access
+    - url
+    - repository
+    - relatedResource
+    - wasGeneratedBy
+    - contentSize
+    - encodingFormat
+    - digest
+    - path
+    - dateModified
+    - blobDateModified
+    - dataType
+    - sameAs
+    - approach
+    - measurementTechnique
+    - variableMeasured
+    - wasDerivedFrom
+    - wasAttributedTo
+    - identifier
+    - contentUrl
+    - publishedBy
+    - datePublished
+    slot_usage:
+      id:
+        description: Uniform resource identifier.
+        required: true
+      schemaKey:
+        required: true
+      schemaVersion: {}
+      name:
+        description: The name of the item.
+        pattern: ^[\s\S]{0,150}$
+      description:
+        description: A description of the item.
+      contributor:
+        multivalued: true
+      about:
+        multivalued: true
+      studyTarget:
+        multivalued: true
+      license:
+        range: LicenseType
+        multivalued: true
+      protocol:
+        multivalued: true
+      ethicsApproval:
+        range: EthicsApproval
+        multivalued: true
+      keywords:
+        multivalued: true
+      acknowledgement:
+        description: Any acknowledgments not covered by contributors or external resources.
+      access:
+        range: AccessRequirements
+        multivalued: true
+      url:
+        description: permalink to the item
+        range: uri
+        pattern: ^[\s\S]{1,1000}$
+      repository:
+        description: location of the item
+        range: uri
+        pattern: ^[\s\S]{1,1000}$
+      relatedResource:
+        range: Resource
+        multivalued: true
+      wasGeneratedBy:
+        multivalued: true
+        any_of:
+        - range: Session
+        - range: Project
+        - range: Activity
+      contentSize:
+        range: integer
+        required: true
+      encodingFormat:
+        required: true
+      digest:
+        required: true
+      path:
+        required: true
+      dateModified:
+        range: datetime
+      blobDateModified:
+        range: datetime
+      dataType:
+        range: uri
+        pattern: ^[\s\S]{1,1000}$
+      sameAs:
+        multivalued: true
+      approach:
+        range: ApproachType
+        multivalued: true
+      measurementTechnique:
+        range: MeasurementTechniqueType
+        multivalued: true
+      variableMeasured:
+        range: PropertyValue
+        multivalued: true
+      wasDerivedFrom:
+        range: BioSample
+        multivalued: true
+      wasAttributedTo:
+        range: Participant
+        multivalued: true
+      identifier:
+        range: uri
+        required: true
+        pattern: ^RRID:.*
+      contentUrl:
+        required: true
+        multivalued: true
+      publishedBy:
+        description: The URL should contain the provenance of the publishing process.
+        any_of:
+        - range: string
+        - range: PublishActivity
+      datePublished:
+        range: datetime
