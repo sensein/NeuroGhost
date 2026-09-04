@@ -4474,29 +4474,41 @@ function sourceMetadataBlock() {
 ingestBtn.addEventListener('click', async () => {
   if (!yamlText) return;
   const info = parseSchemaInfo(yamlText, fileLang);
-  // Title MUST start with "schema-submission:" — schema_submission.yml triggers
-  // on that exact prefix and strips it to derive the schema name.
-  const title = encodeURIComponent(`schema-submission: ${schemaName}`);
-  // Fence with the detected language: the workflow converts a ```json /
-  // ```json-schema block via from_jsonschema, and treats anything else as
-  // LinkML — so JSON must NOT go out as ```yaml. The FULL schema goes in — no
-  // truncation (that produced invalid, cut-off submissions).
-  const fullBody =
-    `## Schema submission\n\nSubmitted via NeuroGhost UI · ${new Date().toISOString().slice(0, 10)}\n\n` +
-    `\`\`\`${fileLang}\n${yamlText}\n\`\`\`${sourceMetadataBlock()}`;
-  const prefillUrl = `https://github.com/${ISSUE_REPO}/issues/new?title=${title}&body=${encodeURIComponent(fullBody)}&labels=schema-submission`;
+  const val = id => ((document.getElementById(id) || {}).value || '').trim();
 
-  // GitHub/browsers cap a prefilled-issue URL (~8 KB); a big schema overflows it
-  // and gets silently cut. When that happens, copy the full submission to the
-  // clipboard and open a blank issue for the user to paste — nothing is lost.
-  const tooLong = prefillUrl.length > 7000;
-  let openUrl = prefillUrl, copied = false;
-  if (tooLong) {
-    try { await navigator.clipboard.writeText(fullBody); copied = true; } catch (e) {}
-    const note = copied
-      ? '_The full submission was copied to your clipboard — paste it here (⌘/Ctrl-V), keep the title, then submit._'
-      : '_This schema is too large to prefill. Paste the whole schema as a `' + fileLang + '` fenced block here, keep the title, then submit._';
-    openUrl = `https://github.com/${ISSUE_REPO}/issues/new?title=${title}&body=${encodeURIComponent(note)}&labels=schema-submission`;
+  // Submit through the GitHub *issue form* (.github/ISSUE_TEMPLATE/schema_submission.yml),
+  // prefilling its fields from what the UI collected — the converged path. The
+  // form auto-applies the schema-submission label; we set a nice issue title that
+  // also triggers CI.
+  const bundleSel = document.getElementById('im-bundle');
+  const bundle_label = (bundleSel && bundleSel.value !== '__new__') ? bundleSel.value : val('im-bundle-new');
+  const formatLabel = fileLang === 'json' ? 'JSON Schema' : 'LinkML (YAML)';
+
+  const base = new URLSearchParams({ template: 'schema_submission.yml' });
+  base.set('title', `schema-submission: ${schemaName}`);
+  base.set('name', schemaName);
+  base.set('format', formatLabel);
+  const addIf = (k, v) => { if (v) base.set(k, v); };
+  addIf('bundle_label', bundle_label);
+  addIf('homepage',  val('im-homepage'));
+  addIf('publisher', val('im-publisher'));
+  addIf('contact',   val('im-contact'));
+
+  const origin = `https://github.com/${ISSUE_REPO}/issues/new?`;
+
+  // Prefill the Schema field too when it fits; if the URL would blow GitHub's
+  // ~8 KB limit, drop it and put the schema on the clipboard to paste into the
+  // Schema field (the metadata fields are small and always prefill).
+  const withSchema = new URLSearchParams(base);
+  withSchema.set('schema', yamlText);
+  const fullUrl = origin + withSchema.toString();
+  let openUrl, copied = false, needsPaste = false;
+  if (fullUrl.length <= 7000) {
+    openUrl = fullUrl;
+  } else {
+    needsPaste = true;
+    try { await navigator.clipboard.writeText(yamlText); copied = true; } catch (e) {}
+    openUrl = origin + base.toString();
   }
 
   ingestLog.innerHTML = '';
@@ -4506,13 +4518,13 @@ ingestBtn.addEventListener('click', async () => {
   const steps = [
     ['→ Validating schema structure…', ''],
     [`→ Parsed: ${schemaName} · ${info.classes} classes · ${info.slots} slots`, ''],
-    tooLong
-      ? [(copied ? '→ Schema too large to prefill — full submission copied to your clipboard.'
-                 : '→ Schema too large to prefill — copy the schema into the issue body yourself.'), '']
-      : ['→ Opening GitHub issue to trigger CI pipeline…', ''],
-    tooLong
-      ? ['✓ Issue opened — paste (⌘/Ctrl-V), keep the title, then submit.', 'ok']
-      : ['✓ Issue created — Actions will validate, ingest, align, and archive.', 'ok'],
+    needsPaste
+      ? [(copied ? '→ Large schema — copied to your clipboard; the form fields are prefilled.'
+                 : '→ Large schema — paste it into the Schema field yourself; the fields are prefilled.'), '']
+      : ['→ Opening the schema-submission form (fields prefilled)…', ''],
+    needsPaste
+      ? ['✓ Form opened — paste the schema (⌘/Ctrl-V) into the Schema field, then Submit.', 'ok']
+      : ['✓ Form opened — review and Submit; CI validates and opens a PR for review.', 'ok'],
   ];
   steps.forEach(([text, cls], i) => {
     setTimeout(() => {
