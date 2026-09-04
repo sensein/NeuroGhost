@@ -268,5 +268,20 @@
       "sources_total": 7
     },
     "archive_path": "data/versions/1.9.8.json"
+  },
+  {
+    "registry_version": "1.10.0",
+    "previous_version": "1.9.8",
+    "timestamp": "2026-09-04T20:32:58.542372+00:00",
+    "bump": "minor",
+    "trigger": "manual",
+    "issue_number": "",
+    "agent": "djarecka",
+    "schema_ingested": "",
+    "stats": {
+      "classes_total": 694,
+      "sources_total": 9
+    },
+    "archive_path": "data/versions/1.10.0.json"
   }
 ]
