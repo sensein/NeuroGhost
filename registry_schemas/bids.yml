@@ -219,6 +219,7 @@ classes:
     - metadata__BackgroundSuppressionNumberPulses
     - metadata__BackgroundSuppressionPulseTime
     - metadata__BasedOn
+    - metadata__BigDelta
     - metadata__BloodDensity
     - metadata__BodyPart
     - metadata__BodyPartDetails
@@ -566,6 +567,7 @@ classes:
     - metadata__SliceEncodingDirection
     - metadata__SliceThickness
     - metadata__SliceTiming
+    - metadata__SmallDelta
     - metadata__SoftwareFilters
     - metadata__SoftwareName
     - metadata__SoftwareRRID
@@ -3334,7 +3336,7 @@ slots:
 
       [database of Genotypes and Phenotypes
 
-      (dbGaP)](https://www.ncbi.nlm.nih.gov/gap/advanced)
+      (dbGaP)](https://www.ncbi.nlm.nih.gov/gap/advanced_search/)
 
       under /Study/Molecular Data Type (for example, SNP Genotypes (Array) or
 
@@ -3588,6 +3590,20 @@ slots:
     multivalued: false
     range: string
     slot_uri: https://bids-specification.readthedocs.io/en/stable/glossary.html#BasedOn
+  metadata__BigDelta:
+    description: 'In the context of a diffusion-weighted pulsed gradient spin echo
+      sequence,
+
+      corresponds to the time between the leading edges of two successive
+
+      diffusion-encoding gradient pulses (Δ), specified in seconds.
+
+      The value may be an array, if Δ varies by volume, in which case the number
+
+      of values MUST correspond to the number of volumes in the data file.'
+    multivalued: false
+    range: float
+    slot_uri: https://bids-specification.readthedocs.io/en/stable/glossary.html#BigDelta
   metadata__BloodDensity:
     description: Measured blood density. Unit of blood density should be in `"g/mL"`.
     multivalued: false
@@ -6977,6 +6993,20 @@ slots:
     multivalued: true
     range: string
     slot_uri: https://bids-specification.readthedocs.io/en/stable/glossary.html#SliceTiming
+  metadata__SmallDelta:
+    description: 'In the context of a diffusion-weighted pulsed gradient spin echo
+      sequence,
+
+      corresponds to the duration of a diffusion-encoding gradient pulse (δ),
+
+      specified in seconds.
+
+      The value may be an array, if δ varies by volume, in which case the number
+
+      of values MUST correspond to the number of volumes in the data file.'
+    multivalued: false
+    range: float
+    slot_uri: https://bids-specification.readthedocs.io/en/stable/glossary.html#SmallDelta
   metadata__SoftwareFilters:
     description: '[Object](https://www.json.org/json-en.html)
 

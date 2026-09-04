@@ -179,6 +179,14 @@ classes:
     slots:
     - Analoginput__whoami
     - Analoginput__name
+  Antibodies_Inc:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Antibodies_Inc
+    description: Model Antibodies Inc
+    slots:
+    - Antibodies_Inc__name
+    - Antibodies_Inc__abbreviation
+    - Antibodies_Inc__registry
+    - Antibodies_Inc__registry_identifier
   Applied_Scientific_Instrumentation:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Applied_Scientific_Instrumentation
     description: Model Applied Scientific Instrumentation
@@ -3011,6 +3019,14 @@ classes:
     slots:
     - Rgbarray__whoami
     - Rgbarray__name
+  Rockland_Immunochemicals:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Rockland_Immunochemicals
+    description: Model Rockland Immunochemicals
+    slots:
+    - Rockland_Immunochemicals__name
+    - Rockland_Immunochemicals__abbreviation
+    - Rockland_Immunochemicals__registry
+    - Rockland_Immunochemicals__registry_identifier
   Rotation:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Rotation
     description: 'Rotation
@@ -3379,6 +3395,14 @@ classes:
     - Surgery__measured_coordinates
     - Surgery__procedures
     - Surgery__notes
+  Synaptic_Systems:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Synaptic_Systems
+    description: Model Synaptic Systems
+    slots:
+    - Synaptic_Systems__name
+    - Synaptic_Systems__abbreviation
+    - Synaptic_Systems__registry
+    - Synaptic_Systems__registry_identifier
   Synchronizer:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Synchronizer
     description: Model Synchronizer
@@ -4376,6 +4400,30 @@ slots:
     range: integer
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#whoami
+  Antibodies_Inc__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Antibodies_Inc__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Antibodies_Inc__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Antibodies_Inc__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Applied_Scientific_Instrumentation__abbreviation:
     description: Abbreviation
     multivalued: false
@@ -14429,6 +14477,30 @@ slots:
     range: integer
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#whoami
+  Rockland_Immunochemicals__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Rockland_Immunochemicals__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Rockland_Immunochemicals__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Rockland_Immunochemicals__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Rotation__angles:
     description: Right-hand rule, positive angles rotate CCW
     multivalued: true
@@ -15660,6 +15732,30 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#workstation_id
+  Synaptic_Systems__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Synaptic_Systems__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Synaptic_Systems__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Synaptic_Systems__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Synchronizer__name:
     description: Name
     multivalued: false
