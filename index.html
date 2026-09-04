@@ -46,7 +46,11 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   box-shadow:0 0 0 3px rgba(52,211,153,.15);}
 
 /* ── View shell ── */
-.view{display:none;height:calc(100vh - 52px);}
+#tab-desc{height:44px;box-sizing:border-box;padding:6px 20px;
+  border-bottom:1px solid var(--border);color:var(--muted);
+  font-size:12px;line-height:1.35;flex-shrink:0;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.view{display:none;height:calc(100vh - 52px - 44px);}
 .view.active{display:flex;}
 
 /* ══ META-MODEL ══════════════════════════════════════════════════════════ */
@@ -909,6 +913,9 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   </div>
 </header>
 
+<!-- one-line description of the active tab (set by setTabDesc) -->
+<div id="tab-desc"></div>
+
 <!-- ── Meta-model ──────────────────────────────────────── -->
 <div id="view-meta" class="view">
   <div class="meta-main">
@@ -1250,6 +1257,22 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
 // ────────────────────────────────────────────────────────
 // Tab switching
 // ────────────────────────────────────────────────────────
+// One-line description shown under the tab bar for the active tab.
+const TAB_DESC = {
+  concepts: 'Browse the concepts harmonized across all registered schemas. Switch between Classes and Properties, filter by source, and select an entry to see its definition, type, and where it appears.',
+  diff:     'Compare two schemas side by side — which classes they share and, for each class, which slots are shared, added, or removed. Slots are matched by concept name across schemas.',
+  graph:    'A force-directed graph of registered classes and how they connect. Filter by source and drag nodes to explore the structure.',
+  transform:'Map one class’s fields onto another to translate records between schemas. Fields match by name and pipeline alignment; each row shows the target field and a confidence score.',
+  query:    'Free-text search across every class, property, and IRI in the registry. Hits are ranked by relevance — click one to open its details.',
+  compose:  'Build a custom LinkML schema: pick classes from the registry, toggle which slots to include, and export the result.',
+  ingest:   'Submit a new schema — LinkML YAML or JSON Schema. It opens a pre-filled GitHub issue that triggers ingestion, adding the schema and re-aligning the registry.',
+  meta:     'The registry’s own data model — its entity types (RegistryClass, RegistryProperty, RegistryRule, …) and how they relate. Generated from meta_model.yaml.',
+};
+function setTabDesc(target) {
+  const el = document.getElementById('tab-desc');
+  if (el) el.textContent = TAB_DESC[target] || '';
+}
+
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const target = btn.dataset.view;
@@ -1257,6 +1280,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + target).classList.add('active');
+    setTabDesc(target);
     if (target === 'meta') loadMetamodel().then(renderGraph);
     else if (target === 'concepts') initConcepts();
     else if (target === 'diff') initDiff();
@@ -1498,7 +1522,7 @@ function selectNode(cls, opts = {}) {
 // DOMContentLoaded so it runs after the whole script has parsed (initConcepts
 // touches CONCEPT and other consts declared further down). The Meta-model graph
 // is loaded lazily when its tab is opened (and re-rendered on resize).
-window.addEventListener('DOMContentLoaded', () => { initConcepts(); });
+window.addEventListener('DOMContentLoaded', () => { setTabDesc('concepts'); initConcepts(); });
 window.addEventListener('resize', () => {
   if (document.getElementById('view-meta').classList.contains('active')) renderGraph();
 });
