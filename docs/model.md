@@ -6,7 +6,8 @@ A logical view of every class and relationship in `meta_model.yaml`
 regardless of how it's actually stored. For the *physical* LadybugDB layout
 (multivalued scalars as native list columns, class refs as id-FK columns or REL
 tables, per `db.py`'s `_build_registry_ddl()`), see the "Graph Schema"
-diagram in `index.html` instead, kept in sync via `scripts/update_graph.py`.
+diagram in `index.html` instead — built at runtime from the registry JSON,
+so it has no separate sync step.
 
 See [`ingestion.md`](ingestion.md) for the field-by-field walkthrough of
 what's identity-defining vs. provenance vs. alignment evidence.
