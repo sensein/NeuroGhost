@@ -1,8 +1,17 @@
 """
 converters/run_all.py — Run all external schema converters
 ----------------------------------------------------------
-Fetches and converts BIDS, NWB, DANDI, openMINDS, and AIND schemas
+Fetches and converts BIDS, NWB, openMINDS, and AIND schemas
 to LinkML YAML in the registry_schemas/ directory.
+
+DANDI is deliberately NOT here: it used to be (a bespoke `dandi.py` converter
+that namespaced every slot as `<Class>__<prop>`, e.g. `Dandiset__identifier`
+— ugly UI names that also blocked cross-schema dedup). It was retired in
+favor of ingesting DANDI's real JSON Schema files directly through the
+generic `from_jsonschema` path (bare names) — see `registry_schemas/asset.yml`
+/ `dandiset.yml` + their `_source.yaml` sidecars. Re-adding a `dandi` entry
+here would regenerate the old namespaced `dandi.yml` on every scheduled
+rebuild (`publish_registry.yml`) and reintroduce that bug.
 
 Usage:
     python converters/run_all.py
@@ -18,13 +27,12 @@ import click
 # Add parent dir to path so converters can import each other
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from converters import bbqs, bids, nwb, dandi, openminds, aind
+from converters import bbqs, bids, nwb, openminds, aind
 
 CONVERTERS = {
     "bbqs":       bbqs,
     "bids":       bids,
     "nwb":        nwb,
-    "dandi":      dandi,
     "openminds":  openminds,
     "aind":       aind,
 }
