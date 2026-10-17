@@ -4,9 +4,9 @@
 # meta_model.yaml, via LinkML's own gen-erdiagram generator.
 #
 # This is a *logical* view (every object-valued slot is a relationship,
-# regardless of physical storage) — complementary to scripts/update_graph.py,
-# which draws the *physical* LadybugDB layout (inline classes flattened,
-# multivalued class refs as edges only).
+# regardless of physical storage) — complementary to the "Graph Schema" tab in
+# index.html, which draws the *physical* LadybugDB layout at runtime from the
+# registry JSON (inline classes flattened, multivalued class refs as edges only).
 #
 # Usage:
 #   ./scripts/gen_erdiagram.sh           # rewrite docs/model.md in place
