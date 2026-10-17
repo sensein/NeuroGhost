@@ -373,6 +373,3 @@ registry_version` stays `None` for now, pending a decision on the above.
   (aind/bbqs/bids/dandi/nwb/openminds) declare LinkML's own `aliases:`/
   `unit:` constructs — so aliases stay largely empty and UNIT rules are rare
   until source schemas adopt them, or a text-mining step is built.
-- **`scripts/update_graph.py`'s diagram may still draw a `UnitOfMeasure`
-  node.** That class was removed when unit moved to a `UNIT` `RegistryRule`;
-  the diagram script should be re-synced so it no longer shows it.

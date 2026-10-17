@@ -3,11 +3,15 @@
 A logical view of every class and relationship in `meta_model.yaml`
 (LinkML's `gen-erdiagram`, run via `scripts/gen_erdiagram.sh`). This shows
 *logical* relationships — every object-valued slot is drawn as an edge,
-regardless of how it's actually stored. For the *physical* LadybugDB layout
+regardless of how it's actually stored. The *physical* LadybugDB layout
 (multivalued scalars as native list columns, class refs as id-FK columns or REL
-tables, per `db.py`'s `_build_registry_ddl()`), see the "Graph Schema"
-diagram in `index.html` instead — built at runtime from the registry JSON,
-so it has no separate sync step.
+tables) isn't drawn anywhere; it's defined by `db.py`'s `_build_registry_ddl()`.
+
+The website's "Meta-model" tab (`index.html`) draws the same model as a
+structural diagram (classes, `is_a` parents, own slots, a curated set of named
+relationships). It's generated from `meta_model.yaml` by
+`scripts/gen_metamodel_json.py` into `data/metamodel.json` (kept in sync by the
+`gen_models.yml` workflow), so it has no hand-maintained copy to drift.
 
 See [`ingestion.md`](ingestion.md) for the field-by-field walkthrough of
 what's identity-defining vs. provenance vs. alignment evidence.
