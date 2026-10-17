@@ -3,14 +3,17 @@ name: Rebuild & Publish Registry
 # Trigger manually or weekly (Sunday 03:00 UTC).
 # A schema submission (schema_submission.yml) handles per-PR incremental updates;
 # this workflow does a full clean rebuild on a schedule.
+#
+# PAUSED: the push and schedule triggers are commented out while we decide
+# whether we want automatic rebuilds (see issue #118). Manual runs still work.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "registry_schemas/**"
-      - "meta_model.yaml"
-      - "neuro_ghost/**"
-      - "requirements.txt"
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - "registry_schemas/**"
+  #     - "meta_model.yaml"
+  #     - "neuro_ghost/**"
+  #     - "requirements.txt"
   workflow_dispatch:
     inputs:
       bump:
@@ -24,8 +27,8 @@ on:
         required: false
         default: false
         type: boolean
-  schedule:
-    - cron: "0 3 * * 0"   # weekly, Sunday 03:00 UTC
+  # schedule:
+  #   - cron: "0 3 * * 0"   # weekly, Sunday 03:00 UTC
 
 jobs:
   rebuild:

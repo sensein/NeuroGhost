@@ -10,8 +10,8 @@ that namespaced every slot as `<Class>__<prop>`, e.g. `Dandiset__identifier`
 favor of ingesting DANDI's real JSON Schema files directly through the
 generic `from_jsonschema` path (bare names) — see `registry_schemas/asset.yml`
 / `dandiset.yml` + their `_source.yaml` sidecars. Re-adding a `dandi` entry
-here would regenerate the old namespaced `dandi.yml` on every scheduled
-rebuild (`publish_registry.yml`) and reintroduce that bug.
+here would regenerate the old namespaced `dandi.yml` on every external-schema
+fetch (`fetch_external_schemas.yml`) and reintroduce that bug.
 
 Usage:
     python converters/run_all.py

@@ -1367,7 +1367,8 @@ classes:
 
       If acquisition time is included it should be listed under the acq_time header.
 
-      Acquisition time refers to when the first data point in each run was acquired.
+      Acquisition time refers to the moment the acquisition of the data in each run
+      started.
 
       Furthermore, if this header is provided, the acquisition times of all files
       that belong to a
@@ -1699,10 +1700,16 @@ slots:
     range: string
     slot_uri: https://bids-specification.readthedocs.io/en/stable/glossary.html#abbreviation
   columns__acq_time__scans:
-    description: 'Acquisition time refers to when the first data point in each run
-      was acquired.
+    description: 'The moment the acquisition of the data that resulted in this file
+      started,
 
-      Furthermore, if this header is provided, the acquisition times of all files
+      analogous to the DICOM
+
+      [Acquisition Time](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.10.html)
+
+      attribute ([DICOM Tag (0008,0032)](https://www.dicomlookup.com/dicomtags/(0008,0032))).
+
+      Furthermore, if this value is provided, the acquisition times of all files
 
       from the same recording MUST be identical.
 
@@ -1713,8 +1720,8 @@ slots:
     range: string
     slot_uri: https://bids-specification.readthedocs.io/en/stable/glossary.html#acq_time__scans
   columns__acq_time__sessions:
-    description: 'Acquisition time refers to when the first data point of the first
-      run was acquired.
+    description: 'The moment the acquisition of the first data point in this session
+      started.
 
       Datetime format and their deidentification are described in
 

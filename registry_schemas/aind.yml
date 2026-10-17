@@ -124,6 +124,14 @@ classes:
     - AirPuffDevice__notes
     - AirPuffDevice__diameter
     - AirPuffDevice__diameter_unit
+  Aligning_Science_Across_Parkinson_S:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Aligning_Science_Across_Parkinson_S
+    description: Model Aligning Science Across Parkinson's
+    slots:
+    - Aligning_Science_Across_Parkinson_S__name
+    - Aligning_Science_Across_Parkinson_S__abbreviation
+    - Aligning_Science_Across_Parkinson_S__registry
+    - Aligning_Science_Across_Parkinson_S__registry_identifier
   Allen_Institute:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Allen_Institute
     description: Model Allen Institute
@@ -1155,6 +1163,14 @@ classes:
     - Equus_Asinus__common_name
     - Equus_Asinus__registry
     - Equus_Asinus__registry_identifier
+  Esther_A_Joseph_Klingenstein_Fund:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Esther_A_Joseph_Klingenstein_Fund
+    description: Model Esther A. & Joseph Klingenstein Fund
+    slots:
+    - Esther_A_Joseph_Klingenstein_Fund__name
+    - Esther_A_Joseph_Klingenstein_Fund__abbreviation
+    - Esther_A_Joseph_Klingenstein_Fund__registry
+    - Esther_A_Joseph_Klingenstein_Fund__registry_identifier
   Euresys:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Euresys
     description: Model Euresys
@@ -1320,6 +1336,14 @@ classes:
     - Funding__funder
     - Funding__grant_number
     - Funding__fundee
+  G_Harold_Leila_Y_Mathers_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#G_Harold_Leila_Y_Mathers_Foundation
+    description: Model G. Harold & Leila Y. Mathers Foundation
+    slots:
+    - G_Harold_Leila_Y_Mathers_Foundation__name
+    - G_Harold_Leila_Y_Mathers_Foundation__abbreviation
+    - G_Harold_Leila_Y_Mathers_Foundation__registry
+    - G_Harold_Leila_Y_Mathers_Foundation__registry_identifier
   Gallus_Gallus:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Gallus_Gallus
     description: Model Gallus gallus
@@ -1436,6 +1460,14 @@ classes:
     - Headframe__headframe_material
     - Headframe__well_part_number
     - Headframe__well_type
+  Helen_Hay_Whitney_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Helen_Hay_Whitney_Foundation
+    description: Model Helen Hay Whitney Foundation
+    slots:
+    - Helen_Hay_Whitney_Foundation__name
+    - Helen_Hay_Whitney_Foundation__abbreviation
+    - Helen_Hay_Whitney_Foundation__registry
+    - Helen_Hay_Whitney_Foundation__registry_identifier
   Hobgoblin:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Hobgoblin
     description: Model Hobgoblin
@@ -1696,6 +1728,14 @@ classes:
     - Kent_Scientific_Corporation__abbreviation
     - Kent_Scientific_Corporation__registry
     - Kent_Scientific_Corporation__registry_identifier
+  Klingenstein_Third_Generation_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Klingenstein_Third_Generation_Foundation
+    description: Model Klingenstein Third Generation Foundation
+    slots:
+    - Klingenstein_Third_Generation_Foundation__name
+    - Klingenstein_Third_Generation_Foundation__abbreviation
+    - Klingenstein_Third_Generation_Foundation__registry
+    - Klingenstein_Third_Generation_Foundation__registry_identifier
   Kowa:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Kowa
     description: Model Kowa
@@ -1858,6 +1898,14 @@ classes:
     slots:
     - Licketysplit__whoami
     - Licketysplit__name
+  Life_Sciences_Research_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Life_Sciences_Research_Foundation
+    description: Model Life Sciences Research Foundation
+    slots:
+    - Life_Sciences_Research_Foundation__name
+    - Life_Sciences_Research_Foundation__abbreviation
+    - Life_Sciences_Research_Foundation__registry
+    - Life_Sciences_Research_Foundation__registry_identifier
   Lifecanvas:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Lifecanvas
     description: Model LifeCanvas
@@ -2045,6 +2093,22 @@ classes:
     - Mcgovern_Institute_For_Brain_Research__abbreviation
     - Mcgovern_Institute_For_Brain_Research__registry
     - Mcgovern_Institute_For_Brain_Research__registry_identifier
+  Mcknight_Brain_Research_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Mcknight_Brain_Research_Foundation
+    description: Model McKnight Brain Research Foundation
+    slots:
+    - Mcknight_Brain_Research_Foundation__name
+    - Mcknight_Brain_Research_Foundation__abbreviation
+    - Mcknight_Brain_Research_Foundation__registry
+    - Mcknight_Brain_Research_Foundation__registry_identifier
+  Mcknight_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Mcknight_Foundation
+    description: Model McKnight Foundation
+    slots:
+    - Mcknight_Foundation__name
+    - Mcknight_Foundation__abbreviation
+    - Mcknight_Foundation__registry
+    - Mcknight_Foundation__registry_identifier
   Meadowlark_Optics:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Meadowlark_Optics
     description: Model Meadowlark Optics
@@ -2362,6 +2426,14 @@ classes:
     - National_Institute_Of_Neurological_Disorders_And_Stroke__abbreviation
     - National_Institute_Of_Neurological_Disorders_And_Stroke__registry
     - National_Institute_Of_Neurological_Disorders_And_Stroke__registry_identifier
+  National_Institute_On_Aging:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#National_Institute_On_Aging
+    description: Model National Institute on Aging
+    slots:
+    - National_Institute_On_Aging__name
+    - National_Institute_On_Aging__abbreviation
+    - National_Institute_On_Aging__registry
+    - National_Institute_On_Aging__registry_identifier
   National_Instruments:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#National_Instruments
     description: Model National Instruments
@@ -2682,6 +2754,14 @@ classes:
     - Person__name
     - Person__registry
     - Person__registry_identifier
+  Pew_Charitable_Trusts:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Pew_Charitable_Trusts
+    description: Model Pew Charitable Trusts
+    slots:
+    - Pew_Charitable_Trusts__name
+    - Pew_Charitable_Trusts__abbreviation
+    - Pew_Charitable_Trusts__registry
+    - Pew_Charitable_Trusts__registry_identifier
   Placid_Industries:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Placid_Industries
     description: Model Placid Industries
@@ -3571,6 +3651,30 @@ classes:
     - Tymphany__abbreviation
     - Tymphany__registry
     - Tymphany__registry_identifier
+  U_S_National_Science_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#U_S_National_Science_Foundation
+    description: Model U.S. National Science Foundation
+    slots:
+    - U_S_National_Science_Foundation__name
+    - U_S_National_Science_Foundation__abbreviation
+    - U_S_National_Science_Foundation__registry
+    - U_S_National_Science_Foundation__registry_identifier
+  United_States_Department_Of_Defense:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#United_States_Department_Of_Defense
+    description: Model United States Department of Defense
+    slots:
+    - United_States_Department_Of_Defense__name
+    - United_States_Department_Of_Defense__abbreviation
+    - United_States_Department_Of_Defense__registry
+    - United_States_Department_Of_Defense__registry_identifier
+  United_States_Department_Of_Energy:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#United_States_Department_Of_Energy
+    description: Model United States Department of Energy
+    slots:
+    - United_States_Department_Of_Energy__name
+    - United_States_Department_Of_Energy__abbreviation
+    - United_States_Department_Of_Energy__registry
+    - United_States_Department_Of_Energy__registry_identifier
   University_Of_California_San_Diego:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#University_Of_California_San_Diego
     description: Model University of California, San Diego
@@ -3665,6 +3769,22 @@ classes:
     - Vortran__abbreviation
     - Vortran__registry
     - Vortran__registry_identifier
+  W_M_Keck_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#W_M_Keck_Foundation
+    description: Model W. M. Keck Foundation
+    slots:
+    - W_M_Keck_Foundation__name
+    - W_M_Keck_Foundation__abbreviation
+    - W_M_Keck_Foundation__registry
+    - W_M_Keck_Foundation__registry_identifier
+  Warren_Alpert_Foundation:
+    class_uri: https://aind-data-schema.readthedocs.io/en/stable/#Warren_Alpert_Foundation
+    description: Model Warren Alpert Foundation
+    slots:
+    - Warren_Alpert_Foundation__name
+    - Warren_Alpert_Foundation__abbreviation
+    - Warren_Alpert_Foundation__registry
+    - Warren_Alpert_Foundation__registry_identifier
   WaterRestriction:
     class_uri: https://aind-data-schema.readthedocs.io/en/stable/#WaterRestriction
     description: Description of a water restriction procedure
@@ -4238,6 +4358,30 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#serial_number
+  Aligning_Science_Across_Parkinson_S__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Aligning_Science_Across_Parkinson_S__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Aligning_Science_Across_Parkinson_S__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Aligning_Science_Across_Parkinson_S__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Allen_Institute_For_Brain_Science__abbreviation:
     description: Abbreviation
     multivalued: false
@@ -7900,6 +8044,30 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  Esther_A_Joseph_Klingenstein_Fund__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Esther_A_Joseph_Klingenstein_Fund__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Esther_A_Joseph_Klingenstein_Fund__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Esther_A_Joseph_Klingenstein_Fund__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Euresys__abbreviation:
     description: Abbreviation
     multivalued: false
@@ -8477,6 +8645,30 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#object_type
+  G_Harold_Leila_Y_Mathers_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  G_Harold_Leila_Y_Mathers_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  G_Harold_Leila_Y_Mathers_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  G_Harold_Leila_Y_Mathers_Foundation__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Gallus_Gallus__common_name:
     description: Common Name
     multivalued: false
@@ -8879,6 +9071,30 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#well_type
+  Helen_Hay_Whitney_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Helen_Hay_Whitney_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Helen_Hay_Whitney_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Helen_Hay_Whitney_Foundation__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Hobgoblin__name:
     description: Name
     multivalued: false
@@ -9727,6 +9943,30 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  Klingenstein_Third_Generation_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Klingenstein_Third_Generation_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Klingenstein_Third_Generation_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Klingenstein_Third_Generation_Foundation__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Kowa__abbreviation:
     description: Abbreviation
     multivalued: false
@@ -10309,6 +10549,30 @@ slots:
     range: integer
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#whoami
+  Life_Sciences_Research_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Life_Sciences_Research_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Life_Sciences_Research_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Life_Sciences_Research_Foundation__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   Lifecanvas__abbreviation:
     description: Abbreviation
     multivalued: false
@@ -10965,6 +11229,54 @@ slots:
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
   Mcgovern_Institute_For_Brain_Research__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  Mcknight_Brain_Research_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Mcknight_Brain_Research_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Mcknight_Brain_Research_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Mcknight_Brain_Research_Foundation__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  Mcknight_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Mcknight_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Mcknight_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Mcknight_Foundation__registry_identifier:
     description: Registry Identifier
     multivalued: false
     range: string
@@ -12134,6 +12446,30 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  National_Institute_On_Aging__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  National_Institute_On_Aging__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  National_Institute_On_Aging__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  National_Institute_On_Aging__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   National_Instruments__abbreviation:
     description: Abbreviation
     multivalued: false
@@ -13241,6 +13577,30 @@ slots:
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
   Person__registry_identifier:
     description: ORCID ID
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  Pew_Charitable_Trusts__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Pew_Charitable_Trusts__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Pew_Charitable_Trusts__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Pew_Charitable_Trusts__registry_identifier:
+    description: Registry Identifier
     multivalued: false
     range: string
     required: false
@@ -16320,6 +16680,78 @@ slots:
     range: string
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  U_S_National_Science_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  U_S_National_Science_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  U_S_National_Science_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  U_S_National_Science_Foundation__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  United_States_Department_Of_Defense__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  United_States_Department_Of_Defense__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  United_States_Department_Of_Defense__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  United_States_Department_Of_Defense__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  United_States_Department_Of_Energy__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  United_States_Department_Of_Energy__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  United_States_Department_Of_Energy__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  United_States_Department_Of_Energy__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
   University_Of_California_San_Diego__abbreviation:
     description: Abbreviation
     multivalued: false
@@ -16610,6 +17042,54 @@ slots:
     required: false
     slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
   Vortran__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  W_M_Keck_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  W_M_Keck_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  W_M_Keck_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  W_M_Keck_Foundation__registry_identifier:
+    description: Registry Identifier
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry_identifier
+  Warren_Alpert_Foundation__abbreviation:
+    description: Abbreviation
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#abbreviation
+  Warren_Alpert_Foundation__name:
+    description: Name
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#name
+  Warren_Alpert_Foundation__registry:
+    description: ''
+    multivalued: false
+    range: string
+    required: false
+    slot_uri: https://aind-data-schema.readthedocs.io/en/stable/#registry
+  Warren_Alpert_Foundation__registry_identifier:
     description: Registry Identifier
     multivalued: false
     range: string
