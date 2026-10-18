@@ -8,7 +8,7 @@ dandiset:AssetsSummary.species	skos:closeMatch	bids:BIDSMetadata.Species	1.000	P
 dandiset:EthicsApproval.contactPoint	skos:closeMatch	bids:BIDSMetadata.EthicsApprovals	0.723	PROPOSED		
 dandiset:Dandiset.ethicsApproval	skos:closeMatch	bids:BIDSMetadata.EthicsApprovals	0.690	PROPOSED		
 dandiset:Software.identifier	skos:closeMatch	bids:BIDSMetadata.RRID	0.666	PROPOSED		
-dandiset:Dandiset.keywords	skos:closeMatch	bids:BIDSMetadata.Keywords	0.659	ACCEPTED  djar
+dandiset:Dandiset.keywords	skos:closeMatch	bids:BIDSMetadata.Keywords	0.659	ACCEPTED  djarecka
 dandiset:Dandiset.acknowledgement	skos:closeMatch	bids:BIDSMetadata.Acknowledgements	0.647	PROPOSED		
 dandiset:AssetsSummary.measurementTechnique	skos:closeMatch	bids:BIDSMetadata.Manufacturer	0.640	PROPOSED		
 dandiset:Dandiset.doi	skos:closeMatch	bids:BIDSMetadata.DOI	0.628	PROPOSED		
