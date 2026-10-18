@@ -1,0 +1,91 @@
+name: Propose Mappings
+
+# Proposes mappings between two registered schemas with the free local
+# embedding model (neuro_ghost/propose_mappings.py) and opens a PR with the
+# mapping file — every row PROPOSED, for review. Merging triggers the rebuild.
+# Manual only.
+on:
+  workflow_dispatch:
+    inputs:
+      subject:
+        description: "Subject schema (source label, e.g. aind)"
+        required: true
+        type: string
+      object:
+        description: "Object schema (source label, e.g. bids)"
+        required: true
+        type: string
+      kind:
+        description: "What to map"
+        required: true
+        default: "properties"
+        type: choice
+        options: [properties, classes]
+      min_score:
+        description: "Cosine cut-off"
+        required: false
+        default: "0.6"
+        type: string
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push the PR branch
+      pull-requests: write   # open the PR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Cache sentence-transformers model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: hf-minilm-v2
+          restore-keys: hf-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Propose mappings
+        id: propose
+        env:
+          SUBJECT: ${{ inputs.subject }}
+          OBJECT: ${{ inputs.object }}
+          KIND: ${{ inputs.kind }}
+          MIN_SCORE: ${{ inputs.min_score }}
+        run: |
+          OUT="mappings/$(date -u +%Y-%m-%d)_embeddings_${SUBJECT}__${OBJECT}_${KIND}.sssom.tsv"
+          python neuro_ghost/propose_mappings.py "$SUBJECT" "$OBJECT" \
+            --kind "$KIND" --min-score "$MIN_SCORE" --out "$OUT"
+          python neuro_ghost/mappings.py validate "$OUT"
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUT: ${{ steps.propose.outputs.out }}
+        run: |
+          BRANCH="mappings/$(basename "$OUT" .sssom.tsv)-${{ github.run_id }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add "$OUT"
+          git commit -m "chore(mappings): propose $(basename "$OUT")"
+          git push -u origin "$BRANCH"
+          N=$(grep -cv '^#' "$OUT"); N=$((N - 1))
+          gh pr create --base main --head "$BRANCH" \
+            --title "Proposed mappings: ${{ inputs.subject }} → ${{ inputs.object }} (${{ inputs.kind }})" \
+            --body "$N mapping(s) proposed by embeddings (\`all-MiniLM-L6-v2\`, cut-off ${{ inputs.min_score }}), all **PROPOSED**. Review the file: change a row's \`review_status\` to \`ACCEPTED\`/\`REJECTED\` and set \`reviewer_id\` to your GitHub login (the Mapping Check verifies it's you), or leave rows PROPOSED. Merging publishes them and triggers the rebuild."

@@ -1,7 +1,8 @@
 name: Rebuild & Publish Registry
 
 # Rebuilds data/ (registry.json, versions/, provenance.json) from the schemas
-# already in registry_schemas/ and commits the result to main.
+# already in registry_schemas/ (and the reviewed mappings in mappings/) and
+# commits the result to main.
 #
 # This workflow never downloads external schemas. Fetching upstream schemas
 # (BIDS/NWB/AIND/…) is a separate, manual step: fetch_external_schemas.yml opens
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - "registry_schemas/**"
+      - "mappings/**"
       - "meta_model.yaml"
       - "neuro_ghost/**"
       - "requirements.txt"

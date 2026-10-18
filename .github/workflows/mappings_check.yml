@@ -1,0 +1,65 @@
+name: Mapping Check
+
+# On a PR that touches mappings/*.sssom.tsv: the files must be well-formed,
+# every source:Class[.prop] reference must exist in the registry, and any row
+# the PR newly accepts or rejects must name an author of the PR as reviewer_id
+# (whoever opened it, or wrote one of its commits — e.g. a person reviewing
+# inside a bot-opened Propose Mappings PR). GitHub vouches for both, so "who
+# approved it" can be trusted.
+on:
+  pull_request:
+    paths:
+      - "mappings/**"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read    # list the PR's commit authors
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install click
+
+      - name: Changed mapping files
+        id: files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          FILES=$(git diff --name-only --diff-filter=AM "$BASE_SHA" HEAD -- 'mappings/*.sssom.tsv' | tr '\n' ' ')
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          # The base branch's versions, for telling new reviews from old ones.
+          mkdir -p /tmp/base
+          for f in $FILES; do
+            git show "$BASE_SHA:$f" > "/tmp/base/$(basename "$f")" 2>/dev/null || rm -f "/tmp/base/$(basename "$f")"
+          done
+          echo "Changed: ${FILES:-none}"
+
+      - name: Validate mapping files
+        if: steps.files.outputs.files != ''
+        run: python neuro_ghost/mappings.py validate ${{ steps.files.outputs.files }} --registry data/registry.json
+
+      - name: Reviews are made by an author of the PR
+        if: steps.files.outputs.files != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENER: ${{ github.event.pull_request.user.login }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          ARGS=(--author "$OPENER")
+          for login in $(gh api "repos/${{ github.repository }}/pulls/$PR/commits" --paginate \
+                           --jq '.[].author.login // empty' | sort -u); do
+            ARGS+=(--author "$login")
+          done
+          python neuro_ghost/mappings.py check-reviewers ${{ steps.files.outputs.files }} \
+            "${ARGS[@]}" --base /tmp/base
