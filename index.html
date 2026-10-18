@@ -265,6 +265,18 @@ header{height:52px;padding:0 20px;border-bottom:1px solid var(--border);
   color:var(--text-dim);background:var(--surface-2);border:1px solid var(--border);word-break:break-all;}
 .c-rule.cls{color:var(--purple);background:var(--purple-soft);border-color:var(--purple-line);}
 .c-legend{font-size:10.5px;color:var(--muted);margin-top:6px;}
+/* reviewed cross-schema mappings (mappings/*.sssom.tsv) */
+.c-map{padding:6px 0;border-bottom:1px solid var(--border);font-size:11.5px;}
+.c-map:last-child{border-bottom:none;}
+.c-map-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.c-map-pred{font-family:var(--mono);font-size:10px;color:var(--muted);}
+.c-map-meta{font-size:10.5px;color:var(--muted);margin-top:3px;}
+.c-status{font-family:var(--mono);font-size:9px;letter-spacing:.05em;padding:1px 5px;border-radius:4px;border:1px solid var(--border);}
+.c-status.PROPOSED{color:var(--yellow);}
+.c-status.ACCEPTED{color:var(--green);border-color:var(--green);}
+.c-status.REJECTED{color:var(--red);border-color:var(--red);}
+.c-status.SUPERSEDED{color:var(--muted);}
+.c-map.REJECTED .c-prop-name,.c-map.SUPERSEDED .c-prop-name{text-decoration:line-through;color:var(--muted);}
 
 /* weight sliders */
 .c-weights{background:var(--surface);border:1px solid var(--border);border-radius:8px;
@@ -2052,11 +2064,18 @@ async function initConcepts() {
     let e = propMap.get(p.id);
     if (!e) {
       e = { id: p.id, sha256_hash: p.sha256_hash || '', name: p.name || '', iri: p.iri || '',
-            defs: p.definition ? [p.definition] : [], sources: p.sources || [], uses: [] };
+            defs: p.definition ? [p.definition] : [], sources: p.sources || [], uses: [],
+            mappings: p.mappings || [] };
       propMap.set(p.id, e);
     }
     e.uses.push({ cls: c.name, clsSources: c.sources || [], rules: p.rules || [] });
   }));
+  // id -> source labels of every class and property (for mapping targets).
+  CONCEPT.entitySources = new Map();
+  d.classes.forEach(c => {
+    CONCEPT.entitySources.set(c.id, c.sources || []);
+    (c.properties || []).forEach(p => CONCEPT.entitySources.set(p.id, p.sources || []));
+  });
   CONCEPT.properties = [...propMap.values()].map(e => ({
     ...e,
     classes: e.uses.map(u => u.cls),
@@ -2293,6 +2312,29 @@ function ruleChip(r) {
   return `<span class="c-rule${r.scope === 'class' ? ' cls' : ''}" title="${esc(title)}">${esc(what)}</span>`;
 }
 
+// Reviewed cross-schema mappings of a class or property (from mappings/*.sssom.tsv).
+function mappingsHtml(mappings) {
+  if (!mappings || !mappings.length) return '<div class="c-none">No mappings yet.</div>';
+  return mappings.map(m => {
+    const conf = m.confidence == null ? '' : ` · ${Number(m.confidence).toFixed(2)}`;
+    const method = m.mapping_tool || m.mapping_justification || '';
+    const who = [m.proposed_by && `proposed by ${m.proposed_by}`,
+                 m.reviewed_by && `${m.review_status === 'REJECTED' ? 'rejected' : 'reviewed'} by ${m.reviewed_by}`]
+                .filter(Boolean).join(', ');
+    return `
+      <div class="c-map ${esc(m.review_status)}">
+        <div class="c-map-head">
+          <span class="c-status ${esc(m.review_status)}">${esc(m.review_status)}</span>
+          <span class="c-map-pred">${esc(m.predicate)}</span>
+          <span class="c-prop-name" title="${esc(m.target_id)}">${esc(m.target_name || m.target_id)}</span>
+          ${((CONCEPT.entitySources && CONCEPT.entitySources.get(m.target_id)) || []).slice(0, 2)
+              .map(s => `<span class="c-src-tag">${esc(s)}</span>`).join('')}
+        </div>
+        <div class="c-map-meta">${esc(method)}${esc(conf)}${who ? ' · ' + esc(who) : ''}</div>
+      </div>`;
+  }).join('');
+}
+
 function renderPropertyDetail() {
   const el = document.getElementById('c-detail');
   const p  = CONCEPT.properties.find(x => x.id === CONCEPT.selectedProp);
@@ -2321,6 +2363,9 @@ function renderPropertyDetail() {
       </div>`).join('')}
     ${uses.length > 80 ? `<div class="c-prop-more">+${uses.length - 80} more</div>` : ''}
     ${anyClassScoped ? '<div class="c-legend"><span class="c-rule cls">highlighted</span> rules are specific to that class</div>' : ''}
+
+    <div class="c-section">Mappings (${(p.mappings || []).length})</div>
+    ${mappingsHtml(p.mappings)}
   `;
 }
 
@@ -2401,6 +2446,9 @@ function renderConceptDetail() {
 
     <div class="c-section">Properties (${props.length})</div>
     ${propsHtml}
+
+    <div class="c-section">Mappings (${(c.mappings || []).length})</div>
+    ${mappingsHtml(c.mappings)}
 
     <div class="c-section">Alignments (${aligns.length})</div>
     ${aligns.length ? weightsHtml : ''}
