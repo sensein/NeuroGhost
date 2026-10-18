@@ -32,6 +32,7 @@ import click
 HERE     = Path(__file__).parent
 ROOT     = HERE.parent
 SCHEMAS  = ROOT / "registry_schemas"
+MAPPINGS = ROOT / "mappings"
 DB_PATH  = str(ROOT / "registry.lbug")
 # The previous export — read before it is overwritten, so content that's
 # already registered keeps its id across --fresh rebuilds.
@@ -112,7 +113,11 @@ def cli(db: str, fresh: bool, skip_converters: bool,
     # 5. Align
     _run([py, str(HERE / "align.py"), "--db", db])
 
-    # 6. Export
+    # 6. Mapping files (reviewed cross-schema mappings, mappings/*.sssom.tsv)
+    if any(MAPPINGS.glob("*.sssom.tsv")):
+        _run([py, str(HERE / "mappings.py"), "load", str(MAPPINGS), "--db", db])
+
+    # 7. Export
     _run([py, str(HERE / "export_json.py"),
           "--db",    db,
           "--bump",  bump,

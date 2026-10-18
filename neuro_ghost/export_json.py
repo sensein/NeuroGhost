@@ -91,6 +91,54 @@ def _effective_rules(rules: list[Rule], class_id: str, class_sources: set[str],
     return effective
 
 
+_PREDICATE_CURIE = {
+    "EXACT_MATCH": "skos:exactMatch", "CLOSE_MATCH": "skos:closeMatch",
+    "BROAD_MATCH": "skos:broadMatch", "NARROW_MATCH": "skos:narrowMatch",
+    "RELATED_MATCH": "skos:relatedMatch", "EQUIVALENT_CLASS": "owl:equivalentClass",
+}
+
+
+def _load_mappings(conn, names: dict[str, str]) -> dict[str, list[dict]]:
+    """Every Mapping (loaded from mappings/*.sssom.tsv), as subject id ->
+    [mapping dict], with who proposed it (tool, justification) and who
+    reviewed it read from its MappingProvenanceEntry nodes."""
+    prov: dict[str, dict] = {}
+    for mid, activity, agent, tool, just, at in conn.execute("""
+        MATCH (e:MappingProvenanceEntry)
+        RETURN e.attests_to, e.was_generated_by, e.was_attributed_to,
+               e.mapping_tool, e.mapping_justification, e.generated_at_time
+    """).get_all():
+        p = prov.setdefault(mid, {})
+        if activity == "review":
+            p.update(reviewed_by=agent or "", reviewed_at=at or "")
+        else:
+            p.update(proposed_by=agent or "", proposed_at=at or "",
+                     mapping_tool=tool or "", mapping_justification=just or "")
+
+    by_subject: dict[str, list[dict]] = {}
+    for rel, label in (("HAS_SKOS_MAPPING", "RegistryClass"), ("HAS_SKOS_MAPPING_P", "RegistryProperty")):
+        for sid, mid, mtype, target, conf, status, mset in conn.execute(f"""
+            MATCH (s:{label})-[:{rel}]->(m:Mapping)
+            RETURN s.id, m.id, m.mapping_type, m.target, m.confidence,
+                   m.review_status, m.mapping_set_id
+        """).get_all():
+            by_subject.setdefault(sid, []).append({
+                "id": mid,
+                "predicate": _PREDICATE_CURIE.get(mtype, mtype or ""),
+                "target_id": target or "",
+                "target_name": names.get(target, ""),
+                # Stored as a 32-bit FLOAT: round off the float noise.
+                "confidence": None if conf is None else round(conf, 3),
+                "review_status": status or "PROPOSED",
+                "mapping_set_id": mset or "",
+                **{"proposed_by": "", "mapping_tool": "", "mapping_justification": "",
+                   "reviewed_by": "", **prov.get(mid, {})},
+            })
+    for ms in by_subject.values():
+        ms.sort(key=lambda m: (m["target_name"], m["mapping_set_id"]))
+    return by_subject
+
+
 def export_snapshot(conn, registry_version: str) -> dict:
     def _class_count_where(clause: str, params: dict) -> int:
         return conn.execute(f"""
@@ -159,11 +207,12 @@ def export_snapshot(conn, registry_version: str) -> dict:
     """).get_all()
 
     rules_by_prop = _load_rules(conn)
-    # id -> name for the entities a RANGE rule can point at.
+    # id -> name for the entities a RANGE rule or a Mapping can point at.
     names = {
-        i: n for label in ("RegistryClass", "RegistryValueSet")
+        i: n for label in ("RegistryClass", "RegistryValueSet", "RegistryProperty")
         for i, n in conn.execute(f"MATCH (x:{label}) RETURN x.id, x.name").get_all()
     }
+    mappings_by_subject = _load_mappings(conn, names)
 
     classes = []
     for row in cls_rows:
@@ -215,12 +264,14 @@ def export_snapshot(conn, registry_version: str) -> dict:
                     "value_range": " | ".join(x["label"] for x in rules if x["type"] == "RANGE"),
                     "units":       " | ".join(x["value"] for x in rules if x["type"] == "UNIT"),
                     "sources":     _attesting_sources(conn, "RegistryProperty", "HAS_PROVENANCE_P", r[0]),
+                    "mappings":    mappings_by_subject.get(r[0], []),
                 }
                 for r in props
                 for rules in [_effective_rules(rules_by_prop.get(r[0], []), node_id,
                                                set(class_sources), names)]
             ],
             "subclass_of": subclass_of,
+            "mappings":    mappings_by_subject.get(node_id, []),
             "alignments": [
                 {
                     "target_id": r[0],
