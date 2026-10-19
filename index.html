@@ -2859,9 +2859,9 @@ const METHOD_DESCRIPTIONS = {
     '(`all-MiniLM-L6-v2`). Catches synonyms and morphological variants that a substring match ' +
     'would miss (`Subject` ↔ `Participant`, `Depth` ↔ `depth_mm`).',
   'composite':
-    'A weighted blend of the full Proteus signal stack — name similarity, token Jaccard, ' +
-    'alias overlap, definition embeddings, IRI anchor, and unit dimensional veto. Used when ' +
-    'no single signal is decisive; the weights are tunable live in the Concepts tab.',
+    'A weighted blend of several signals — name similarity, token Jaccard, alias overlap, ' +
+    'definition embeddings, IRI anchor, and unit dimensional veto — for when no single signal ' +
+    'is decisive. (Not produced by the current pipeline, whose alignments are exact IRI matches.)',
 };
 
 const GRAPH = {

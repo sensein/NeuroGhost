@@ -290,11 +290,11 @@ way some richer designs do) is the correct choice — there's nothing yet
 that could inform the hash before commit anyway.
 
 Currently `align.py` is a **minimal placeholder** (exact `class_uri`
-matches only) — the real, multi-signal alignment work is meant to come
-from an external package, Proteus's own `proteus-align`
-(github.com/neurovium/Proteus). See `align.py`'s own module docstring
-before extending it; the intent is that this file changes only if the
-`ALIGNED_TO` edge shape itself changes, not every time the meta-model does.
+matches only); the intent is that it changes only if the `ALIGNED_TO` edge
+shape itself changes, not every time the meta-model does. Real cross-schema
+correspondences are recorded as reviewed **mappings** instead —
+`mappings/*.sssom.tsv`, proposed by embeddings, an LLM or a person and merged
+through PRs; see [`mappings/README.md`](../mappings/README.md).
 
 ## Testing: two layers, don't conflate them
 
