@@ -129,5 +129,25 @@ jobs:
           PY
             )
             git commit -m "chore(registry): rebuild v${VERSION} [skip ci]"
-            git push origin HEAD:main
+
+            # A PR merged while this run was building moves main, so the push
+            # is rejected. This commit only touches data/, so replay it on the
+            # new main and push again. (If that merge changed schemas, its own
+            # rebuild is queued behind this one and refreshes data/ next.)
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then
+                exit 0
+              fi
+              echo "main moved while rebuilding (attempt $attempt); replaying the data commit on top"
+              git fetch origin main
+              if ! git rebase origin/main; then
+                # data/ itself changed on main meanwhile (e.g. a PR that ships
+                # data/): that supersedes this run's output — don't overwrite it.
+                git rebase --abort
+                echo "data/ changed on main meanwhile; leaving it as is."
+                exit 0
+              fi
+            done
+            echo "Could not push the rebuild after 3 attempts."
+            exit 1
           fi
